@@ -1,0 +1,15 @@
+# LF in the repository and in the working tree on every platform.
+#
+# This is not housekeeping. A regression test byte-compares program output
+# against the 2012 reference outputs under fortran/sample-output/ on Linux,
+# macOS and Windows. A Windows checkout under core.autocrlf once checked
+# mobcal_He.f out at 90,793 bytes against an 88,015-byte blob.
+#
+# Pinning the checkout is only half of it: gfortran's Windows runtime opens
+# the output unit in text mode and the program writes CRLF there. A test
+# strips end-of-line CR itself and does not rely on git having done it.
+* text=auto eol=lf
+*.f    text eol=lf
+*.mfj  text eol=lf
+*.in   text eol=lf
+*.out  text eol=lf
