@@ -1,0 +1,98 @@
+name: ci
+
+# Does it build: the 2012 Fortran compiled on Linux, macOS and Windows with the recipe in
+# mobcal.fortran (this file does not restate the flags), the self-check and the tests run, and
+# both binaries kept as artifacts. tools/check_public.py fails on any compiler warning.
+
+on:
+  # push is limited to main so a branch with an open pull request does not run twice per commit.
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      # When one platform fails, what the other two did in the same run is the evidence.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+
+      # Each branch sets FC, which mobcal.fortran.find_gfortran() honours before PATH.
+      - name: Install gfortran (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+          echo "FC=$(command -v gfortran)" >> "$GITHUB_ENV"
+
+      - name: Install gfortran (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gcc
+          echo "FC=$(brew --prefix gcc)/bin/gfortran" >> "$GITHUB_ENV"
+
+      - name: Install gfortran (Windows)
+        if: runner.os == 'Windows'
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc-fortran
+
+      # MSYS2's gfortran is used from the runner's own shell, as on a workstation: build() puts
+      # its directory on the subprocess PATH, and -static keeps the binary off it afterwards.
+      - name: Point FC at MSYS2's gfortran (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $fc = Join-Path '${{ steps.msys2.outputs.msys2-location }}' 'mingw64\bin\gfortran.exe'
+          "FC=$fc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Compiler
+        shell: bash
+        run: |
+          "$FC" --version | head -1
+          uv run python -c "from mobcal import fortran; print(fortran.describe())"
+
+      - name: Lock file is current
+        run: uv sync --locked
+
+      # The self-check also compares fortran/ against its SHA-256 pins, which a CRLF checkout
+      # would fail, so .gitattributes is tested here on every platform.
+      - name: Self-check
+        run: uv run tools/check_public.py
+
+      - name: Tests
+        run: uv run pytest
+
+      - name: Lint
+        if: runner.os == 'Linux'
+        run: uv run ruff check .
+
+      - name: Build the binaries
+        run: uv run mobcal build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mobcal-${{ runner.os }}-${{ runner.arch }}
+          path: build/fortran/
+          if-no-files-found: error
+          retention-days: 30

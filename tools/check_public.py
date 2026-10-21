@@ -7,8 +7,8 @@ never as FAIL.
 What it covers today: the package imports, the version declarations agree, the six files under
 fortran/ are the 2012 release byte for byte, the lower layers stay free of Qt, nothing shipped
 cites the development record by a path only a lab checkout resolves, and, when gfortran is
-present, both sources compile with the recorded flags and the binaries exist. Tasks add sections
-as they land code.
+present, both sources compile with the recorded flags, the binaries exist, and the compiler
+issued no warnings. Tasks add sections as they land code.
 
 Run:  uv run tools/check_public.py
 """
@@ -115,10 +115,13 @@ def main() -> int:
             from pathlib import Path
             for gas in fortran.GASES:
                 try:
-                    out = fortran.build(gas, Path(td))
-                    check_true(f"{gas}: compiled with recorded flags, binary exists", out.is_file())
+                    b = fortran.build(gas, Path(td))
                 except subprocess.CalledProcessError as e:
                     check_true(f"{gas}: compiled with recorded flags (exit {e.returncode})", False)
+                    continue
+                check_true(f"{gas}: compiled with recorded flags, binary exists",
+                           b.binary.is_file())
+                check_true(f"{gas}: zero compiler warnings ({b.warnings})", b.warnings == 0)
 
     print()
     print(f"{len(FAIL)} failed, {len(SKIPPED)} skipped")

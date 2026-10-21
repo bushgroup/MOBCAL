@@ -16,6 +16,9 @@ warning count it leaves is expected to be zero, so a nonzero count is worth read
 is passed on Windows only: a dynamically linked MSYS2 binary dies silently when launched from
 PowerShell, Apple's linker has no fully static mode, and it buys nothing on Linux.
 
+``build`` captures what the compiler writes and counts its warnings; the self-check and CI fail on
+any. Without ``-std=legacy`` each source draws 64.
+
     uv run mobcal build            # both gases into build/fortran/
     uv run mobcal build --gas he   # one
 """
@@ -25,9 +28,11 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from mobcal import ROOT
@@ -57,6 +62,10 @@ WINDOWS_FLAGS = ["-static"]
 # invocations fail with exit 1 and no output at all, which reads like a source
 # error rather than a missing compiler.
 MSYS2_BIN = Path(r"C:\msys64\mingw64\bin")
+
+# A diagnostic gfortran classes as a warning ("Warning: ..." on a line of its own, after the
+# source excerpt), or one the linker passes back through it ("ld: warning: ...").
+_WARNING = re.compile(r"^(?:Warning: |\S*\bld(?:\.exe)?: warning: )", re.M)
 
 
 def _sha256(path: Path) -> str:
@@ -102,11 +111,27 @@ def binary_name(gas: str) -> str:
     return f"mobcal_{gas}" + (".exe" if sys.platform == "win32" else "")
 
 
-def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Path:
-    """Compile one gas's source into ``out_dir`` and return the binary's path.
+def count_warnings(log: str) -> int:
+    """The number of warnings in what gfortran wrote to stdout and stderr."""
+    return len(_WARNING.findall(log))
+
+
+@dataclass(frozen=True)
+class Build:
+    binary: Path
+    log: str  # the compiler's stdout and stderr, interleaved as it wrote them
+
+    @property
+    def warnings(self) -> int:
+        return count_warnings(self.log)
+
+
+def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Build:
+    """Compile one gas's source into ``out_dir``; return the binary's path and the compiler's log.
 
     Raises FileNotFoundError when no gfortran is found and CalledProcessError when the compile
-    fails; the compiler's own output is passed through in both directions.
+    fails. The compiler's output is captured, so that its warnings can be counted, and echoed to
+    stderr unchanged; ``LC_ALL=C`` keeps it in the language the count expects.
     """
     if gas not in GASES:
         raise ValueError(f"gas must be one of {GASES}, not {gas!r}")
@@ -117,11 +142,15 @@ def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Path:
     out = out_dir / binary_name(gas)
     src = FORTRAN_DIR / SOURCE[gas]
     cmd = [gfortran, *flags(), "-o", str(out), str(src)]
-    env = dict(os.environ)
+    env = dict(os.environ, LC_ALL="C")
     if sys.platform == "win32":
         env["PATH"] = str(Path(gfortran).parent) + os.pathsep + env.get("PATH", "")
-    subprocess.run(cmd, check=True, env=env)
-    return out
+    proc = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, errors="replace")
+    sys.stderr.write(proc.stdout)
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout)
+    return Build(out, proc.stdout)
 
 
 def describe() -> str:

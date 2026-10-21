@@ -42,11 +42,11 @@ def main(argv: list[str] | None = None) -> int:
         print(fortran.describe())
         for gas in ([args.gas] if args.gas else fortran.GASES):
             try:
-                out = fortran.build(gas, args.out)
+                b = fortran.build(gas, args.out)
             except FileNotFoundError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 2
-            print(f"built {out}")
+            print(f"built {b.binary}" + (f" ({b.warnings} warnings)" if b.warnings else ""))
         return 0
 
     return 1
