@@ -12,12 +12,14 @@
 # it and say so there.
 #
 # How the list was derived (2026-10-21): choline in helium at the 2012 seed and three others,
-# diffed line by line against the 2012-seed run (lab record, task 04). Every pattern below except
-# "trajectory lost" matched a line that moved, and with these lines left out the runs at other
-# seeds differ from the reference only in the two lines that echo the seed. "trajectory lost" is
-# the 30,000-step abandonment diagnostic, written per trajectory like the energy-conservation
-# ones; no helium run here printed one. Nitrogen at three seeds is the check still running.
-# The seed lines, and everything else that is a function of the input alone, stay in T1:
+# and in nitrogen at the 2012 seed and two others, diffed line by line against the 2012-seed run
+# (lab record, task 04). Every pattern below except "trajectory lost" matched a line that moved
+# in at least one gas, and with these lines left out the runs at other seeds differ from the
+# reference only in the two lines that echo the seed. "trajectory lost" is the 30,000-step
+# abandonment diagnostic, written per trajectory like the energy-conservation ones; none of the
+# seven runs printed one, and none of the three nitrogen runs printed an energy-conservation
+# diagnostic or failed a trajectory. The seed lines, and everything else that is a function of
+# the input alone, stay in T1:
 #
 # - the ROTATE angles and the emax / rmax / r00 lines along the three axes, which find the
 #   maximum extent of the fixed geometry and draw no random numbers;

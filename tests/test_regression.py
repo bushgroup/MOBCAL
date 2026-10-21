@@ -35,13 +35,14 @@ REL_TOL = 1e-3
 
 The cross sections are printed to five significant figures, so the last printed digit is worth
 1e-4 relative at most (5.5402E+01: 2e-5). A platform that draws the same random stream and only
-sums in another order moves a few chaotic trajectories out of 400,000 and the printed value by a
-digit or two at most, well inside 1e-3. The method's own scatter is larger: the 2012 helium
-reference reports a per-cycle standard deviation of 0.92 % over ten cycles, a standard error of
-0.29 %, and helium runs at three other seeds land 0.03 % to 0.27 % from the reference values
-(this build, Windows, 2026-10-21; lab record, task 04). So T2 does not trip on rounding and does
-trip on a gross change to a parameter, but it cannot be relied on to see a different random
-stream; T1 carries the seed lines and T3 every digit, and those see it.
+sums in another order would move a few chaotic trajectories out of 400,000, and the printed value
+by a digit or two, well inside 1e-3; no platform has yet differed at all. The method's own
+scatter is larger: the 2012 helium reference reports a per-cycle standard deviation of 0.92 %
+over ten cycles, a standard error of 0.29 %; helium runs at three other seeds land 0.03 % to
+0.27 % from the reference values, and nitrogen runs at two others 0.16 % and 0.19 % from its TM
+value (this build, Windows, 2026-10-21; lab record, task 04). So T2 does not trip on rounding
+and does trip on a gross change to a parameter, but it cannot be relied on to see a different
+random stream; T1 carries the seed lines and T3 every digit, and those see it.
 """
 
 
