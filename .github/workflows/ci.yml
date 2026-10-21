@@ -32,7 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes full versions only; there is no moving major tag to follow.
+      - uses: astral-sh/setup-uv@v10.3.0
 
       # Each branch sets FC, which mobcal.fortran.find_gfortran() honours before PATH.
       - name: Install gfortran (Linux)
