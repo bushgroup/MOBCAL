@@ -9,10 +9,11 @@ not manage compilers or Python environments.
 
 ## Status
 
-Founded 2026-10-21. The Fortran is in place and builds. The Python package is a skeleton with a
-version, a build command and a self-check. The driver that runs calculations in parallel, the
-regression test against the 2012 outputs, continuous integration on Windows, macOS and Linux,
-and the installers follow, in that order. A graphical interface is planned once the driver
+Founded 2026-10-21. The Fortran is in place and builds on Windows, macOS and Linux in
+continuous integration, which also runs the self-check and the tests on every change. The Python
+package is a skeleton with a version, a build command and a self-check. The driver that runs
+calculations in parallel, the regression test against the 2012 outputs, and the installers
+follow, in that order. A graphical interface is planned once the driver
 exists.
 
 The 2012 code itself, including its Lennard-Jones parameters, is not being changed. Questions
@@ -41,6 +42,11 @@ variables across calls, which was the default of the g77 compiler it was written
 gfortran must be told to do the same with `-fno-automatic`. Without that flag an optimized build
 runs to completion and loses every trajectory. With it, optimized gfortran builds reproduce the
 2012 reference outputs byte for byte on Windows, macOS and Linux.
+
+To see whether the current code builds, look at the [`ci` workflow](.github/workflows/ci.yml).
+Each change to the repository compiles both sources with these flags on all three platforms,
+fails if gfortran issues a single warning, and keeps the two binaries from each platform as
+artifacts of the run.
 
 ## Running from source
 
