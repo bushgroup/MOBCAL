@@ -10,9 +10,12 @@ normalizations of ``mobcal.io.outfile``:
 - **T3, whole file.** Byte identity, gating on the platforms in ``strict-platforms.txt`` and
   reported as an expected failure elsewhere.
 
-Helium is minutes and runs by default; nitrogen is about an hour and carries the ``nitrogen``
-marker, deselected unless asked for (``uv run pytest -m nitrogen``). Without gfortran the gate
-skips, unless ``MOBCAL_REQUIRE_GFORTRAN`` is set, as CI sets it, in which case it fails.
+The runs go through the driver, ``mobcal.run.run_many``, all the selected gases in one batch
+with one worker each, so a session that asks for both gases waits for the longer one and not
+for their sum. Helium is minutes and runs by default; nitrogen is about an hour and carries the
+``nitrogen`` marker, deselected unless asked for (``uv run pytest -m nitrogen``; ``-m ""`` for
+both). Without gfortran the gate skips, unless ``MOBCAL_REQUIRE_GFORTRAN`` is set, as CI sets
+it, in which case it fails.
 """
 
 from __future__ import annotations
@@ -20,12 +23,14 @@ from __future__ import annotations
 import difflib
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 import gate
 from mobcal import fortran
 from mobcal.io.outfile import OutFile
+from mobcal.run import Job, Result, run_many, run_one
 
 REFS = fortran.FORTRAN_DIR / "sample-output"
 REFERENCE = {"he": "Choline_He.out", "n2": "Choline_N2.out"}
@@ -53,6 +58,15 @@ class GateRun:
     new: OutFile
 
 
+@dataclass(frozen=True)
+class Pool:
+    binaries: dict[str, Path]  # one built binary per gas the session selected
+    runs: dict[str, GateRun]
+
+    def launcher(self, job: Job) -> list[str]:
+        return [str(self.binaries[job.gas])]
+
+
 @pytest.fixture(scope="session")
 def gfortran():
     gf = fortran.find_gfortran()
@@ -64,19 +78,40 @@ def gfortran():
     return gf
 
 
+def selected_gases(session) -> list[str]:
+    """The gases the collected (not deselected) tests ask for, so a deselected gas never runs."""
+    gases = {item.callspec.params["choline"] for item in session.items
+             if getattr(item, "callspec", None) is not None
+             and "choline" in item.callspec.params}
+    return [g for g in fortran.GASES if g in gases] or ["he"]
+
+
+@pytest.fixture(scope="session")
+def pool(request, gfortran, tmp_path_factory, run_times) -> Pool:
+    """Build each selected gas, then run them all at once through the driver."""
+    gases = selected_gases(request.session)
+    binaries = {g: fortran.build(g, tmp_path_factory.mktemp(f"bin-{g}"), gfortran).binary
+                for g in gases}
+    p = Pool(binaries, {})
+    refs = {g: OutFile.read(REFS / REFERENCE[g]) for g in gases}
+    for g, ref in refs.items():
+        assert ref.input_name and ref.seed is not None, f"{g}: reference has no SUMMARY"
+    out = tmp_path_factory.mktemp("gate")
+    jobs = [Job(fortran.FORTRAN_DIR / "Choline.mfj", g, refs[g].seed, out, name=g,
+                staged_name=refs[g].input_name) for g in gases]
+    summary = run_many(jobs, workers=len(jobs), launcher=p.launcher)
+    for r in summary.results:
+        run_times[r.job.gas] = r.seconds
+        log = (r.job.run_dir / "stdout.log").read_text(errors="replace")[-2000:]
+        assert r.ok, f"{r.job.gas}: {r.message}\n{log}"
+        p.runs[r.job.gas] = GateRun(r.job.gas, refs[r.job.gas], OutFile.read(r.output))
+    return p
+
+
 @pytest.fixture(scope="module",
                 params=["he", pytest.param("n2", marks=pytest.mark.nitrogen)])
-def choline(request, gfortran, tmp_path_factory, run_times):
-    gas = request.param
-    ref = OutFile.read(REFS / REFERENCE[gas])
-    assert ref.input_name and ref.seed is not None, "reference has no SUMMARY to stage from"
-    build = fortran.build(gas, tmp_path_factory.mktemp(f"bin-{gas}"), gfortran)
-    run = gate.run_choline(build.binary, tmp_path_factory.mktemp(f"run-{gas}"),
-                           ref.input_name, ref.seed)
-    run_times[gas] = run.seconds
-    assert run.returncode == 0, f"{gas} exited {run.returncode}:\n{run.log[-2000:]}"
-    assert run.out.is_file(), f"{gas} wrote no output:\n{run.log[-2000:]}"
-    return GateRun(gas, ref, OutFile.read(run.out))
+def choline(request, pool) -> GateRun:
+    return pool.runs[request.param]
 
 
 def _diff(a: list[str], b: list[str], n: int = 60) -> str:
@@ -109,6 +144,19 @@ def test_t3_whole_file(choline):
     pytest.fail(f"{n} lines differ from the reference on {here}, a strict platform. If this is "
                 f"summation order and not physics, remove {here} from strict-platforms.txt in a "
                 f"commit that says so.\n" + _diff(choline.ref.lines, choline.new.lines))
+
+
+def test_an_undefined_element_is_reported_as_failed(pool, tmp_path):
+    # Bromide, key 35, which neither element table defines: the program writes the header, the
+    # refusal line and nothing else, and exits 0. The driver must report that as a failure.
+    inp = tmp_path / "hbr.mfj"
+    inp.write_text("HBr+\n1\n2\nang\ncalc\n1.0000\n 0.0 0.0 0.0 35 0.5\n 1.41 0.0 0.0 1 0.5\n",
+                   encoding="latin-1", newline="\n")
+    for gas in pool.binaries:
+        r: Result = run_one(Job(inp, gas, 1, tmp_path), pool.launcher)
+        assert not r.ok and r.returncode == 0, (gas, r)
+        assert r.message == "no SUMMARY: type not defined for atom number  1", (gas, r.message)
+        assert r.cross_sections == {} and r.conformers == []
 
 
 def test_strict_platforms_are_known():

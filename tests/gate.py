@@ -1,53 +1,20 @@
-"""Stage choline, run a built binary on it, and read the gate's two list files.
+"""The regression gate's two list files and its tier-1 filter.
 
-The thin subprocess helper the regression test uses until the process-fanout driver (lab record,
-task 05) exists and the test moves onto it. One run, one directory: the program reads
-``mobcal.in`` from its working directory and writes a scratch file ``hold`` there.
+The choline runs themselves go through ``mobcal.run``; what lives here is what the comparison
+needs beyond that: the stochastic-lines list and the filter that applies it, the strict-platforms
+list, and the key this platform is listed under.
 """
 
 from __future__ import annotations
 
 import re
-import shutil
-import subprocess
 import sys
-import time
-from dataclasses import dataclass
 from pathlib import Path
-
-from mobcal import fortran
 
 HERE = Path(__file__).resolve().parent
 STOCHASTIC_LINES = HERE / "stochastic-lines.txt"
 STRICT_PLATFORMS = HERE / "strict-platforms.txt"
 PLATFORMS = ("linux", "macos", "windows")
-
-
-@dataclass(frozen=True)
-class Run:
-    out: Path
-    returncode: int
-    seconds: float  # wall time of the binary alone
-    log: str  # what the binary wrote to stdout and stderr
-
-
-def run_choline(binary: Path, run_dir: Path, staged_name: str, seed: int) -> Run:
-    """Copy ``fortran/Choline.mfj`` into ``run_dir`` as ``staged_name`` and run it at ``seed``.
-
-    The references echo the name the input had in 2012, so the input is staged under that name
-    rather than either side being edited. ``mobcal.in`` is three records -- input file, output
-    file, seed -- and the two filename fields are read with an ``a30`` edit descriptor, so
-    neither may exceed 30 characters.
-    """
-    if len(staged_name) > 30:
-        raise ValueError(f"{staged_name!r} is longer than the a30 field that reads it")
-    run_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(fortran.FORTRAN_DIR / "Choline.mfj", run_dir / staged_name)
-    (run_dir / "mobcal.in").write_text(f"{staged_name}\ngate.out\n{seed}\n", newline="\n")
-    t0 = time.perf_counter()
-    proc = subprocess.run([str(binary)], cwd=run_dir, stdout=subprocess.PIPE,
-                          stderr=subprocess.STDOUT, text=True, errors="replace")
-    return Run(run_dir / "gate.out", proc.returncode, time.perf_counter() - t0, proc.stdout)
 
 
 def _entries(path: Path) -> list[str]:

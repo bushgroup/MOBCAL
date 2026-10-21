@@ -105,14 +105,34 @@ def main() -> int:
     print(f"     lab_dir() -> {lab}")
     check_true("lab_dir() returns a Path or None", lab is None or hasattr(lab, "is_dir"))
 
+    section("formats")
+    from mobcal.io.infile import InFile
+    from mobcal.io.mfj import Mfj
+    from mobcal.io.outfile import OutFile
+    choline = Mfj.read(fortran.FORTRAN_DIR / "Choline.mfj")
+    check_true("Choline.mfj reads: 1 coordinate set, 21 atoms, ang, calc",
+               (choline.coordinate_sets, choline.atoms, choline.units, choline.charge_mode)
+               == (1, 21, "ang", "calc"))
+    shipped = InFile.read(fortran.FORTRAN_DIR / "mobcal.in")
+    check_true("mobcal.in reads: Choline.mfj at seed 5013489",
+               (shipped.input_name, shipped.seed) == ("Choline.mfj", 5013489))
+    refs = {g: OutFile.read(fortran.FORTRAN_DIR / "sample-output" / f"Choline_{g}.out")
+            for g in ("He", "N2")}
+    check_true("both references hold a SUMMARY block with a TM cross section",
+               all(o.ok and "TM" in o.cross_sections for o in refs.values()))
+
     section("build")
     gf = fortran.find_gfortran()
     if gf is None:
         skip("compile both gases", "no gfortran found")
+        skip("the driver reports a refused input as failed", "no gfortran found")
     else:
         print("     " + fortran.describe())
         with tempfile.TemporaryDirectory() as td:
             from pathlib import Path
+
+            from mobcal.run import Job, run_one
+            binaries = {}
             for gas in fortran.GASES:
                 try:
                     b = fortran.build(gas, Path(td))
@@ -122,6 +142,17 @@ def main() -> int:
                 check_true(f"{gas}: compiled with recorded flags, binary exists",
                            b.binary.is_file())
                 check_true(f"{gas}: zero compiler warnings ({b.warnings})", b.warnings == 0)
+                binaries[gas] = b.binary
+            # An element neither table defines (bromine, key 35): the program writes its
+            # refusal and exits 0 in well under a second, and the driver must call that failed.
+            hbr = Path(td) / "hbr.mfj"
+            hbr.write_text("HBr+\n1\n2\nang\ncalc\n1.0000\n 0 0 0 35 0.5\n 1.41 0 0 1 0.5\n",
+                           encoding="latin-1", newline="\n")
+            for gas, binary in binaries.items():
+                r = run_one(Job(hbr, gas, 1, Path(td) / "runs"), lambda _job, b=binary: [str(b)])
+                check_true(f"{gas}: the driver reports the refused input as failed "
+                           f"({r.message!r})",
+                           not r.ok and r.returncode == 0 and "type not defined" in r.message)
 
     print()
     print(f"{len(FAIL)} failed, {len(SKIPPED)} skipped")

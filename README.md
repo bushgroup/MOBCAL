@@ -12,9 +12,10 @@ not manage compilers or Python environments.
 Founded 2026-10-21. The Fortran is in place and builds on Windows, macOS and Linux in
 continuous integration, which also runs the self-check and the tests on every change. The tests
 include a regression test that runs the 2012 choline input through each build and compares the
-result with the 2012 outputs. The Python package has a version, a build command, a self-check
-and a reader for the output file. The driver that runs calculations in parallel and the
-installers follow, in that order. A graphical interface is planned once the driver exists.
+result with the 2012 outputs. The Python package has a version, a build command, a self-check,
+readers and writers for the three file formats, and `mobcal run`, which runs many calculations
+at once on separate processors and collects the results. The installers follow. A graphical
+interface is planned once the command line has been used.
 
 The 2012 code itself, including its Lennard-Jones parameters, is not being changed. Questions
 about the parameters are being taken up separately, and no change to them will land without a
@@ -58,6 +59,41 @@ uv run tools/check_public.py
 uv run pytest
 ```
 
+## Running calculations
+
+`mobcal run` runs the built binaries on one or more input files, one process per calculation
+and several at once:
+
+```
+uv run mobcal run choline.mfj --gas both --seeds 5013489,1234567 --workers 4 --out runs
+```
+
+A calculation is one input file, one gas and one seed. The command makes one job for every
+combination of the inputs given (paths or globs), the gas (`he`, `n2` or `both`; helium by
+default) and the seeds (the 2012 seed, 5013489, by default), runs them `--workers` at a time
+(by default, as many as the machine has processors), and prints each result as it lands. Each
+run gets a directory of its own under `--out`, named for the input, the gas and the seed, and
+holding a copy of the input, the `mobcal.in` the program read, the output it wrote as
+`mobcal.out`, and whatever it printed to the console as `stdout.log`. The directory is a
+complete record of the run: the program started again in that directory repeats the
+calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
+run directories, one row per run with its status, its cross sections in Å², and the time the
+program took. For an input with several coordinate sets the row carries the mean over sets, as
+the program reports it, and `summary.json` the value for each set.
+
+A run that did not finish is reported as failed, never as a number. The 2012 program exits with
+status 0 whether it computed a cross section or refused its input, so the command reads success
+from the output file instead: a completed calculation ends in a SUMMARY block, and an output
+without one is a failure whose message is the last line the program wrote, for example
+`type not defined for atom number  1` for an element its tables do not define. An input the
+program would stop on, such as more than 1,000 atoms, more than 100 coordinate sets, or a units
+line that is not exactly `ang` or `au`, is refused before the program starts. The command exits
+with status 1 if any run failed.
+
+The Fortran is single-threaded and is not changed; the speedup comes from running independent
+calculations on separate processors. Splitting one calculation across processors is planned
+as a separate change to the Fortran.
+
 ## Testing against the 2012 outputs
 
 To check that a build still computes the 2012 numbers, the test suite runs `Choline.mfj`
@@ -70,8 +106,9 @@ projection-approximation, exact hard-sphere and trajectory-method values in heli
 trajectory-method value in nitrogen. The third requires the whole file to be byte-identical to
 the reference on the platforms listed in `tests/strict-platforms.txt`, which are all three.
 
-The helium comparison takes about 3 minutes and runs with every `uv run pytest`. The nitrogen
-comparison takes about an hour and runs only when asked for:
+Both runs go through the same driver as `mobcal run`, and when both gases are selected they run
+at the same time. The helium comparison takes about 3 minutes and runs with every
+`uv run pytest`. The nitrogen comparison takes about an hour and runs only when asked for:
 
 ```
 uv run pytest -m nitrogen

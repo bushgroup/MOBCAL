@@ -18,7 +18,16 @@ The SUMMARY block at the end of the file repeats the run's identifying parameter
 results, one ``label = value`` pair or two per line. ``OutFile.summary`` maps each label to the
 value as printed; ``OutFile.cross_sections`` holds the cross sections the run reports, in Å^2,
 keyed ``PA``, ``EHS`` and ``TM``. The nitrogen code has no MOBIL4 path, so its outputs report
-``TM`` only.
+``TM`` only. An input with several coordinate sets gets a different SUMMARY: a table per method
+with one row per set and an ``AVGE`` row, and no ``average ... cross section`` lines.
+``OutFile.conformers`` gives the per-set values in either case and ``cross_sections`` the
+average, which for one set is the set itself.
+
+The SUMMARY block is also the only evidence that a run completed. Every termination of the 2012
+program is a bare ``stop``, which exits 0, so a refusal (``units not specified``, ``type not
+defined for atom number``, ``masses do not add up``) and a finished calculation look the same to
+a caller; the refusal is the last line the output file holds. ``OutFile.ok`` is whether the
+block is present and ``OutFile.last_line`` is what to report when it is not.
 """
 
 from __future__ import annotations
@@ -42,6 +51,13 @@ CROSS_SECTION_LABELS = {
     "EHS": "average EHS cross section",
     "TM": "average TM cross section",
 }
+
+# The multi-set SUMMARY tables (formats 622-624 and 630-632): a header naming the columns, one
+# row per set with the set index first, then an AVGE row. Cross sections are in Å^2 already.
+_TABLE_HEADER = re.compile(r"^\s+set\s+(PA CS|TM CS)\b")
+_TABLE_COLUMNS = {"PA CS": ("PA", None, "EHS"), "TM CS": ("TM",)}
+_TABLE_ROW = re.compile(r"^\s*(\d+|AVGE)((?:\s+-?\d\.\d+E[+-]\d\d)+)")
+_SETS_LINE = " number of coordinate sets ="
 
 
 def normalize(text: str) -> str:
@@ -88,10 +104,70 @@ class OutFile:
         return pairs
 
     @cached_property
+    def _tables(self) -> tuple[list[dict[str, float]], dict[str, float]]:
+        """The per-set rows and the AVGE row of the multi-set SUMMARY tables, merged by method."""
+        try:
+            start = self.lines.index(SUMMARY_LINE)
+        except ValueError:
+            return [], {}
+        rows: dict[int, dict[str, float]] = {}
+        avge: dict[str, float] = {}
+        columns: tuple[str | None, ...] = ()
+        for line in self.lines[start + 1:]:
+            h = _TABLE_HEADER.match(line)
+            if h:
+                columns = _TABLE_COLUMNS[h.group(1)]
+                continue
+            r = _TABLE_ROW.match(line) if columns else None
+            if not r:
+                continue
+            values = [float(v) for v in r.group(2).split()]
+            named = {k: v for k, v in zip(columns, values, strict=False) if k is not None}
+            if r.group(1) == "AVGE":
+                avge.update(named)
+                columns = ()
+            else:
+                rows.setdefault(int(r.group(1)), {}).update(named)
+        return [rows[i] for i in sorted(rows)], avge
+
+    @cached_property
     def cross_sections(self) -> dict[str, float]:
-        """The cross sections the SUMMARY block reports, in Å^2: some of ``PA``, ``EHS``, ``TM``."""
-        return {k: float(self.summary[label]) for k, label in CROSS_SECTION_LABELS.items()
-                if label in self.summary}
+        """The cross sections the SUMMARY block reports, in Å^2: some of ``PA``, ``EHS``, ``TM``.
+
+        For one coordinate set, the ``average ... cross section`` lines; for several, the
+        ``AVGE`` row of each table, the mean over sets.
+        """
+        single = {k: float(self.summary[label]) for k, label in CROSS_SECTION_LABELS.items()
+                  if label in self.summary}
+        return single or dict(self._tables[1])
+
+    @cached_property
+    def conformers(self) -> list[dict[str, float]]:
+        """One ``cross_sections``-shaped dict per coordinate set, in the file's order."""
+        rows = self._tables[0]
+        if rows:
+            return rows
+        return [self.cross_sections] if self.cross_sections else []
+
+    @property
+    def coordinate_sets(self) -> int | None:
+        for line in self.lines:
+            if line.startswith(_SETS_LINE):
+                return int(line[len(_SETS_LINE):])
+        return None
+
+    @property
+    def ok(self) -> bool:
+        """Whether the run completed: the SUMMARY block is present."""
+        return bool(self.summary)
+
+    @property
+    def last_line(self) -> str:
+        """The last non-blank line: the refusal, when a run stopped without a SUMMARY."""
+        for line in reversed(self.lines):
+            if line.strip():
+                return line.strip()
+        return ""
 
     @property
     def input_name(self) -> str | None:

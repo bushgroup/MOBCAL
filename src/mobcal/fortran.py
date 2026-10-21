@@ -111,6 +111,32 @@ def binary_name(gas: str) -> str:
     return f"mobcal_{gas}" + (".exe" if sys.platform == "win32" else "")
 
 
+def binary_dir() -> Path:
+    """Where the built binaries are looked for, and never on PATH.
+
+    ``$MOBCAL_BIN_DIR`` first; then, in a frozen (installed) program, the ``fortran`` directory
+    beside the executable, where the installer puts the binaries built in CI; otherwise
+    ``build/fortran/`` under this checkout, where ``mobcal build`` writes them.
+    """
+    env = os.environ.get("MOBCAL_BIN_DIR")
+    if env:
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "fortran"
+    return ROOT / "build" / "fortran"
+
+
+def find_binary(gas: str) -> Path:
+    """The built binary for one gas. Raises FileNotFoundError, naming where it looked."""
+    if gas not in GASES:
+        raise ValueError(f"gas must be one of {GASES}, not {gas!r}")
+    p = binary_dir() / binary_name(gas)
+    if not p.is_file():
+        raise FileNotFoundError(f"no {p.name} in {p.parent}: run `mobcal build`, or point "
+                                f"MOBCAL_BIN_DIR at a directory that holds it")
+    return p
+
+
 def count_warnings(log: str) -> int:
     """The number of warnings in what gfortran wrote to stdout and stderr."""
     return len(_WARNING.findall(log))
