@@ -45,6 +45,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Nitrogen is about an hour: `uv run pytest -m nitrogen` for it alone, `-m ""` for everything.
+addopts = ["-m", "not nitrogen"]
+markers = ["nitrogen: the nitrogen regression run, about an hour; deselected by default"]
 
 [tool.ruff]
 line-length = 100

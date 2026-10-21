@@ -1,0 +1,16 @@
+# Platforms on which tier T3 of the regression gate -- the whole output byte-identical to the
+# 2012 reference after the two normalizations -- gates. Elsewhere it is reported (xfail) only.
+#
+# One key per line: linux, macos or windows. Blank lines and lines starting with '#' are ignored.
+# Tiers T1 and T2 gate on every platform whatever this file says.
+#
+# T3 is the only tier tight enough to see a wrong Lennard-Jones epsilon or sigma: those reach no
+# deterministic line, and the cross sections would have to move grossly to trip T2. It is also
+# the tier most likely to fail for a reason that is not physics, a compiler summing 400,000
+# trajectory contributions in another order and moving a last printed digit. So every platform
+# starts listed. Removing one is a commit that writes its reason here, with the compiler, the
+# date and the lines that differed.
+
+linux
+macos
+windows

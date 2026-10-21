@@ -10,11 +10,11 @@ not manage compilers or Python environments.
 ## Status
 
 Founded 2026-10-21. The Fortran is in place and builds on Windows, macOS and Linux in
-continuous integration, which also runs the self-check and the tests on every change. The Python
-package is a skeleton with a version, a build command and a self-check. The driver that runs
-calculations in parallel, the regression test against the 2012 outputs, and the installers
-follow, in that order. A graphical interface is planned once the driver
-exists.
+continuous integration, which also runs the self-check and the tests on every change. The tests
+include a regression test that runs the 2012 choline input through each build and compares the
+result with the 2012 outputs. The Python package has a version, a build command, a self-check
+and a reader for the output file. The driver that runs calculations in parallel and the
+installers follow, in that order. A graphical interface is planned once the driver exists.
 
 The 2012 code itself, including its Lennard-Jones parameters, is not being changed. Questions
 about the parameters are being taken up separately, and no change to them will land without a
@@ -57,6 +57,28 @@ Requires [uv](https://docs.astral.sh/uv/) and gfortran. On Windows, gfortran fro
 uv run tools/check_public.py
 uv run pytest
 ```
+
+## Testing against the 2012 outputs
+
+To check that a build still computes the 2012 numbers, the test suite runs `Choline.mfj`
+through each binary at seed 5013489, the seed the references were produced with, and compares
+the output with `fortran/sample-output/` in three tiers. The first compares every line that does
+not depend on the random number stream character for character. `tests/stochastic-lines.txt`
+lists the lines that do, so a line that is not listed has to match, and a line the 2012 code
+never wrote fails the test. The second compares the reported cross sections within 0.1 %: the
+projection-approximation, exact hard-sphere and trajectory-method values in helium, and the
+trajectory-method value in nitrogen. The third requires the whole file to be byte-identical to
+the reference on the platforms listed in `tests/strict-platforms.txt`, which are all three.
+
+The helium comparison takes about 3 minutes and runs with every `uv run pytest`. The nitrogen
+comparison takes about an hour and runs only when asked for:
+
+```
+uv run pytest -m nitrogen
+```
+
+Continuous integration runs the nitrogen comparison every Monday, and on a manual run of the
+`ci` workflow with its nitrogen option selected.
 
 ## Citation
 

@@ -1,0 +1,70 @@
+# Output lines whose printed values depend on the random stream: tier T1 of the regression gate
+# leaves them out, and compares every other line of the output with the 2012 reference exactly.
+#
+# One Python regular expression per line, matched with re.search. Blank lines and lines starting
+# with '#' are ignored. A blank output line directly before a left-out line is left out with it:
+# the energy-conservation diagnostics are written with a leading '/', so each one brings a blank
+# line, and their number varies.
+#
+# THE DEFAULT IS "MUST MATCH". A line not listed here has to be identical to the reference, so a
+# new output line fails the gate and someone looks at it, instead of landing in an ignored
+# bucket. If a new line really does depend on the stream, list it in the commit that introduces
+# it and say so there.
+#
+# How the list was derived (2026-10-21): choline in helium at the 2012 seed and three others,
+# diffed line by line against the 2012-seed run (lab record, task 04). Every pattern below except
+# "trajectory lost" matched a line that moved, and with these lines left out the runs at other
+# seeds differ from the reference only in the two lines that echo the seed. "trajectory lost" is
+# the 30,000-step abandonment diagnostic, written per trajectory like the energy-conservation
+# ones; no helium run here printed one. Nitrogen at three seeds is the check still running.
+# The seed lines, and everything else that is a function of the input alone, stay in T1:
+#
+# - the ROTATE angles and the emax / rmax / r00 lines along the three axes, which find the
+#   maximum extent of the fixed geometry and draw no random numbers;
+# - the velocity grid (pgst, wgst, v, ke/kt) and the b2max table, which the b2max search builds
+#   from trajectories at that fixed orientation, again without drawing;
+# - the f value for the second-order correction, f = 1/(1 - delta), which depends on the stream
+#   through delta but prints 1.0000E+00 while delta stays below 5e-5. If it ever prints anything
+#   else the correction has become significant, and that should fail the gate.
+#
+# The angle, emax and b2max lines are where the Lennard-Jones epsilon and sigma reach a
+# deterministic line, so this tier sees a parameter change, not only the whole-file tier.
+#
+# The lines are left out of T1, not out of the gate: T2 compares the cross sections among them
+# numerically, and T3 compares all of them byte for byte on the strict platforms.
+
+# --- MOBIL4: projection approximation and exact hard spheres (helium only) ---
+^ average PA mobility =
+^ inverse average PA mobility =
+^ average PA cross section =
+^ maximum number of reflections encountered =
+^ average EHS mobility =
+^ inverse average EHS mobility =
+^ average EHS cross section =
+
+# The EHS convergence table under "order   cross section": an order and a cross section in m^2.
+^ +\d+ +\d\.\d{5}E[+-]\d{2}$
+
+# --- MOBIL2: per-trajectory diagnostics, a varying number of them ---
+^ energy not conserved:
+^ gst2 = .*theta = .*phi = .*gamma =
+^ trajectory lost
+
+# --- MOBIL2: the per-cycle summary, a cycle index and four accumulated values ---
+^ +\d+ +\d\.\d{4}E[+-]\d{2} +\d\.\d{4}E[+-]\d{2} +\d\.\d{4}E[+-]\d{2} +\d\.\d{4}E[+-]\d{2}$
+
+# --- MOBIL2: the q1st averages, gst2 and wgst (deterministic) and q1st, two blanks apart.
+# --- The b2max table has the same three-number shape five blanks apart, and stays in T1. ---
+^  \d\.\d{4}E[+-]\d{2}  \d\.\d{4}E[+-]\d{2}  \d\.\d{4}E[+-]\d{2}$
+
+# --- MOBIL2 results and the second-order correction built from them ---
+^ mean OMEGA\*\(1,1\) =
+^ standard deviation =
+^ standard error of mean =
+^ omega\*12 =
+^ +u2 =
+^ average \(second order\) TM mobility =
+^ inverse average \(second order\) TM mobility =
+^ average TM cross section =
+^ standard deviation \(percent\) =
+^ number of failed trajectories =
