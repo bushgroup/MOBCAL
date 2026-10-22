@@ -8,7 +8,7 @@ from mobcal.io.infile import MAX_SEED, InFile, InFileError
 
 def test_the_shipped_run_file():
     i = InFile.read(fortran.FORTRAN_DIR / "mobcal.in")
-    assert i == InFile("Choline.mfj", "temp.choline.n2.out", 5013489)
+    assert i == InFile("Choline.mfj", "choline.out", 5013489)
     assert i.split is None
 
 

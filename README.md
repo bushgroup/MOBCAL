@@ -22,10 +22,13 @@ graphical interface is planned once the command line has been used.
 
 The physics of the 2012 code, including its Lennard-Jones parameters, is not being changed.
 Questions about the parameters are being taken up separately, and no change to them will land
-without a stated decision and a stated reason. The one change to the Fortran so far adds
-statements and alters none, and is listed with its line counts in
-[fortran/README.md](fortran/README.md): without the record it reads, the program is the 2012
-program, and the regression test holds it to the 2012 outputs byte for byte on every change.
+without a stated decision and a stated reason. The changes to the Fortran so far are listed
+with their line counts in [fortran/README.md](fortran/README.md). Two add the statements that
+let one calculation run as several processes. The others correct defects in how the program
+reports: a refused input now exits with status 1, an input larger than the arrays is refused
+instead of overrunning them, two output formats print what they were meant to, and the shipped
+run file names a neutral output. None of them changes a number the program computes, and the
+regression test holds it to the 2012 outputs byte for byte on every change.
 
 ## Installing
 
@@ -35,9 +38,9 @@ to check an installation with `mobcal self-check`.
 
 ## What is here
 
-- `fortran/`: the 2012 sources, the choline input, the run file and the two reference outputs,
-  unchanged. [`fortran/README.md`](fortran/README.md) records their hashes and what the 2012
-  release said about compiling them.
+- `fortran/`: the 2012 sources, the choline input, the run file and the two reference outputs.
+  [`fortran/README.md`](fortran/README.md) lists every change since 2012, records the hashes,
+  and says what the 2012 release said about compiling them. The reference outputs are unchanged.
 - `src/mobcal/`: the Python package.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
@@ -127,7 +130,7 @@ other; the eight workers' directories, `w01` to `w08`, are kept beside it as rec
 that did not write every block it owed fails the run, and the combining run never starts. Any
 `--split` from 1 to 400 balances, since the blocks are dealt round robin, and `--workers` then
 counts split calculations in flight, each of them `--split` processes. Without `--split`, or
-without the fourth record it writes to `mobcal.in`, the program is the 2012 program.
+without the fourth record it writes to `mobcal.in`, the program runs the 2012 calculation.
 
 Every process repeats the part of the calculation that precedes the trajectories (the
 projection and hard-sphere cross sections and the search for the largest impact parameter at

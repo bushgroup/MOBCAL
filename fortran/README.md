@@ -33,6 +33,7 @@ or what the program does when it refuses an input, never a value it computes.
 | 2026-10-22 | `mobcal_He.f` +1, −1; `mobcal_N2.f` +1, −1 | **The `mass of ion` line prints an `E` exponent.** Format 604 was `1pd11.4`, the only `D` edit descriptor in either file: g77 printed it with an `E`, as the references show, and gfortran with a `D`. It is `1pe11.4`, and a gfortran build prints the line as the references do, so a comparison no longer rewrites it. |
 | 2026-10-22 | `mobcal_He.f` +12, −12; `mobcal_N2.f` +10, −10 | **A refusal exits with status 1.** Every termination was a bare `stop`, which exits 0, so a refusal and a finished calculation looked the same to a caller. Each refusal's `stop` is `stop 1`: in both files `units not specified`, `charge distribution not specified`, `type not defined for atom number` (twice, once per coordinate-set reader), `masses do not add up`, `Problem orientating along x axis`, `ibst greater than 500`, and the three refusals of the split reader above; in helium also the `ifail` cap in `gsang` and the split reader's own `ifail` stop. The normal end is the one bare `stop` left in each file, and exits 0. No line of any output file changes. |
 | 2026-10-22 | `mobcal_He.f` +14, −2; `mobcal_N2.f` +14, −2 | **The array bounds are checked.** The number of coordinate sets and the number of atoms were read with no check against the arrays they index, 100 sets (the main program's `dimension tmc(100)` and its neighbours) and 1,000 atoms (`parameter (len=1000)`), so a larger input wrote past them. Each count is now checked in `fcoord` right after it is echoed, with `.gt.` because the bound itself is legal: above it the program writes `number of coordinate sets exceeds the limit of 100` or `number of atoms exceeds the limit of 1000` and stops with status 1, the set count being refused before the atom count is read. Six lines per guard. The `type not defined for atom number` refusal's format 602 widens from `i3` to `i4` in both of its copies, so that atom 1,000 prints as a number rather than `***`. No line of the choline outputs changes. |
+| 2026-10-22 | `mobcal.in` +1, −1 | **The shipped run file names a neutral output.** Its second record was `temp.choline.n2.out` for both gases, so a helium run by hand wrote a file named for nitrogen. It is `choline.out`. Input, seed and output contents are unchanged; `mobcal run` writes its own run file and never read this one. |
 
 ## What the 2012 release said about building
 
@@ -58,8 +59,9 @@ copies the input to the echoed name before running rather than editing either si
 
 ## The run file
 
-`mobcal.in` as shipped names `Choline.mfj` as input, `temp.choline.n2.out` as output, and seed
-`5013489`, which is the seed the references were run at. The output name is the same for both
-gases. A fourth record, `W w`, is read when present and makes the run one process of a split
+`mobcal.in` as shipped names `Choline.mfj` as input, `choline.out` as output, and seed
+`5013489`, which is the seed the references were run at. The 2012 file named
+`temp.choline.n2.out` as output for both gases; the name is now neutral (Changes, above). A
+fourth record, `W w`, is read when present and makes the run one process of a split
 calculation, as the Changes table describes; `mobcal run --split W` writes it, and the shipped
 file does not carry it.
