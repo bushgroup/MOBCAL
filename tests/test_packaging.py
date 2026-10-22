@@ -54,7 +54,7 @@ def test_a_missing_binary_is_caught(built):
 def test_a_binary_from_other_sources_is_caught(built):
     _edit(built, "he", source_sha256="0" * 64)
     assert fortran.verify_binaries(built) == [
-        f"{fortran.binary_name('he')}: built from a mobcal_He.f that is not the 2012 file"]
+        f"{fortran.binary_name('he')}: built from a mobcal_He.f that is not the pinned file"]
 
 
 def test_a_binary_without_fno_automatic_is_caught(built):
