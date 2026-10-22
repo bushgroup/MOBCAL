@@ -73,7 +73,7 @@ mobcal self-check
 
 checks, in under a second, that the installed copy can compute a cross section. It prints one
 line per stage, with the time each took: the version; that both Fortran programs are present,
-are the files that were built for this package, and were built from the 2012 sources with the
+are the files that were built for this package, and were built from this package's Fortran sources with the
 recorded compiler flags (the folder `fortran` beside `mobcal` holds the programs and a
 `build.json` that records the compiler, the flags, the commit and a checksum of each file); and
 that each program starts and refuses an input naming an element it does not define, which
@@ -100,7 +100,9 @@ of the installation:
 mobcal run <installation>/examples/Choline.mfj --gas he --out runs
 ```
 
-writes its run directory and `summary.csv` under `runs` in the current directory. Run
+writes its run directory and `summary.csv` under `runs` in the current directory. Adding
+`--split 8` runs that one calculation as eight processes and reports the serial result exactly,
+which is how a long nitrogen calculation is made short on a machine with cores to spare. Run
 calculations from a folder of your own, not from inside the installation, which an upgrade
 replaces.
 

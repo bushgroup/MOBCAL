@@ -1,10 +1,10 @@
-"""The process-fanout driver: independent calculations, one process each, N at a time.
+"""The driver: independent calculations one process each, and one calculation across W processes.
 
-The 2012 binary is a black box with a working directory. It reads ``mobcal.in`` from the
-directory it is started in, takes no arguments, writes its output where that file says, and
-exits 0 whether it computed a cross section or refused its input. So every run gets a directory
-of its own, parallelism is one process per directory, and what the package knows about a run it
-learns from the output file: the SUMMARY block at the end is the evidence that the calculation
+The binary is a black box with a working directory. It reads ``mobcal.in`` from the directory
+it is started in, takes no arguments, writes its output where that file says, and exits 0
+whether it computed a cross section or refused its input. So every run gets a directory of its
+own, parallelism is one process per directory, and what the package knows about a run it learns
+from the output file: the SUMMARY block at the end is the evidence that the calculation
 completed, and an output without one is a failure whose message is the last line the file holds
 (``type not defined for atom number``, ``units not specified``, ``masses do not add up``).
 
@@ -13,15 +13,26 @@ directory ``<out_dir>/<name>/`` holding a copy of the input (under the name the 
 echo), its ``mobcal.in``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
 complete record that reruns by itself. ``run_many`` runs a list of jobs with a cap on how many
 are in flight, calls back as each lands, and returns a ``Summary`` that writes ``summary.csv``
-and ``summary.json`` beside the run directories. The Fortran is single-threaded and unchanged;
-the speedup is across runs. Splitting one calculation across workers is a later task.
+and ``summary.json`` beside the run directories.
+
+A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
+Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
+it integrates its share of the 400 trajectory blocks per coordinate set, draws the random
+stream through the rest, and writes a file per block it integrated. When every worker has
+landed and every block it owed is on disk, the block files are copied into the run directory
+and the program runs there once more as the combining run (``W 0``): it integrates nothing,
+reads the blocks back, and makes the sums, the averages and the SUMMARY with its own
+statements. That output is the run's output, read exactly as a serial one. A worker whose
+blocks are missing is a failure, with its output's last line as the reason, and the combining
+run never starts.
 
 No Qt here. The window, when it exists, calls ``run_many`` from a worker thread and draws from
-the callback.
+the callbacks.
 
     from mobcal.run import Job, run_many
     jobs = [Job(Path("choline.mfj"), gas, 5013489, Path("runs")) for gas in ("he", "n2")]
     summary = run_many(jobs, workers=2, progress=print)
+    split = run_one(Job(Path("choline.mfj"), "he", 5013489, Path("runs"), split=8))
 """
 
 from __future__ import annotations
@@ -43,6 +54,7 @@ from pathlib import Path
 
 import mobcal
 from mobcal import fortran
+from mobcal.io.block import BLOCKS_PER_SET, expected_names
 from mobcal.io.infile import FIELD_WIDTH, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
@@ -54,6 +66,8 @@ SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
 CSV_COLUMNS = ("name", "input", "gas", "seed", "status", "PA", "EHS", "TM", "sets", "seconds",
                "output", "message")
+BLOCK_GLOB = "block-*.dat"
+POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
 
 Launcher = Callable[["Job"], Sequence[str]]
 """The command line to run for a job, in the job's directory. The default is the built binary
@@ -68,10 +82,15 @@ class Job:
     out_dir: Path
     name: str | None = None  # the run directory's name; default <input stem>-<gas>-<seed>
     staged_name: str | None = None  # the input's name inside the run directory
+    split: int | None = None  # W: run this one calculation across W processes
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
             raise ValueError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
+        if self.split is not None and not (isinstance(self.split, int)
+                                           and 1 <= self.split <= BLOCKS_PER_SET):
+            raise ValueError(f"split must be a worker count from 1 to {BLOCKS_PER_SET}, "
+                             f"not {self.split!r}")
         object.__setattr__(self, "input", Path(self.input))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
 
@@ -90,6 +109,9 @@ class Job:
             return self.staged_name
         return self.input.name if len(self.input.name) <= FIELD_WIDTH else FALLBACK_STAGED_NAME
 
+    def worker_dir(self, w: int) -> Path:
+        return self.run_dir / f"w{w:02d}"
+
 
 @dataclass(frozen=True)
 class Result:
@@ -97,7 +119,7 @@ class Result:
     ok: bool
     message: str  # empty when ok; otherwise why not, with the exit status
     returncode: int | None  # None when the binary was never started
-    seconds: float  # wall time of the binary alone
+    seconds: float  # wall time of the binary alone (of workers and combining run, split)
     output: Path | None  # the output file, whether or not it holds a SUMMARY
     cross_sections: dict[str, float]  # the run's reported values (the mean over sets)
     conformers: list[dict[str, float]]  # per coordinate set
@@ -109,9 +131,10 @@ class Result:
     def record(self) -> dict:
         j = self.job
         return {"name": j.label, "input": str(j.input), "gas": j.gas, "seed": j.seed,
-                "status": self.status, "message": self.message, "returncode": self.returncode,
-                "seconds": round(self.seconds, 2), "output": str(self.output or ""),
-                "cross_sections": self.cross_sections, "conformers": self.conformers}
+                "split": j.split, "status": self.status, "message": self.message,
+                "returncode": self.returncode, "seconds": round(self.seconds, 2),
+                "output": str(self.output or ""), "cross_sections": self.cross_sections,
+                "conformers": self.conformers}
 
     def row(self) -> dict[str, object]:
         cs = self.cross_sections
@@ -123,11 +146,12 @@ class Result:
                 "message": self.message}
 
     def __str__(self) -> str:
+        split = f"  ({self.job.split} workers)" if self.job.split else ""
         if not self.ok:
-            return f"{self.job.label}  FAILED  {self.message}"
+            return f"{self.job.label}  FAILED  {self.message}{split}"
         cs = "  ".join(f"{k} {v:g}" for k, v in self.cross_sections.items())
         sets = f"  ({len(self.conformers)} sets)" if len(self.conformers) > 1 else ""
-        return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s"
+        return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}"
 
 
 def default_launcher(job: Job) -> Sequence[str]:
@@ -139,52 +163,37 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
     return Result(job, False, message, returncode, seconds, output, {}, [])
 
 
-def run_one(job: Job, launcher: Launcher | None = None, *,
-            _running: set[subprocess.Popen] | None = None) -> Result:
-    """Stage one job in its own directory, run the binary there, and read what it wrote.
-
-    The input is read first and a file the program would stop on is reported as failed without
-    starting the binary. A stale ``mobcal.out`` in the directory is removed before the run, so
-    that an output is never read from an earlier run.
-    """
-    try:
-        Mfj.read(job.input)
-    except OSError as e:
-        return _failed(job, f"cannot read input: {e}")
-    except MfjError as e:
-        return _failed(job, f"input refused: {e}")
-    try:
-        infile = InFile(job.staged, OUTPUT_NAME, job.seed)
-    except InFileError as e:
-        return _failed(job, str(e))
-    try:
-        command = list((launcher or default_launcher)(job))
-    except (FileNotFoundError, ValueError) as e:
-        return _failed(job, str(e))
-
-    d = job.run_dir
+def _prepare(job: Job, d: Path, split: tuple[int, int] | None) -> None:
+    """Make ``d`` ready for one start of the program: the input copied in under its staged name,
+    ``mobcal.in`` written, and any output or block file of an earlier run removed, so that
+    nothing stale is ever read as this run's."""
     d.mkdir(parents=True, exist_ok=True)
-    out = d / OUTPUT_NAME
-    out.unlink(missing_ok=True)
+    (d / OUTPUT_NAME).unlink(missing_ok=True)
+    for p in d.glob(BLOCK_GLOB):
+        p.unlink()
     shutil.copyfile(job.input, d / job.staged)
-    infile.write(d)
+    InFile(job.staged, OUTPUT_NAME, job.seed, split).write(d)
 
-    t0 = time.perf_counter()
+
+def _start(command: Sequence[str], d: Path,
+           running: set[subprocess.Popen] | None) -> subprocess.Popen:
+    """Start the program in ``d``, its console output to ``stdout.log``. Raises OSError."""
     with open(d / LOG_NAME, "wb") as log:
-        try:
-            proc = subprocess.Popen(command, cwd=d, stdout=log, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL)
-        except OSError as e:
-            return _failed(job, f"cannot start {command[0]}: {e}")
-        if _running is not None:
-            _running.add(proc)
-        try:
-            rc = proc.wait()
-        finally:
-            if _running is not None:
-                _running.discard(proc)
-    seconds = time.perf_counter() - t0
+        proc = subprocess.Popen(command, cwd=d, stdout=log, stderr=subprocess.STDOUT,
+                                stdin=subprocess.DEVNULL)
+    if running is not None:
+        running.add(proc)
+    return proc
 
+
+def _finish(proc: subprocess.Popen, running: set[subprocess.Popen] | None) -> None:
+    if running is not None:
+        running.discard(proc)
+
+
+def _collect(job: Job, d: Path, rc: int, seconds: float) -> Result:
+    """The verdict on a run from what the program left in ``d``."""
+    out = d / OUTPUT_NAME
     if not out.is_file():
         return _failed(job, f"no output file written (exit {rc})", rc, seconds)
     o = OutFile.read(out)
@@ -196,26 +205,146 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     return Result(job, True, "", rc, seconds, out, o.cross_sections, o.conformers)
 
 
+BlocksProgress = Callable[[Job, int, int], None]
+"""Called by a split run as its workers write block files: the job, blocks written, blocks
+expected. Called at least once, when the workers have landed."""
+
+
+def run_one(job: Job, launcher: Launcher | None = None, *,
+            _running: set[subprocess.Popen] | None = None,
+            blocks: BlocksProgress | None = None) -> Result:
+    """Stage one job in its own directory, run the binary there, and read what it wrote.
+
+    The input is read first and a file the program would stop on is reported as failed without
+    starting the binary. A stale ``mobcal.out`` in the directory is removed before the run, so
+    that an output is never read from an earlier run. A job with ``split`` runs its workers and
+    then the combining run; see the module docstring.
+    """
+    try:
+        mfj = Mfj.read(job.input)
+    except OSError as e:
+        return _failed(job, f"cannot read input: {e}")
+    except MfjError as e:
+        return _failed(job, f"input refused: {e}")
+    try:
+        InFile(job.staged, OUTPUT_NAME, job.seed)
+    except InFileError as e:
+        return _failed(job, str(e))
+    try:
+        command = list((launcher or default_launcher)(job))
+    except (FileNotFoundError, ValueError) as e:
+        return _failed(job, str(e))
+
+    if job.split:
+        return _run_split(job, command, mfj.coordinate_sets, _running, blocks)
+
+    d = job.run_dir
+    _prepare(job, d, None)
+    t0 = time.perf_counter()
+    try:
+        proc = _start(command, d, _running)
+    except OSError as e:
+        return _failed(job, f"cannot start {command[0]}: {e}")
+    try:
+        rc = proc.wait()
+    finally:
+        _finish(proc, _running)
+    return _collect(job, d, rc, time.perf_counter() - t0)
+
+
+def _run_split(job: Job, command: list[str], coordinate_sets: int,
+               running: set[subprocess.Popen] | None, blocks: BlocksProgress | None) -> Result:
+    total, d = job.split, job.run_dir
+    expected = {w: expected_names(coordinate_sets, total, w) for w in range(1, total + 1)}
+    n_expected = sum(len(v) for v in expected.values())
+    _prepare(job, d, (total, 0))
+    for w in expected:
+        _prepare(job, job.worker_dir(w), (total, w))
+
+    t0 = time.perf_counter()
+    procs: dict[int, subprocess.Popen] = {}
+    try:
+        for w in expected:
+            procs[w] = _start(command, job.worker_dir(w), running)
+    except OSError as e:
+        for p in procs.values():
+            p.terminate()
+            _finish(p, running)
+        return _failed(job, f"cannot start {command[0]}: {e}")
+
+    written = -1
+    try:
+        while True:
+            alive = [p for p in procs.values() if p.poll() is None]
+            n = sum(1 for w in expected for _ in job.worker_dir(w).glob(BLOCK_GLOB))
+            if blocks is not None and n != written:
+                blocks(job, n, n_expected)
+                written = n
+            if not alive:
+                break
+            try:
+                alive[0].wait(timeout=POLL_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        for p in procs.values():
+            _finish(p, running)
+
+    problems = []
+    for w, names in expected.items():
+        missing = [n for n in names if not (job.worker_dir(w) / n).is_file()]
+        if not missing:
+            continue
+        out = job.worker_dir(w) / OUTPUT_NAME
+        last = OutFile.read(out).last_line if out.is_file() else ""
+        why = last or f"exit {procs[w].returncode}"
+        problems.append(f"worker {w}: {len(missing)} of {len(names)} blocks missing ({why})")
+    if problems:
+        rc = next((p.returncode for p in procs.values() if p.returncode), 0)
+        return _failed(job, "; ".join(problems), rc, time.perf_counter() - t0)
+
+    for w in expected:
+        for p in job.worker_dir(w).glob(BLOCK_GLOB):
+            shutil.copyfile(p, d / p.name)
+    try:
+        proc = _start(command, d, running)
+    except OSError as e:
+        return _failed(job, f"cannot start the combining run: {e}", None,
+                       time.perf_counter() - t0)
+    try:
+        rc = proc.wait()
+    finally:
+        _finish(proc, running)
+    return _collect(job, d, rc, time.perf_counter() - t0)
+
+
 Progress = Callable[[Result, int, int], None]
 """Called as each run lands, with the result, how many have landed and how many there are."""
 
 
 def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress | None = None,
-             launcher: Launcher | None = None) -> Summary:
-    """Run the jobs with at most ``workers`` binaries in flight (default: the CPU count).
+             launcher: Launcher | None = None, blocks: BlocksProgress | None = None) -> Summary:
+    """Run the jobs with at most ``workers`` in flight (default: the CPU count).
 
     Each job runs in its own directory from a supervising thread; results are returned in the
-    jobs' order whatever order they land in. A KeyboardInterrupt stops every running binary
-    and is re-raised.
+    jobs' order whatever order they land in. A split job counts as one job in flight and
+    starts its own W processes. A KeyboardInterrupt stops every running binary and is
+    re-raised.
     """
     jobs = list(jobs)
     workers = max(1, min(workers or os.cpu_count() or 1, len(jobs) or 1))
     results: list[Result | None] = [None] * len(jobs)
     running: set[subprocess.Popen] = set()
     lock = threading.Lock()
+
+    def report_blocks(job: Job, n: int, total: int) -> None:
+        if blocks is not None:
+            with lock:
+                blocks(job, n, total)
+
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mobcal-run") as pool:
-        futures = {pool.submit(run_one, job, launcher, _running=running): i
+        futures = {pool.submit(run_one, job, launcher, _running=running, blocks=report_blocks): i
                    for i, job in enumerate(jobs)}
         done = 0
         try:

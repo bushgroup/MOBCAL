@@ -10,30 +10,22 @@ normalizations of ``mobcal.io.outfile``:
 - **T3, whole file.** Byte identity, gating on the platforms in ``strict-platforms.txt`` and
   reported as an expected failure elsewhere.
 
-The runs go through the driver, ``mobcal.run.run_many``, all the selected gases in one batch
-with one worker each, so a session that asks for both gases waits for the longer one and not
-for their sum. Helium is minutes and runs by default; nitrogen is about an hour and carries the
-``nitrogen`` marker, deselected unless asked for (``uv run pytest -m nitrogen``; ``-m ""`` for
-both). Without gfortran the gate skips, unless ``MOBCAL_REQUIRE_GFORTRAN`` is set, as CI sets
-it, in which case it fails.
+The runs go through the driver, ``mobcal.run.run_many``, from the session's ``pool`` fixture
+(``conftest.py``): all the selected gases in one batch with one worker each, so a session that
+asks for both gases waits for the longer one and not for their sum. Helium is minutes and runs
+by default; nitrogen is about an hour and carries the ``nitrogen`` marker, deselected unless
+asked for (``uv run pytest -m nitrogen``; ``-m ""`` for both).
 """
 
 from __future__ import annotations
 
 import difflib
-import os
-from dataclasses import dataclass
-from pathlib import Path
 
 import pytest
 
 import gate
-from mobcal import fortran
 from mobcal.io.outfile import OutFile
-from mobcal.run import Job, Result, run_many, run_one
-
-REFS = fortran.FORTRAN_DIR / "sample-output"
-REFERENCE = {"he": "Choline_He.out", "n2": "Choline_N2.out"}
+from mobcal.run import Job, Result, run_one
 
 REL_TOL = 1e-3
 """T2's relative tolerance on each reported cross section.
@@ -51,66 +43,9 @@ random stream; T1 carries the seed lines and T3 every digit, and those see it.
 """
 
 
-@dataclass(frozen=True)
-class GateRun:
-    gas: str
-    ref: OutFile
-    new: OutFile
-
-
-@dataclass(frozen=True)
-class Pool:
-    binaries: dict[str, Path]  # one built binary per gas the session selected
-    runs: dict[str, GateRun]
-
-    def launcher(self, job: Job) -> list[str]:
-        return [str(self.binaries[job.gas])]
-
-
-@pytest.fixture(scope="session")
-def gfortran():
-    gf = fortran.find_gfortran()
-    if gf is None:
-        msg = "no gfortran found ($FC, PATH, or MSYS2)"
-        if os.environ.get("MOBCAL_REQUIRE_GFORTRAN"):
-            pytest.fail(msg + " and MOBCAL_REQUIRE_GFORTRAN is set")
-        pytest.skip(msg)
-    return gf
-
-
-def selected_gases(session) -> list[str]:
-    """The gases the collected (not deselected) tests ask for, so a deselected gas never runs."""
-    gases = {item.callspec.params["choline"] for item in session.items
-             if getattr(item, "callspec", None) is not None
-             and "choline" in item.callspec.params}
-    return [g for g in fortran.GASES if g in gases] or ["he"]
-
-
-@pytest.fixture(scope="session")
-def pool(request, gfortran, tmp_path_factory, run_times) -> Pool:
-    """Build each selected gas, then run them all at once through the driver."""
-    gases = selected_gases(request.session)
-    binaries = {g: fortran.build(g, tmp_path_factory.mktemp(f"bin-{g}"), gfortran).binary
-                for g in gases}
-    p = Pool(binaries, {})
-    refs = {g: OutFile.read(REFS / REFERENCE[g]) for g in gases}
-    for g, ref in refs.items():
-        assert ref.input_name and ref.seed is not None, f"{g}: reference has no SUMMARY"
-    out = tmp_path_factory.mktemp("gate")
-    jobs = [Job(fortran.FORTRAN_DIR / "Choline.mfj", g, refs[g].seed, out, name=g,
-                staged_name=refs[g].input_name) for g in gases]
-    summary = run_many(jobs, workers=len(jobs), launcher=p.launcher)
-    for r in summary.results:
-        run_times[r.job.gas] = r.seconds
-        log = (r.job.run_dir / "stdout.log").read_text(errors="replace")[-2000:]
-        assert r.ok, f"{r.job.gas}: {r.message}\n{log}"
-        p.runs[r.job.gas] = GateRun(r.job.gas, refs[r.job.gas], OutFile.read(r.output))
-    return p
-
-
 @pytest.fixture(scope="module",
                 params=["he", pytest.param("n2", marks=pytest.mark.nitrogen)])
-def choline(request, pool) -> GateRun:
+def choline(request, pool) -> gate.GateRun:
     return pool.runs[request.param]
 
 
@@ -166,8 +101,8 @@ def test_strict_platforms_are_known():
 def test_stochastic_patterns_spare_the_identifying_lines():
     # The seed, the input echo and the mass reach T1 whatever the list says.
     patterns = gate.stochastic_patterns()
-    for name in REFERENCE.values():
-        ref = OutFile.read(REFS / name)
+    for name in gate.REFERENCE.values():
+        ref = OutFile.read(gate.REFS / name)
         kept = gate.deterministic(ref.lines, patterns)
         for must in (" using RANLUX with seed integer = 5013489",
                      " input file name = Choline_pop.mfj               ",
@@ -189,7 +124,7 @@ def test_t1_sees_what_it_should():
     # Against the helium reference itself: a new line, a moved potential minimum and a moved
     # b2max each change the deterministic lines; a moved cross section does not.
     patterns = gate.stochastic_patterns()
-    ref = OutFile.read(REFS / "Choline_He.out").lines
+    ref = OutFile.read(gate.REFS / "Choline_He.out").lines
     kept = gate.deterministic(ref, patterns)
 
     def t1(lines):

@@ -3,14 +3,16 @@
     mobcal version
     mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
-    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--workers N] [--out DIR]
+    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--workers N]
+               [--split W] [--out DIR]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
-``summary.csv`` and ``summary.json`` beside the run directories. Its exit status is 1 if any run
-failed. ``self-check`` is ``mobcal.selfcheck``. ``build`` needs a source checkout; an installed
-copy carries binaries built in CI. The window's ``gui`` arrives with its task. This module
-imports no Qt.
+``summary.csv`` and ``summary.json`` beside the run directories. With ``--split W`` each
+calculation runs across W processes and reports the serial result exactly. Its exit status is
+1 if any run failed. ``self-check`` is ``mobcal.selfcheck``. ``build`` needs a source checkout;
+an installed copy carries binaries built in CI. The window's ``gui`` arrives with its task.
+This module imports no Qt.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import sys
 from pathlib import Path
 
 from mobcal import ROOT, __version__, fortran
+from mobcal.io.block import BLOCKS_PER_SET
 from mobcal.run import Job, Result, run_many
 
 # The seed the shipped mobcal.in carries, at which the 2012 references were run.
@@ -77,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
                    help=f"one run per seed (default {DEFAULT_SEED}, the 2012 seed)")
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help="runs in flight at once (default: the number of CPUs)")
+    r.add_argument("--split", type=int, default=None, metavar="W",
+                   help="run each calculation across W processes, with the serial result "
+                        "exactly (default: one process per calculation)")
     r.add_argument("--out", type=Path, default=DEFAULT_OUT,
                    help=f"where the run directories and the summary go (default {DEFAULT_OUT}/)")
 
@@ -98,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         problems = fortran.verify_sources()
         if problems:
-            print("refusing to build: fortran/ is not the 2012 code", file=sys.stderr)
+            print("refusing to build: fortran/ is not the pinned code", file=sys.stderr)
             for p in problems:
                 print("  " + p, file=sys.stderr)
             return 2
@@ -131,16 +137,30 @@ def _run(args: argparse.Namespace) -> int:
         except FileNotFoundError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-    jobs = [Job(p, gas, seed, args.out) for p in inputs for gas in gases for seed in args.seeds]
-    workers = max(1, min(args.workers or os.cpu_count() or 1, len(jobs)))
+    split = args.split
+    if split is not None and not 1 <= split <= BLOCKS_PER_SET:
+        print(f"error: --split takes a worker count from 1 to {BLOCKS_PER_SET}", file=sys.stderr)
+        return 2
+    try:
+        jobs = [Job(p, gas, seed, args.out, split=split)
+                for p in inputs for gas in gases for seed in args.seeds]
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    cpus = os.cpu_count() or 1
+    workers = max(1, min(args.workers or (cpus // split if split else cpus), len(jobs)))
     print(f"{len(jobs)} run{'s' if len(jobs) != 1 else ''} on {workers} worker"
-          f"{'s' if workers != 1 else ''}, binaries from {fortran.binary_dir()}, "
-          f"output under {args.out}/", flush=True)
+          f"{'s' if workers != 1 else ''}" + (f", each across {split} processes" if split else "")
+          + f", binaries from {fortran.binary_dir()}, output under {args.out}/", flush=True)
 
     def progress(r: Result, done: int, total: int) -> None:
         print(f"[{done}/{total}] {r}", flush=True)
 
-    summary = run_many(jobs, workers, progress)
+    def blocks(job: Job, n: int, total: int) -> None:
+        if n and n % 40 == 0 or n == total:
+            print(f"    {job.label}: {n}/{total} blocks", flush=True)
+
+    summary = run_many(jobs, workers, progress, blocks=blocks)
     csv_path, json_path = summary.write(args.out)
     print(f"{summary}; wrote {csv_path} and {json_path}")
     return 1 if summary.failed else 0

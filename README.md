@@ -2,10 +2,11 @@
 
 MOBCAL calculates the collision cross sections of ions in helium and in nitrogen by the
 trajectory method. The Fortran at its core is the 2012 release of MOBCAL described in
-Campuzano et al., *Anal. Chem.* 2012, 84, 1026, kept here byte for byte. Around it this
+Campuzano et al., *Anal. Chem.* 2012, 84, 1026, kept here with one addition: the program can
+run one calculation as several processes and report the serial result exactly. Around it this
 repository is building a Python package that compiles the Fortran, runs many calculations at
-once on separate cores, collects the results, and will ship as an installer for people who do
-not manage compilers or Python environments.
+once on separate cores or one calculation across them, collects the results, and will ship as
+an installer for people who do not manage compilers or Python environments.
 
 ## Status
 
@@ -13,14 +14,18 @@ Founded 2026-10-21. The Fortran is in place and builds on Windows, macOS and Lin
 continuous integration, which also runs the self-check and the tests on every change. The tests
 include a regression test that runs the 2012 choline input through each build and compares the
 result with the 2012 outputs. The Python package has a version, a build command, a self-check,
-readers and writers for the three file formats, and `mobcal run`, which runs many calculations
-at once on separate processors and collects the results. Each change also builds an installer
+readers and writers for the file formats, and `mobcal run`, which runs many calculations at
+once on separate processors, or one calculation across them with `--split`, and collects the
+results. Each change also builds an installer
 for Windows and archives for macOS and Linux, which run without a compiler or Python. A
 graphical interface is planned once the command line has been used.
 
-The 2012 code itself, including its Lennard-Jones parameters, is not being changed. Questions
-about the parameters are being taken up separately, and no change to them will land without a
-stated decision and a stated reason.
+The physics of the 2012 code, including its Lennard-Jones parameters, is not being changed.
+Questions about the parameters are being taken up separately, and no change to them will land
+without a stated decision and a stated reason. The one change to the Fortran so far adds
+statements and alters none, and is listed with its line counts in
+[fortran/README.md](fortran/README.md): without the record it reads, the program is the 2012
+program, and the regression test holds it to the 2012 outputs byte for byte on every change.
 
 ## Installing
 
@@ -99,9 +104,28 @@ program would stop on, such as more than 1,000 atoms, more than 100 coordinate s
 line that is not exactly `ang` or `au`, is refused before the program starts. The command exits
 with status 1 if any run failed.
 
-The Fortran is single-threaded and is not changed; the speedup comes from running independent
-calculations on separate processors. Splitting one calculation across processors is planned
-as a separate change to the Fortran.
+The Fortran is single-threaded, so the speedup above comes from running independent calculations
+on separate processors. One calculation can also run across them:
+
+```
+uv run mobcal run choline.mfj --gas n2 --split 8 --out runs
+```
+
+runs the choline calculation in nitrogen as eight processes and reports the serial result
+exactly: the same cross section, standard deviation and failure count to every printed digit,
+because the random number stream is partitioned rather than re-drawn and the sums are made by
+the serial program's own statements. The trajectory method integrates 400 blocks of 1,000
+trajectories per coordinate set, and each of the eight processes integrates every eighth block,
+draws the random stream through the others so that it reaches each of its own in the state the
+serial run would have had, and writes a 44-byte file per block it integrated. When all eight
+have landed, the program runs once more in the run directory as the combining run, which
+integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY
+with the same statements the serial run uses. That output is the run's output, read as any
+other; the eight workers' directories, `w01` to `w08`, are kept beside it as records. A worker
+that did not write every block it owed fails the run, and the combining run never starts. Any
+`--split` from 1 to 400 balances, since the blocks are dealt round robin, and `--workers` then
+counts split calculations in flight, each of them `--split` processes. Without `--split`, or
+without the fourth record it writes to `mobcal.in`, the program is the 2012 program.
 
 ## Testing against the 2012 outputs
 
@@ -113,7 +137,12 @@ lists the lines that do, so a line that is not listed has to match, and a line t
 never wrote fails the test. The second compares the reported cross sections within 0.1 %: the
 projection-approximation, exact hard-sphere and trajectory-method values in helium, and the
 trajectory-method value in nitrogen. The third requires the whole file to be byte-identical to
-the reference on the platforms listed in `tests/strict-platforms.txt`, which are all three.
+the reference on the platforms listed in `tests/strict-platforms.txt`, which are all three. A
+fourth test runs the same helium calculation split across one process and across three, and
+requires each combined output to match the serial run's line for line, with no tolerance, apart
+from the energy-conservation diagnostics, which the process that integrated the failing
+trajectory prints, and the one line that marks a combined output as combined; the diagnostics
+themselves must be conserved across the workers.
 
 Both runs go through the same driver as `mobcal run`, and when both gases are selected they run
 at the same time. The helium comparison takes about 3 minutes and runs with every
