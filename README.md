@@ -14,12 +14,19 @@ continuous integration, which also runs the self-check and the tests on every ch
 include a regression test that runs the 2012 choline input through each build and compares the
 result with the 2012 outputs. The Python package has a version, a build command, a self-check,
 readers and writers for the three file formats, and `mobcal run`, which runs many calculations
-at once on separate processors and collects the results. The installers follow. A graphical
-interface is planned once the command line has been used.
+at once on separate processors and collects the results. Each change also builds an installer
+for Windows and archives for macOS and Linux, which run without a compiler or Python. A
+graphical interface is planned once the command line has been used.
 
 The 2012 code itself, including its Lennard-Jones parameters, is not being changed. Questions
 about the parameters are being taken up separately, and no change to them will land without a
 stated decision and a stated reason.
+
+## Installing
+
+[`docs/install.md`](docs/install.md) describes the Windows installer and the macOS and Linux
+archives, which carry the `mobcal` command and the Fortran compiled for each platform, and how
+to check an installation with `mobcal self-check`.
 
 ## What is here
 
@@ -28,6 +35,8 @@ stated decision and a stated reason.
   release said about compiling them.
 - `src/mobcal/`: the Python package.
 - `tools/check_public.py`: the self-check a fresh clone runs.
+- `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
+- `docs/`: the installation guide.
 
 ## Building the Fortran
 

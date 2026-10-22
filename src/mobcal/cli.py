@@ -51,7 +51,9 @@ def expand_inputs(patterns: list[str]) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="mobcal", description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        prog="mobcal", description="Collision cross sections by the trajectory method: the 2012 "
+        "MOBCAL Fortran, run many calculations at a time.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("version", help="print the package version")

@@ -1,0 +1,111 @@
+# Installing MOBCAL
+
+MOBCAL is distributed as a program that runs without a Fortran compiler and without Python: an
+installer for Windows, and an archive for macOS on Apple silicon and for Linux on x86-64. Each
+holds the `mobcal` command, the two 2012 Fortran programs (helium and nitrogen) compiled for that
+platform, and the 2012 choline input with its two reference outputs. To build from source
+instead, see the [README](../README.md).
+
+Released versions are on the repository's
+[Releases page](https://github.com/bushgroup/MOBCAL/releases). Between releases, every change to
+the repository builds all three packages in the
+[`ci` workflow](https://github.com/bushgroup/MOBCAL/actions/workflows/ci.yml), which keeps them
+as artifacts of each run (`package-Windows-X64`, `package-macOS-ARM64`, `package-Linux-X64`) for
+30 days. A development build carries a version ending in `.dev0`.
+
+## Windows
+
+Run `mobcal-<version>-setup.exe`. The installer does not need administrator rights: it installs
+for the current user, into `%LOCALAPPDATA%\Programs\MOBCAL` by default. The installer is not
+signed, and Windows SmartScreen answers an unsigned installer it has not seen before with
+"Windows protected your PC"; choose **More info**, then **Run anyway**.
+
+One option, checked by default, adds the installation directory to your `PATH`, so that `mobcal`
+runs in any terminal opened after the installation. The Start menu gets three entries:
+**MOBCAL command prompt**, a command prompt in which `mobcal` runs whether or not that option was
+chosen; **MOBCAL self-check**, which runs the check described below; and **Uninstall MOBCAL**.
+Uninstalling removes the program and its `PATH` entry, and leaves alone any calculation output
+written elsewhere.
+
+## macOS (Apple silicon)
+
+Unpack the archive wherever the program should live, for example in your home directory:
+
+```
+tar -xzf mobcal-<version>-macos-arm64.tar.gz -C ~
+```
+
+This gives a folder `mobcal-<version>` holding the `mobcal` command. The program is not signed
+by Apple, so macOS refuses to run a copy that was downloaded with a web browser until the
+download's quarantine flag is removed:
+
+```
+xattr -dr com.apple.quarantine ~/mobcal-<version>
+```
+
+To run `mobcal` by name, add the folder to your `PATH`, for example by adding this line to
+`~/.zprofile`:
+
+```
+export PATH="$HOME/mobcal-<version>:$PATH"
+```
+
+The macOS package runs on Apple silicon (arm64) only. On an Intel Mac, build from source.
+
+## Linux (x86-64)
+
+Unpack the archive and add the folder to your `PATH` in the same way:
+
+```
+tar -xzf mobcal-<version>-linux-x86_64.tar.gz -C ~
+export PATH="$HOME/mobcal-<version>:$PATH"
+```
+
+The Fortran programs are linked statically and depend on no library. The `mobcal` command needs
+a glibc-based distribution; each build is tested in AlmaLinux 8, Ubuntu 20.04 and Debian stable
+containers that have neither a compiler nor Python installed.
+
+## Checking an installation
+
+```
+mobcal self-check
+```
+
+checks, in under a second, that the installed copy can compute a cross section. It prints one
+line per stage, with the time each took: the version; that both Fortran programs are present,
+are the files that were built for this package, and were built from the 2012 sources with the
+recorded compiler flags (the folder `fortran` beside `mobcal` holds the programs and a
+`build.json` that records the compiler, the flags, the commit and a checksum of each file); and
+that each program starts and refuses an input naming an element it does not define, which
+exercises everything a calculation does except the trajectories. It ends with
+`self-check passed`, or names the stage that failed.
+
+```
+mobcal self-check --choline
+```
+
+also runs the 2012 choline input in helium at the 2012 random seed and compares the three cross
+sections with the 2012 output, which takes about three minutes. A correct installation
+reproduces the 2012 values, 61.075 Å² (projection approximation), 63.473 Å² (exact hard
+spheres) and 55.402 Å² (trajectory method), and every package is tested this way before it is
+kept.
+
+## Running calculations
+
+The installed command is the same `mobcal run` that the [README](../README.md#running-calculations)
+describes, without the `uv run` in front of it. The choline input is in the `examples` folder
+of the installation:
+
+```
+mobcal run <installation>/examples/Choline.mfj --gas he --out runs
+```
+
+writes its run directory and `summary.csv` under `runs` in the current directory. Run
+calculations from a folder of your own, not from inside the installation, which an upgrade
+replaces.
+
+## Source code
+
+MOBCAL is free software under the GNU General Public License, version 3, which the installation
+carries as `LICENSE`. The commit each package was built from is recorded in its
+`fortran/build.json`, and the source code at that commit is in this repository.
