@@ -519,10 +519,22 @@ c
       read(9,*) icoord
       write(8,650) icoord
   650 format(1x,'number of coordinate sets =',i5)
+      if(icoord.gt.100) then
+      write(8,651)
+  651 format(1x,'number of coordinate sets exceeds the limit of 100')
+      close (8)
+      stop 1
+      endif
 c 
       read(9,*) inatom
       write(8,612) inatom
   612 format(1x,'number of atoms =',i4)
+      if(inatom.gt.len) then
+      write(8,652) len
+  652 format(1x,'number of atoms exceeds the limit of',i5)
+      close (8)
+      stop 1
+      endif
       read(9,'(a30)') unit
       read(9,'(a30)') dchar
 c
@@ -689,7 +701,7 @@ c
 c
       if(itest.eq.0) then
       write(8,602) iatom
-  602 format(1x,'type not defined for atom number',i3)
+  602 format(1x,'type not defined for atom number',i4)
       close (8)
       stop 1
       endif
@@ -2781,7 +2793,7 @@ c
 c
       if(itest.eq.0) then
       write(8,602) iatom
-  602 format(1x,'type not defined for atom number',i3)
+  602 format(1x,'type not defined for atom number',i4)
       close (8)
       stop 1
       endif

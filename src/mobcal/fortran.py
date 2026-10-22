@@ -57,8 +57,8 @@ SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the changes fortran/README.md lists under Changes.
 SHA256 = {
-    "mobcal_He.f": "ea8855f161276fe6d3f08f5d660296b3b29df374868be8458fe14c5a20fdafb6",
-    "mobcal_N2.f": "dde4dbd483a0bef3b9ec34ee43e979f2af7467bfae82448d0abd725b6c93d593",
+    "mobcal_He.f": "2ee87153cc405bf3fde37ac2408684e733450693a6007da32764888415ed1691",
+    "mobcal_N2.f": "dc1b449ffad70246d8c466888f78c38ca9246f99b2bc9971f1549cac0f70d96a",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "b171aed86d9bcf6ad4a1daeb8ad43608268d8ce02e67b54366459970605e2da6",
     "sample-output/Choline_He.out":

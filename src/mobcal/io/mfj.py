@@ -21,7 +21,8 @@ reports as a failed run.
 
 What this reader refuses, before a binary is launched: an atom count above 1,000 or a set count
 above 100 (``parameter (len=1000)`` and the main program's ``dimension tmc(100)``, which the
-2012 code reads into without a check), a unit or charge mode the program would stop on, a
+2012 code read into without a check and the program now refuses too), a unit or charge mode the
+program would stop on, a
 missing or short atom line, and a file that ends before its last set. Nothing about charge or
 geometry is checked; the program's own checks (``masses do not add up``) stand.
 

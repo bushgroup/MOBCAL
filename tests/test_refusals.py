@@ -1,4 +1,4 @@
-"""Every refusal of the program exits 1, and the normal end exits 0.
+"""Every refusal of the program exits 1, the normal end exits 0, and the array bounds are guarded.
 
 The 2012 program ended every termination with a bare ``stop``, which exits 0, so a refusal and a
 finished calculation looked the same to a caller. Each refusal is now ``stop 1``. The static test
@@ -28,13 +28,30 @@ _STOP = re.compile(r"\bstop\b(.*)$")
 _HBR = "HBr+\n1\n2\n{unit}\n{charge}\n1.0000\n 0 0 0 {key} 0.5\n 1.41 0 0 1 0.5\n"
 _OK = {"unit": "ang", "charge": "calc", "key": 35}
 
+
+def _chain(sets: int, atoms: int) -> str:
+    """``atoms`` hydrogens on a line, the last of them bromine; ``sets`` declared, one given.
+
+    The program reads the coordinate-set count, then the atom count, then the first set, and
+    refuses the bromine before it needs the other sets, so the counts alone decide what happens.
+    """
+    rows = [f" {1.1 * i:.2f} 0 0 {35 if i == atoms else 1} 0.001" for i in range(1, atoms + 1)]
+    return "\n".join(["chain", str(sets), str(atoms), "ang", "calc", "1.0000", *rows]) + "\n"
+
+
 # (input, fourth mobcal.in record or None, the output's last non-blank line, stripped)
 REFUSALS = {
+    # The array bounds: 100 coordinate sets (the main program's dimension tmc(100)) and 1,000
+    # atoms (parameter len). At both bounds the input is accepted and runs on to the bromine,
+    # which is atom 1000 and prints as such under format 602's i4.
+    "sets over": (_chain(101, 2), None, "number of coordinate sets exceeds the limit of 100"),
+    "atoms over": (_chain(1, 1001), None, "number of atoms exceeds the limit of 1000"),
+    "both at bound": (_chain(100, 1000), None, "type not defined for atom number1000"),
     "units": (_HBR.format(**{**_OK, "unit": "nm"}), None,
               "units not specified"),
     "charge": (_HBR.format(**{**_OK, "charge": "some"}), None,
                "charge distribution not specified"),
-    "element": (_HBR.format(**_OK), None, "type not defined for atom number  1"),
+    "element": (_HBR.format(**_OK), None, "type not defined for atom number   1"),
     "split record": (_HBR.format(**_OK), "2 3",
                      "bad split record in mobcal.in:       2       3"),
 }
@@ -71,3 +88,15 @@ def test_a_refusal_exits_1(pool, tmp_path, case):
         out = OutFile.read(d / "out.txt")
         assert proc.returncode == 1, (gas, proc.returncode, out.last_line)
         assert out.last_line == last and not out.ok, (gas, out.lines[-3:])
+
+
+def test_the_set_count_is_refused_before_the_atom_count_is_read(pool, tmp_path):
+    binary = next(iter(pool.binaries.values()))
+    (tmp_path / "in.mfj").write_text(_chain(101, 2), encoding="latin-1", newline="\n")
+    (tmp_path / "mobcal.in").write_text("in.mfj\nout.txt\n1\n", encoding="latin-1",
+                                        newline="\n")
+    subprocess.run([str(binary)], cwd=tmp_path, capture_output=True, timeout=60,
+                   stdin=subprocess.DEVNULL)
+    lines = OutFile.read(tmp_path / "out.txt").lines
+    assert lines[-2:] == [" number of coordinate sets =  101",
+                          " number of coordinate sets exceeds the limit of 100"]

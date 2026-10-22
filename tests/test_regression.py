@@ -90,7 +90,7 @@ def test_an_undefined_element_is_reported_as_failed(pool, tmp_path):
     for gas in pool.binaries:
         r: Result = run_one(Job(inp, gas, 1, tmp_path), pool.launcher)
         assert not r.ok and r.returncode == 1, (gas, r)
-        assert r.message == "exit 1: type not defined for atom number  1", (gas, r.message)
+        assert r.message == "exit 1: type not defined for atom number   1", (gas, r.message)
         assert r.cross_sections == {} and r.conformers == []
 
 
