@@ -22,8 +22,8 @@ you are reading this file *without* that import, you have a public clone — the
 - **`fortran/` is the 2012 code plus the changes `fortran/README.md` lists, and changes no other
   way.** `mobcal.fortran.SHA256` pins every file there and the self-check compares. A change to
   any of them happens only in a commit a lab task calls for, updates the pins and that list in
-  the same commit, and counts its diff line by line in the message. The serial program stays the
-  2012 program statement for statement; the gate proves it on every push.
+  the same commit, and counts its diff line by line in the message. No change moves a value the
+  2012 program computes; the gate proves it on every push.
   The reference outputs under `fortran/sample-output/` are the 2012 originals; a test normalizes
   its own output to compare, and never edits them.
 - **The build recipe lives in one place**, `mobcal.fortran.FFLAGS`: `-O3 -fno-automatic

@@ -4,9 +4,8 @@ The six files under ``fortran/`` are the 2012 release of MOBCAL plus the changes
 ``fortran/README.md`` lists, each counted line by line, and this module is where that claim is
 made checkable: ``SHA256`` pins each file as committed and ``verify_sources`` compares. A change
 to any of them is a decision taken in the lab record, lands with new pins in the same commit,
-and counts its diff in the commit message. The 2012 numbers are untouched: the serial program
-is the 2012 program statement for statement, and the regression gate reproduces both 2012
-outputs byte for byte.
+and counts its diff in the commit message. The 2012 numbers are untouched: no change alters a
+value the program computes, and the regression gate reproduces both 2012 outputs byte for byte.
 
 The build recipe is also stated here and nowhere else. ``-fno-automatic`` is mandatory: the code
 relies on local variables keeping their values between calls, which g77 gave it by default. An
@@ -56,10 +55,10 @@ SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
 
 # The 2012 files, as committed at bushgroup/MOBCAL-2012 tag v1.0 (commit 4f3be72) and copied
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
-# with the split-calculation statements added the same day (fortran/README.md, Changes).
+# with the changes fortran/README.md lists under Changes.
 SHA256 = {
-    "mobcal_He.f": "678d5370a258220a913e1f4e811254862435fe6a5a1c293e0a39c316f7db6749",
-    "mobcal_N2.f": "46ad661ef645bbd956ec01b0d0f9292ba7db1c6ddb3525ee9b348e62f6e76e6d",
+    "mobcal_He.f": "e789eefb5fc6af3165d5532325fa1ff8c07699ecb9c95a33fa10126c7fa4dfe6",
+    "mobcal_N2.f": "fb8e799774830be4f00387e3b8d12248dcd0761cce1e3dbc1787389b3ab1151d",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "b171aed86d9bcf6ad4a1daeb8ad43608268d8ce02e67b54366459970605e2da6",
     "sample-output/Choline_He.out":

@@ -1,4 +1,4 @@
-"""mobcal.io.outfile: the two normalizations, each on its own terms, and the SUMMARY reader."""
+"""mobcal.io.outfile: the one normalization, on its own terms, and the SUMMARY reader."""
 
 from mobcal import fortran
 from mobcal.io.outfile import OutFile, normalize, read_text
@@ -23,14 +23,10 @@ def test_cr_is_stripped_at_end_of_line_only():
     assert normalize("one\r\r\n") == "one\r\n"
 
 
-def test_d_exponent_on_the_mass_line():
-    assert normalize(" mass of ion = 1.0417D+02\r\n") == " mass of ion = 1.0417E+02\n"
-    assert normalize(" mass of ion = 1.0417D-02") == " mass of ion = 1.0417E-02"
-
-
-def test_d_exponent_elsewhere_is_left_alone():
-    for line in (" dipole constant = 2.3642D-59", " total charge = 1.0000D+00",
-                 " input file label = Choline_631G++dp_pop", " mass of ion = HDD"):
+def test_d_exponent_is_left_alone_even_on_the_mass_line():
+    # Format 604 prints E now; a D there is a regressed format, and the comparison must see it.
+    for line in (" mass of ion = 1.0417D+02", " dipole constant = 2.3642D-59",
+                 " input file label = Choline_631G++dp_pop"):
         assert normalize(line) == line
 
 

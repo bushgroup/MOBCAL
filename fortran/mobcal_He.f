@@ -699,7 +699,7 @@ c
       do 2021 iatom=1,inatom
  2021 m2=m2+xmass(iatom)
       write(8,604) m2
-  604 format(1x,'mass of ion =',1pd11.4)
+  604 format(1x,'mass of ion =',1pe11.4)
       do 2030 iatom=1,inatom
       rhs2(iatom)=rhs(iatom)*rhs(iatom)
       eox4(iatom)=4.d0*eolj(iatom)

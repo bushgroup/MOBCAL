@@ -1,5 +1,5 @@
 # Platforms on which tier T3 of the regression gate -- the whole output byte-identical to the
-# 2012 reference after the two normalizations -- gates. Elsewhere it is reported (xfail) only.
+# 2012 reference after the one normalization -- gates. Elsewhere it is reported (xfail) only.
 #
 # One key per line: linux, macos or windows. Blank lines and lines starting with '#' are ignored.
 # Tiers T1 and T2 gate on every platform whatever this file says.

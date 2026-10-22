@@ -1,18 +1,15 @@
 """The ``.out`` file the 2012 program writes: normalize it, and read its SUMMARY block.
 
-Two normalizations make a gfortran output comparable with the 2012 g77 references, and they are
-applied to the program's side only (the references are never edited):
+One normalization makes a gfortran output comparable with the 2012 g77 references, and it is
+applied to the program's side only (the references are never edited): **end-of-line CR.**
+gfortran's Windows runtime opens the output unit in text mode and writes CRLF. One CR is stripped
+at the end of each line and nowhere else: the filename fields are blank-padded to 30 columns by
+an ``a30`` edit descriptor, and those trailing blanks are content.
 
-1. **End-of-line CR.** gfortran's Windows runtime opens the output unit in text mode and writes
-   CRLF. One CR is stripped at the end of each line and nowhere else: the filename fields are
-   blank-padded to 30 columns by an ``a30`` edit descriptor, and those trailing blanks are
-   content.
-2. **The ``D`` exponent on the ``mass of ion`` line.** Format 604 is the only ``1pd`` edit
-   descriptor in either source; g77 printed ``E`` there and gfortran prints ``D``, same digits.
-   The letter is rewritten on that one line.
-
-Nothing else is normalized. With both applied, the founding build reproduced the 2012 helium
-reference byte for byte; with either removed it did not.
+Nothing else is normalized. There were two until format 604, the ``mass of ion`` line, was
+changed from ``1pd`` to ``1pe`` (``fortran/README.md``, Changes): gfortran printed a ``D``
+exponent there where g77 printed ``E``, and the letter was rewritten on that one line. The line
+now reaches the comparison as printed, so a ``D`` there fails it.
 
 The SUMMARY block at the end of the file repeats the run's identifying parameters and its
 results, one ``label = value`` pair or two per line. ``OutFile.summary`` maps each label to the
@@ -37,11 +34,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-MASS_LINE = " mass of ion ="
 SUMMARY_LINE = " SUMMARY"
-
-# A Fortran exponent letter between a mantissa digit and a signed exponent: 1.0417D+02.
-_D_EXPONENT = re.compile(r"(?<=\d)D(?=[+-]\d)")
 
 # One "label = value" pair. Labels contain blanks and parentheses; values do not contain blanks.
 _PAIR = re.compile(r"\s*([^=]*?)\s*=\s*(\S+)")
@@ -61,15 +54,8 @@ _SETS_LINE = " number of coordinate sets ="
 
 
 def normalize(text: str) -> str:
-    """The program's output with the two normalizations applied, and nothing else changed."""
-    lines = text.split("\n")
-    for i, line in enumerate(lines):
-        if line.endswith("\r"):
-            line = line[:-1]
-        if line.startswith(MASS_LINE):
-            line = _D_EXPONENT.sub("E", line)
-        lines[i] = line
-    return "\n".join(lines)
+    """The program's output with one CR stripped at the end of each line, nothing else changed."""
+    return "\n".join(s[:-1] if s.endswith("\r") else s for s in text.split("\n"))
 
 
 def read_text(path: Path) -> str:

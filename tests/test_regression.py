@@ -1,8 +1,8 @@
 """The regression gate: choline through the built binaries, compared with the 2012 references.
 
 Each gas is built with the recorded recipe, run on ``fortran/Choline.mfj`` staged under the name
-the reference echoes and at the seed it records, and compared in three tiers after the two
-normalizations of ``mobcal.io.outfile``:
+the reference echoes and at the seed it records, and compared in three tiers after the one
+normalization of ``mobcal.io.outfile`` (end-of-line CR):
 
 - **T1, deterministic lines.** Every line that no pattern in ``stochastic-lines.txt`` matches,
   character for character. An unlisted line must match, so a new output line fails here.

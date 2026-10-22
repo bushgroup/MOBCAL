@@ -58,7 +58,7 @@ def main() -> int:
     if mode == "refuse":
         lines.append(" type not defined for atom number  1")
         return write(out, lines, 0)
-    lines += [" mass of ion = 1.0417D+02", " RANLUX INITIALIZED BY RLUXGO FROM SEEDS"
+    lines += [" mass of ion = 1.0417E+02", " RANLUX INITIALIZED BY RLUXGO FROM SEEDS"
               f" {seed} 0 0", f" using RANLUX with seed integer ={seed:8d}"]
     if mode == "crash":
         return write(out, lines, 3)
