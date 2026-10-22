@@ -5,11 +5,17 @@ name: ci
 # self-check and the tests run, and both binaries kept as artifacts. tools/check_public.py fails
 # on any compiler warning. The tests include the helium regression gate, a few minutes; the
 # nitrogen gate, about an hour, runs weekly and on a manual dispatch that asks for it.
+#
+# Then the installable program, from those artifacts: the Windows installer and the macOS and
+# Linux archives, each installed or unpacked where no compiler or Python is visible and run
+# through its self-check and the 2012 choline input in helium. A pushed v* tag also gathers the
+# three into a draft GitHub release, which is published by hand.
 
 on:
   # push is limited to main so a branch with an open pull request does not run twice per commit.
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   schedule:
     - cron: "17 9 * * 1"  # Mondays, 09:17 UTC
@@ -110,9 +116,141 @@ jobs:
       - name: Build the binaries
         run: uv run mobcal build
 
+      # The two binaries and the build.json that records them, which the package job checks.
       - uses: actions/upload-artifact@v7
         with:
           name: mobcal-${{ runner.os }}-${{ runner.arch }}
           path: build/fortran/
           if-no-files-found: error
           retention-days: 30
+
+  package:
+    name: package ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.3.0
+
+      - name: Lock file is current
+        run: uv sync --locked
+
+      # The binaries this platform's build job compiled and tested, not a new compile.
+      - uses: actions/download-artifact@v7
+        with:
+          name: mobcal-${{ runner.os }}-${{ runner.arch }}
+          path: build/fortran/
+
+      # build_bundle.py refuses binaries that need a gfortran runtime or do not match their
+      # build.json, and runs the built program's self-check with PATH cut to the OS's own.
+      - name: Bundle (macOS, Linux)
+        if: runner.os != 'Windows'
+        run: uv run tools/build_bundle.py --archive
+
+      - name: Install Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Bundle and installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tools/build_exe.ps1
+
+      # A clean machine, as near as a runner gets: Linux containers with neither gfortran nor
+      # Python, the oldest a glibc-2.28 one; on macOS and Windows, PATH cut to the OS's own.
+      - name: Unpacked on a clean Linux
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$RUNNER_TEMP/clean" && tar -xzf dist/mobcal-*.tar.gz -C "$RUNNER_TEMP/clean"
+          for img in almalinux:8 ubuntu:20.04; do
+            echo "== $img"
+            docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp "$img" sh -c '/opt/mobcal-*/mobcal self-check'
+          done
+          echo "== debian:stable-slim, with choline"
+          docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp debian:stable-slim sh -c '/opt/mobcal-*/mobcal self-check --choline'
+
+      - name: Unpacked on macOS
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$RUNNER_TEMP/clean" && tar -xzf dist/mobcal-*.tar.gz -C "$RUNNER_TEMP/clean"
+          cd "$RUNNER_TEMP" && env -i HOME="$HOME" PATH=/usr/bin:/bin "$RUNNER_TEMP"/clean/mobcal-*/mobcal self-check --choline
+
+      # Per-user and silent, as a person without admin rights would install it; then the
+      # installed command, the PATH entry the default task adds, and a clean uninstall.
+      - name: Installed on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dist\installer\mobcal-*-setup.exe).FullName
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "setup exited $($p.ExitCode)" }
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\MOBCAL'
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -notcontains $app) { throw "$app is not on the user PATH: $userPath" }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Remove-Item Env:MOBCAL_BIN_DIR -ErrorAction SilentlyContinue
+          Set-Location $env:RUNNER_TEMP
+          & "$app\mobcal.exe" self-check --choline
+          if ($LASTEXITCODE -ne 0) { throw "installed self-check exited $LASTEXITCODE" }
+          # The uninstaller relaunches itself from a temporary copy and returns at once, so the
+          # files are waited for rather than the process.
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path "$app\mobcal.exe") -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 500 }
+          if (Test-Path "$app\mobcal.exe") { throw "mobcal.exe is still there 60 s after uninstall" }
+          Start-Sleep -Seconds 2
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (($userPath -split ';') -contains $app) { throw "$app is still on the user PATH" }
+          "installed, checked and uninstalled"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/installer/*.exe
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  # Only for a pushed tag, which only Matt pushes: a draft release holding the three packages,
+  # after a check that the tag names the version the packages carry.
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: package-*
+          path: release/
+          merge-multiple: true
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not name the version in pyproject.toml, ${version}"; exit 1
+          fi
+          ls -l release/
+          pre=$(python3 -c "import re, sys; print('--prerelease' if re.search(r'(a|b|rc|dev)[0-9]+', sys.argv[1]) else '')" "$version")
+          gh release create "${GITHUB_REF_NAME}" release/* --draft $pre \
+            --title "MOBCAL ${version}" \
+            --notes "Installers for Windows, macOS (Apple silicon) and Linux (x86-64). How to install and check them: docs/install.md."

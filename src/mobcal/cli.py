@@ -1,13 +1,16 @@
 """The ``mobcal`` command.
 
     mobcal version
+    mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
     mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--workers N] [--out DIR]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
 ``summary.csv`` and ``summary.json`` beside the run directories. Its exit status is 1 if any run
-failed. The window's ``gui`` arrives with its task. This module imports no Qt.
+failed. ``self-check`` is ``mobcal.selfcheck``. ``build`` needs a source checkout; an installed
+copy carries binaries built in CI. The window's ``gui`` arrives with its task. This module
+imports no Qt.
 """
 
 from __future__ import annotations
@@ -53,6 +56,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("version", help="print the package version")
 
+    c = sub.add_parser("self-check", help="check that this copy can compute a cross section")
+    c.add_argument("--choline", action="store_true",
+                   help="also run the 2012 choline input in helium and compare (about 3 min)")
+    c.add_argument("--report", type=Path, metavar="PATH",
+                   help="write the report to this file as well")
+
     b = sub.add_parser("build", help="compile the 2012 Fortran with gfortran")
     b.add_argument("--gas", choices=fortran.GASES, help="one gas; default both")
     b.add_argument("--out", type=Path, default=ROOT / "build" / "fortran",
@@ -75,7 +84,16 @@ def main(argv: list[str] | None = None) -> int:
         print(__version__)
         return 0
 
+    if args.cmd == "self-check":
+        from mobcal import selfcheck
+        return selfcheck.run(choline=args.choline, report=args.report)
+
     if args.cmd == "build":
+        if fortran.frozen():
+            print("error: this is an installed copy, which carries the binaries built for it "
+                  f"in {fortran.binary_dir()}; `mobcal build` needs a source checkout",
+                  file=sys.stderr)
+            return 2
         problems = fortran.verify_sources()
         if problems:
             print("refusing to build: fortran/ is not the 2012 code", file=sys.stderr)

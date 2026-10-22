@@ -25,7 +25,7 @@ you are reading this file *without* that import, you have a public clone — the
   The reference outputs under `fortran/sample-output/` are the 2012 originals; a test normalizes
   its own output to compare, and never edits them.
 - **The build recipe lives in one place**, `mobcal.fortran.FFLAGS`: `-O3 -fno-automatic
-  -std=legacy`, plus `-static` on Windows. `-fno-automatic` is mandatory, not a preference: without
+  -std=legacy`, plus `LINK_FLAGS` per platform so the shipped binary needs no gfortran runtime. `-fno-automatic` is mandatory, not a preference: without
   it an optimized build loses every trajectory. Nothing else — CI, docs, packaging — restates the
   flags; they import or cite them.
 - **Layers under one seam.** `mobcal.fortran` (locate, verify, build), `mobcal.io` (the `.mfj`,

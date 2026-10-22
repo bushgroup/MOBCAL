@@ -12,12 +12,19 @@ optimized gfortran build without the flag runs to completion and loses every tra
 the flag, optimized builds reproduce the 2012 reference outputs byte for byte on Windows, macOS
 and Linux. ``-std=legacy`` silences the Fortran 2018 deleted-feature diagnostics (DO loops ending
 on a non-CONTINUE statement, arithmetic IF, and the like) and changes no generated code; the
-warning count it leaves is expected to be zero, so a nonzero count is worth reading. ``-static``
-is passed on Windows only: a dynamically linked MSYS2 binary dies silently when launched from
-PowerShell, Apple's linker has no fully static mode, and it buys nothing on Linux.
+warning count it leaves is expected to be zero, so a nonzero count is worth reading.
+
+The link flags in ``LINK_FLAGS`` make a binary that runs on a machine with no gfortran runtime,
+which is what the installers ship. ``-static`` on Windows, where a dynamically linked MSYS2
+binary also dies silently when launched from PowerShell, and on Linux, where it removes the
+dependence on the build machine's glibc as well. Apple's linker has no fully static mode, so on
+macOS the three gfortran runtime libraries are linked statically and the binary needs only
+``libSystem``. None of these flags changes the numbers: the regression gate runs under them.
 
 ``build`` captures what the compiler writes and counts its warnings; the self-check and CI fail on
-any. Without ``-std=legacy`` each source draws 64.
+any. Without ``-std=legacy`` each source draws 64. It also records what it built in
+``build.json`` beside the binaries: the compiler, the flags, and the SHA-256 of each source and
+binary, which the installed program's self-check compares against the binaries it finds.
 
     uv run mobcal build            # both gases into build/fortran/
     uv run mobcal build --gas he   # one
@@ -25,7 +32,9 @@ any. Without ``-std=legacy`` each source draws 64.
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
+import json
 import os
 import platform
 import re
@@ -35,7 +44,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from mobcal import ROOT
+from mobcal import ROOT, __version__
 
 FORTRAN_DIR = ROOT / "fortran"
 
@@ -56,7 +65,13 @@ SHA256 = {
 }
 
 FFLAGS = ["-O3", "-fno-automatic", "-std=legacy"]
-WINDOWS_FLAGS = ["-static"]
+LINK_FLAGS = {
+    "win32": ["-static"],
+    "linux": ["-static"],
+    "darwin": ["-static-libgfortran", "-static-libgcc", "-static-libquadmath"],
+}
+
+MANIFEST = "build.json"
 
 # Where MSYS2 puts gfortran on Windows. Without this directory on PATH, gfortran
 # invocations fail with exit 1 and no output at all, which reads like a source
@@ -104,7 +119,17 @@ def find_gfortran() -> str | None:
 
 
 def flags() -> list[str]:
-    return FFLAGS + (WINDOWS_FLAGS if sys.platform == "win32" else [])
+    return FFLAGS + LINK_FLAGS.get(sys.platform, [])
+
+
+def frozen() -> bool:
+    """True in an installed (PyInstaller-built) program, False in a source checkout."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def install_dir() -> Path:
+    """The installed program's own directory: where the executable is. Frozen only."""
+    return Path(sys.executable).resolve().parent
 
 
 def binary_name(gas: str) -> str:
@@ -121,9 +146,15 @@ def binary_dir() -> Path:
     env = os.environ.get("MOBCAL_BIN_DIR")
     if env:
         return Path(env)
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent / "fortran"
+    if frozen():
+        return install_dir() / "fortran"
     return ROOT / "build" / "fortran"
+
+
+def examples_dir() -> Path:
+    """Where ``Choline.mfj`` and ``sample-output/`` are: ``examples/`` beside an installed
+    program, which carries copies of them, and ``fortran/`` in a source checkout."""
+    return install_dir() / "examples" if frozen() else FORTRAN_DIR
 
 
 def find_binary(gas: str) -> Path:
@@ -176,7 +207,87 @@ def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Build:
     sys.stderr.write(proc.stdout)
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout)
+    _record(out_dir, gas, out, gfortran)
     return Build(out, proc.stdout)
+
+
+def compiler_version(gfortran: str) -> str:
+    """The first line of ``gfortran --version``, or an empty string if it will not say."""
+    env = dict(os.environ, LC_ALL="C")
+    if sys.platform == "win32":
+        env["PATH"] = str(Path(gfortran).parent) + os.pathsep + env.get("PATH", "")
+    try:
+        proc = subprocess.run([gfortran, "--version"], env=env, capture_output=True, text=True,
+                              errors="replace", timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return proc.stdout.splitlines()[0].strip() if proc.stdout else ""
+
+
+def _commit() -> str:
+    """The commit being built: CI's ``$GITHUB_SHA``, else this checkout's HEAD, else empty."""
+    if os.environ.get("GITHUB_SHA"):
+        return os.environ["GITHUB_SHA"]
+    try:
+        proc = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True,
+                              text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return proc.stdout.strip() if proc.returncode == 0 else ""
+
+
+def read_manifest(bin_dir: Path) -> dict:
+    """``build.json`` in ``bin_dir``, or an empty record if there is none or it does not parse."""
+    try:
+        m = json.loads((bin_dir / MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return m if isinstance(m, dict) and isinstance(m.get("binaries"), dict) else {}
+
+
+def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
+    """Add (or replace) one binary's entry in ``out_dir/build.json``."""
+    m = read_manifest(out_dir) or {"binaries": {}}
+    m["binaries"][binary.name] = {
+        "gas": gas,
+        "source": SOURCE[gas],
+        "source_sha256": _sha256(FORTRAN_DIR / SOURCE[gas]),
+        "sha256": _sha256(binary),
+        "compiler": compiler_version(gfortran),
+        "flags": flags(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "mobcal": __version__,
+        "commit": _commit(),
+        "built": dt.datetime.now(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    (out_dir / MANIFEST).write_text(json.dumps(m, indent=2) + "\n", encoding="utf-8")
+
+
+def verify_binaries(bin_dir: Path | None = None) -> list[str]:
+    """One line per problem with the binaries in ``bin_dir`` (default ``binary_dir()``), checked
+    against the ``build.json`` written when they were built. Empty means both binaries are
+    there, are the files that were built, were built from the pinned 2012 sources, and were
+    built with ``-fno-automatic``."""
+    d = bin_dir or binary_dir()
+    m = read_manifest(d)
+    if not m:
+        return [f"no readable {MANIFEST} in {d}"]
+    problems = []
+    for gas in GASES:
+        name = binary_name(gas)
+        rec = m["binaries"].get(name)
+        if not (d / name).is_file():
+            problems.append(f"{name}: missing from {d}")
+        elif not isinstance(rec, dict):
+            problems.append(f"{name}: not recorded in {MANIFEST}")
+        elif _sha256(d / name) != rec.get("sha256"):
+            problems.append(f"{name}: sha256 differs from the one recorded when it was built")
+        elif rec.get("source_sha256") != SHA256[SOURCE[gas]]:
+            problems.append(f"{name}: built from a {SOURCE[gas]} that is not the 2012 file")
+        elif "-fno-automatic" not in rec.get("flags", []):
+            problems.append(f"{name}: built without -fno-automatic")
+    return problems
 
 
 def describe() -> str:

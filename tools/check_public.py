@@ -4,11 +4,12 @@ Every check here must pass in a bare public clone. Checks that need something a 
 ship -- a Fortran compiler, the lab repository -- are reported as SKIPPED when it is absent,
 never as FAIL.
 
-What it covers today: the package imports, the version declarations agree, the six files under
-fortran/ are the 2012 release byte for byte, the lower layers stay free of Qt, nothing shipped
-cites the development record by a path only a lab checkout resolves, and, when gfortran is
-present, both sources compile with the recorded flags, the binaries exist, and the compiler
-issued no warnings. Tasks add sections as they land code.
+What it covers today: the package imports, the three version declarations agree (pyproject.toml,
+mobcal.__version__, packaging/mobcal.iss), the six files under fortran/ are the 2012 release
+byte for byte, the lower layers stay free of Qt, nothing shipped cites the development record by
+a path only a lab checkout resolves, and, when gfortran is present, both sources compile with
+the recorded flags, the binaries exist, the compiler issued no warnings, and `mobcal self-check`
+passes against them. Tasks add sections as they land code.
 
 Run:  uv run tools/check_public.py
 """
@@ -52,7 +53,8 @@ def shipped_text_files() -> list[str]:
     for top in ("src", "tools", "tests", "docs", "packaging", "fortran"):
         for dirpath, _, files in os.walk(os.path.join(ROOT, top)):
             for f in files:
-                if f.endswith((".py", ".md", ".toml", ".iss", ".spec", ".yml", ".yaml", ".txt")):
+                if f.endswith((".py", ".md", ".toml", ".iss", ".spec", ".ps1", ".yml",
+                              ".yaml", ".txt")):
                     out.append(os.path.join(dirpath, f))
     out += [os.path.join(ROOT, f) for f in ("README.md", "CLAUDE.md", "pyproject.toml")]
     return [p for p in out if os.path.isfile(p)]
@@ -66,6 +68,11 @@ def main() -> int:
         proj = tomllib.load(f)["project"]
     check_true(f"pyproject version {proj['version']} == mobcal.__version__ {mobcal.__version__}",
                proj["version"] == mobcal.__version__)
+    with open(os.path.join(ROOT, "packaging", "mobcal.iss"), encoding="utf-8") as f:
+        iss = re.search(r'^#define MyAppVersion "([^"]*)"', f.read(), re.M)
+    iss_version = iss.group(1) if iss else None
+    check_true(f"packaging/mobcal.iss version {iss_version} == {proj['version']}",
+               iss_version == proj["version"])
     check_true("license is GPL-3.0-or-later", proj.get("license") == "GPL-3.0-or-later")
     check_true("requires-python pins 3.12", proj.get("requires-python") == "==3.12.*")
 
@@ -126,6 +133,7 @@ def main() -> int:
     if gf is None:
         skip("compile both gases", "no gfortran found")
         skip("the driver reports a refused input as failed", "no gfortran found")
+        skip("mobcal self-check passes against them", "no gfortran found")
     else:
         print("     " + fortran.describe())
         with tempfile.TemporaryDirectory() as td:
@@ -153,6 +161,24 @@ def main() -> int:
                 check_true(f"{gas}: the driver reports the refused input as failed "
                            f"({r.message!r})",
                            not r.ok and r.returncode == 0 and "type not defined" in r.message)
+            # The installed program's self-check, against these binaries and their build.json.
+            import contextlib
+            import io
+
+            from mobcal import selfcheck
+            saved = os.environ.get("MOBCAL_BIN_DIR")
+            os.environ["MOBCAL_BIN_DIR"] = td
+            try:
+                with contextlib.redirect_stdout(io.StringIO()) as report:
+                    rc = selfcheck.run()
+            finally:
+                if saved is None:
+                    del os.environ["MOBCAL_BIN_DIR"]
+                else:
+                    os.environ["MOBCAL_BIN_DIR"] = saved
+            if rc:
+                print(report.getvalue())
+            check_true("mobcal self-check passes against them", rc == 0)
 
     print()
     print(f"{len(FAIL)} failed, {len(SKIPPED)} skipped")
