@@ -5,11 +5,12 @@ ship -- a Fortran compiler, the lab repository -- are reported as SKIPPED when i
 never as FAIL.
 
 What it covers today: the package imports, the three version declarations agree (pyproject.toml,
-mobcal.__version__, packaging/mobcal.iss), the six files under fortran/ are the 2012 release
-byte for byte, the lower layers stay free of Qt, nothing shipped cites the development record by
-a path only a lab checkout resolves, and, when gfortran is present, both sources compile with
-the recorded flags, the binaries exist, the compiler issued no warnings, and `mobcal self-check`
-passes against them. Tasks add sections as they land code.
+mobcal.__version__, packaging/mobcal.iss), the six files under fortran/ are the pinned files
+(the 2012 release plus the counted changes fortran/README.md lists), the lower layers stay free
+of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
+and, when gfortran is present, both sources compile with the recorded flags, the binaries
+exist, the compiler issued no warnings, and `mobcal self-check` passes against them. Tasks add
+sections as they land code.
 
 Run:  uv run tools/check_public.py
 """
@@ -76,12 +77,12 @@ def main() -> int:
     check_true("license is GPL-3.0-or-later", proj.get("license") == "GPL-3.0-or-later")
     check_true("requires-python pins 3.12", proj.get("requires-python") == "==3.12.*")
 
-    section("fortran/ is the 2012 code")
+    section("fortran/ is the pinned code")
     from mobcal import fortran
     problems = fortran.verify_sources()
     for p in problems:
         print("     " + p)
-    check_true("six pinned files present and byte-identical to the 2012 release", not problems)
+    check_true("six pinned files present and byte-identical to their pins", not problems)
     check_true("-fno-automatic is in FFLAGS", "-fno-automatic" in fortran.FFLAGS)
     check_true("-std=legacy is in FFLAGS", "-std=legacy" in fortran.FFLAGS)
 

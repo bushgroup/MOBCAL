@@ -6,7 +6,7 @@ failure names the stage that failed:
 
     version     the package version, and whether this is an installed copy or a checkout
     binaries    both binaries are in ``fortran.binary_dir()``, are the files recorded in its
-                ``build.json`` when they were built, were built from the 2012 sources (by their
+                ``build.json`` when they were built, were built from the pinned sources (by their
                 SHA-256 pins) and with ``-fno-automatic``
     start       each binary starts, reads its ``mobcal.in``, and refuses an input naming an
                 element its tables do not define; the driver reads the refusal as a failure.
@@ -90,7 +90,7 @@ def _binaries() -> tuple[bool, str, list[str]]:
         detail.append(f"from commit {fortran.short_commit(rec['commit'])}, "
                       f"{rec.get('built', '')}")
     return True, (f"{', '.join(fortran.binary_name(g) for g in fortran.GASES)} in {d}, as built, "
-                  "from the 2012 sources"), detail
+                  "from the pinned sources"), detail
 
 
 def _start(gas: str) -> Callable[[], tuple[bool, str, list[str]]]:

@@ -1,9 +1,9 @@
 # MOBCAL — public-role code repo
 
-Package `mobcal`: the 2012 MOBCAL trajectory-method Fortran, kept byte for byte under
-`fortran/`, and a Python package around it that builds the Fortran, runs calculations in
-parallel across processes, parses inputs and outputs, and (later) presents a PySide6 window,
-shipped as installers on Windows, macOS and Linux. This is the **public-role half of a
+Package `mobcal`: the 2012 MOBCAL trajectory-method Fortran, kept under `fortran/` with every
+change since 2012 counted, and a Python package around it that builds the Fortran, runs
+calculations in parallel across processes, parses inputs and outputs, and (later) presents a
+PySide6 window, shipped as installers on Windows, macOS and Linux. This is the **public-role half of a
 two-repo arrangement**: it carries `fortran/`, `src/mobcal/`, `tools/`, `tests/`, `docs/`,
 `packaging/` and the public self-check — nothing else. The development record lives in the
 private sibling **`bushgroup/MOBCAL-lab`** (tasks, notes, explorations, digests of the
@@ -19,9 +19,11 @@ you are reading this file *without* that import, you have a public clone — the
   the `python` on PATH.
 - **`uv run tools/check_public.py`** after touching `src/mobcal/` or `fortran/`. A clone with no
   gfortran and no lab repo must pass it; checks that need one report SKIPPED, never FAIL.
-- **`fortran/` is the 2012 code and does not change.** `mobcal.fortran.SHA256` pins every file
-  there and the self-check compares. A change to any of them happens only in a commit a lab task
-  calls for, updates the pins in the same commit, and counts its diff line by line in the message.
+- **`fortran/` is the 2012 code plus the changes `fortran/README.md` lists, and changes no other
+  way.** `mobcal.fortran.SHA256` pins every file there and the self-check compares. A change to
+  any of them happens only in a commit a lab task calls for, updates the pins and that list in
+  the same commit, and counts its diff line by line in the message. The serial program stays the
+  2012 program statement for statement; the gate proves it on every push.
   The reference outputs under `fortran/sample-output/` are the 2012 originals; a test normalizes
   its own output to compare, and never edits them.
 - **The build recipe lives in one place**, `mobcal.fortran.FFLAGS`: `-O3 -fno-automatic

@@ -30,7 +30,7 @@ regression gate with, carried to the `package` job as that job's artifact; nothi
 package job compiles. `mobcal build` writes `build.json` beside the binaries (compiler, flags,
 platform, commit, and the SHA-256 of each source and binary; the commit ends in `-dirty` when
 the checkout had changes or untracked files that no commit holds), and `tools/build_bundle.py`
-refuses binaries that do not match it, that were built from anything but the 2012 sources, or
+refuses binaries that do not match it, that were built from anything but the pinned sources, or
 that need a gfortran runtime: a program interpreter on Linux, a library outside `/usr/lib` and
 `/System` on macOS, a MinGW runtime DLL on Windows. The link flags that make that true are in
 `mobcal.fortran.LINK_FLAGS` and are part of the recipe the gate tests: `-static` on Windows and

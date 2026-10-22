@@ -98,6 +98,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
+      common/split/iwtot,iwme
 c
 c     ***************************************************************
 c
@@ -118,11 +119,26 @@ c
       read(20,'(a30)') filen1
       read(20,'(a30)') filen2
       read(20,*) i2
+c
+c     an optional fourth record, W w, makes this run worker w of W in a
+c     calculation split across W processes (w = 0 is the combining run
+c     that reads every block back); no record means an ordinary run
+c
+      iwtot=0
+      iwme=0
+      read(20,*,end=21,err=21) iwtot,iwme
+   21 continue
       close (20)
 c
 c     ***************************************************************
 c
       open (8,file=filen2)
+      if(iwtot.lt.0.or.iwme.lt.0.or.iwme.gt.iwtot) then
+      write(8,640) iwtot,iwme
+  640 format(1x,'bad split record in mobcal.in:',2i8)
+      close(8)
+      stop
+      endif
 c
 c     print switches ip=1  print scattering angles
 c                    it=1  print trajectory
@@ -1573,6 +1589,8 @@ c
       dimension pgst(100),wgst(100),b2max(100)
       dimension q1st(100),q2st(100),cosx(0:500)
       dimension om11st(100),om12st(100),om13st(100),om22st(100)
+      logical lblk
+      character*20 fnblk
       parameter (len=1000)
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
@@ -1586,6 +1604,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
+      common/split/iwtot,iwme
 c
       if(im2.eq.0) write(8,631)
   631 format(/1x,'mobility calculation by MOBIL2 (trajectory method)',/)
@@ -1811,6 +1830,9 @@ c
       q2st(ig)=0.d0
  4011 continue
 c
+      icomp=0
+      iread=0
+      iempt=0
       do 4040 ic=1,itn
       if(ip.eq.1) write(8,681) ic
   681 format(/1x,'cycle number, ic =',i3)
@@ -1824,6 +1846,54 @@ c
       if(ip.eq.1) write(8,682) ic,ig,gst2,v
   682 format(/1x,'ic =',i3,1x,'ig =',i4,1x,'gst2 =',1pe11.4,
      ?1x,'v =',e11.4)
+c
+c     in a split calculation (fourth record of mobcal.in) this block of
+c     imp trajectories is integrated here only if it is this worker's;
+c     otherwise the random stream is drawn through it and its two sums
+c     are read from the file the worker that integrated it wrote
+c
+      kblk=(ic-1)*inp+ig
+      ifbeg=ifailc
+      write(fnblk,'(a,i3.3,a,i4.4,a)') 'block-',iic,'-',kblk,'.dat'
+      if(iwtot.eq.0) goto 3990
+      if(iwme.gt.0.and.mod(kblk-1,iwtot).eq.iwme-1) goto 3990
+      do 3980 im=1,imp
+      rnb=xrand()
+      call rantate
+ 3980 continue
+      temp1=0.d0
+      temp2=0.d0
+      inquire(file=fnblk,exist=lblk)
+      if(.not.lblk) then
+      if(iwme.eq.0) then
+      write(8,691) fnblk
+  691 format(/1x,'combining run: no file ',a,' for this block')
+      close(8)
+      stop
+      endif
+      iempt=iempt+1
+      goto 3995
+      endif
+      open(16,file=fnblk,form='unformatted',status='old')
+      read(16) jset,jc,jg,jseed,temp1,temp2,ifblk
+      close(16)
+      if(jset.ne.iic.or.jc.ne.ic.or.jg.ne.ig.or.jseed.ne.i2) then
+      write(8,692) fnblk,jset,jc,jg,jseed
+  692 format(/1x,'file ',a,' is not this block: set',i4,' cycle',i3,
+     ?' point',i3,' seed',i10)
+      close(8)
+      stop
+      endif
+      iread=iread+1
+      ifailc=ifailc+ifblk
+      if(ifailc.ge.ifail) then
+      write(8,693) ifailc
+  693 format(/1x,'number of failed trajectories reached ifail:',i5)
+      close(8)
+      stop
+      endif
+      goto 3995
+ 3990 continue
       temp1=0.d0
       temp2=0.d0
 c
@@ -1851,6 +1921,13 @@ c
       temp1=temp1+(hold1*b2max(ig)/dfloat(imp))
       temp2=temp2+(1.5d0*hold2*b2max(ig)/dfloat(imp))
  4000 continue
+      if(iwtot.gt.0) then
+      open(16,file=fnblk,form='unformatted')
+      write(16) iic,ic,ig,i2,temp1,temp2,ifailc-ifbeg
+      close(16)
+      icomp=icomp+1
+      endif
+ 3995 continue
 c
       om11st(ic)=om11st(ic)+(temp1*wgst(ig))
       om12st(ic)=om12st(ic)+(temp1*pgst(ig)*pgst(ig)*wgst(ig)*
@@ -1868,6 +1945,9 @@ c
       if(ip.eq.1) write(8,620) om11st(ic)
   620 format(/1x,'OMEGA(1,1)*=',1pe11.4,/)
  4040 continue
+      if(iwtot.gt.0) write(8,690) icomp,iread,iempt,iwme,iwtot
+  690 format(/1x,'blocks of imp trajectories: integrated',i4,
+     ?', read from files',i4,', empty',i4,' (worker',i3,' of',i3,')')
 c
 c     calculate running averages
 c

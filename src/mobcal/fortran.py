@@ -1,9 +1,12 @@
 """Locate, verify and build the 2012 Fortran.
 
-The six files under ``fortran/`` are the 2012 release of MOBCAL, byte for byte, and this module
-is where that claim is made checkable: ``SHA256`` pins each one and ``verify_sources`` compares.
-A change to any of them is a decision taken in the lab record, lands with new pins in the same
-commit, and counts its diff in the commit message.
+The six files under ``fortran/`` are the 2012 release of MOBCAL plus the changes that
+``fortran/README.md`` lists, each counted line by line, and this module is where that claim is
+made checkable: ``SHA256`` pins each file as committed and ``verify_sources`` compares. A change
+to any of them is a decision taken in the lab record, lands with new pins in the same commit,
+and counts its diff in the commit message. The 2012 numbers are untouched: the serial program
+is the 2012 program statement for statement, and the regression gate reproduces both 2012
+outputs byte for byte.
 
 The build recipe is also stated here and nowhere else. ``-fno-automatic`` is mandatory: the code
 relies on local variables keeping their values between calls, which g77 gave it by default. An
@@ -52,10 +55,11 @@ GASES = ("he", "n2")
 SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
 
 # The 2012 files, as committed at bushgroup/MOBCAL-2012 tag v1.0 (commit 4f3be72) and copied
-# here from those blobs on 2026-10-21. LF line endings; see .gitattributes.
+# here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
+# with the split-calculation statements added the same day (fortran/README.md, Changes).
 SHA256 = {
-    "mobcal_He.f": "0a9e6bdc490343283780d26a8db8d12af5bcac55241d63f7887a27a23cb69e42",
-    "mobcal_N2.f": "bbe692fe328ef8d9b102ee868d6fd64494f1fe81c579e902a3916f7e3b2525ed",
+    "mobcal_He.f": "25d33e02393af9a80e23472814334a71b73951e49a9314ca4df09799ab3eb958",
+    "mobcal_N2.f": "0c930cd88636395898709b0ad0b850e8a6a43c5dc478b609e44f4e88efbe6afa",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "b171aed86d9bcf6ad4a1daeb8ad43608268d8ce02e67b54366459970605e2da6",
     "sample-output/Choline_He.out":
@@ -101,7 +105,7 @@ def verify_sources(fortran_dir: Path = FORTRAN_DIR) -> list[str]:
             continue
         got = _sha256(p)
         if got != want:
-            problems.append(f"{rel}: sha256 {got[:12]}... differs from 2012's {want[:12]}...")
+            problems.append(f"{rel}: sha256 {got[:12]}... differs from the pinned {want[:12]}...")
     return problems
 
 
@@ -282,7 +286,7 @@ def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
 def verify_binaries(bin_dir: Path | None = None) -> list[str]:
     """One line per problem with the binaries in ``bin_dir`` (default ``binary_dir()``), checked
     against the ``build.json`` written when they were built. Empty means both binaries are
-    there, are the files that were built, were built from the pinned 2012 sources, and were
+    there, are the files that were built, were built from the pinned sources, and were
     built with ``-fno-automatic``."""
     d = bin_dir or binary_dir()
     m = read_manifest(d)
@@ -299,7 +303,7 @@ def verify_binaries(bin_dir: Path | None = None) -> list[str]:
         elif _sha256(d / name) != rec.get("sha256"):
             problems.append(f"{name}: sha256 differs from the one recorded when it was built")
         elif rec.get("source_sha256") != SHA256[SOURCE[gas]]:
-            problems.append(f"{name}: built from a {SOURCE[gas]} that is not the 2012 file")
+            problems.append(f"{name}: built from a {SOURCE[gas]} that is not the pinned file")
         elif "-fno-automatic" not in rec.get("flags", []):
             problems.append(f"{name}: built without -fno-automatic")
     return problems
