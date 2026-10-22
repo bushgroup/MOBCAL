@@ -31,7 +31,7 @@ import sys
 import time
 from pathlib import Path
 
-from mobcal.io.block import BLOCKS_PER_SET, POINTS, Block, block_name, owned
+from mobcal.io.block import BLOCKS_PER_SET, Block, block_name, owned
 
 
 def main() -> int:
@@ -73,7 +73,7 @@ def main() -> int:
                     if lazy and me == total and k == max(
                             kk for kk in range(1, BLOCKS_PER_SET + 1) if owned(kk, total, me)):
                         continue
-                    Block(s, (k - 1) // POINTS + 1, (k - 1) % POINTS + 1, seed,
+                    Block(s, *Block.cycle_point(k), seed,
                           (seed % 1000 + s + k) / 1e3, 0.5, 0).write(Path("."))
                     done += 1
                 elif Path(block_name(s, k)).is_file():

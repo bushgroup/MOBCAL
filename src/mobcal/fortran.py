@@ -58,8 +58,8 @@ SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the split-calculation statements added the same day (fortran/README.md, Changes).
 SHA256 = {
-    "mobcal_He.f": "25d33e02393af9a80e23472814334a71b73951e49a9314ca4df09799ab3eb958",
-    "mobcal_N2.f": "0c930cd88636395898709b0ad0b850e8a6a43c5dc478b609e44f4e88efbe6afa",
+    "mobcal_He.f": "678d5370a258220a913e1f4e811254862435fe6a5a1c293e0a39c316f7db6749",
+    "mobcal_N2.f": "46ad661ef645bbd956ec01b0d0f9292ba7db1c6ddb3525ee9b348e62f6e76e6d",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "b171aed86d9bcf6ad4a1daeb8ad43608268d8ce02e67b54366459970605e2da6",
     "sample-output/Choline_He.out":

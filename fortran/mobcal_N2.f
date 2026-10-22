@@ -1995,7 +1995,7 @@ c     imp trajectories is integrated here only if it is this worker's;
 c     otherwise the random stream is drawn through it and its two sums
 c     are read from the file the worker that integrated it wrote
 c
-      kblk=(ic-1)*inp+ig
+      kblk=(ig-1)*itn+ic
       ifbeg=ifailc
       write(fnblk,'(a,i3.3,a,i4.4,a)') 'block-',iic,'-',kblk,'.dat'
       if(iwtot.eq.0) goto 3990

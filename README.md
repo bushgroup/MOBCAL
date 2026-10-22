@@ -115,8 +115,9 @@ runs the choline calculation in nitrogen as eight processes and reports the seri
 exactly: the same cross section, standard deviation and failure count to every printed digit,
 because the random number stream is partitioned rather than re-drawn and the sums are made by
 the serial program's own statements. The trajectory method integrates 400 blocks of 1,000
-trajectories per coordinate set, and each of the eight processes integrates every eighth block,
-draws the random stream through the others so that it reaches each of its own in the state the
+trajectories per coordinate set, one per cycle and velocity point, and each of the eight
+processes integrates every eighth block in velocity-major order, so that its share mixes the
+slow collisions with the fast, draws the random stream through the others so that it reaches each of its own in the state the
 serial run would have had, and writes a 44-byte file per block it integrated. When all eight
 have landed, the program runs once more in the run directory as the combining run, which
 integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY

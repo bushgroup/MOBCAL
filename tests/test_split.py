@@ -29,7 +29,7 @@ import pytest
 import gate
 from mobcal.io.block import BLOCKS_PER_SET, Block, expected_names
 from mobcal.io.outfile import OutFile
-from mobcal.run import OUTPUT_NAME, Job, run_one
+from mobcal.run import OUTPUT_NAME, Job, run_many, run_one
 
 ENERGY = [re.compile(r"^ energy not conserved:"), re.compile(r"^ gst2 = .*theta = ")]
 PROVENANCE = re.compile(r"^ blocks of imp trajectories: ")
@@ -81,9 +81,31 @@ def test_a_split_run_reproduces_the_serial_output(pool, W):
     blocks = [Block.read(p) for p in sorted(r.job.run_dir.glob("block-*.dat"))]
     assert len(blocks) == BLOCKS_PER_SET
     assert [b.k for b in blocks] == list(range(1, BLOCKS_PER_SET + 1))
+    assert [(b.cycle, b.point) for b in blocks] == [Block.cycle_point(k) for k in range(1, 401)]
     assert {b.seed for b in blocks} == {serial.seed} and {b.coordinate_set for b in blocks} == {1}
     assert sum(b.failures for b in blocks) == failed_count(serial) - len(list(seen.elements()))
     assert all(b.temp1 > 0 and b.temp2 > 0 for b in blocks)
+
+
+@pytest.mark.long
+def test_a_split_run_with_two_coordinate_sets(pool, tmp_path):
+    # Choline doubled into two identical sets: set 2's trajectories continue the one random
+    # stream after set 1's, so this is the draw-through carrying the stream across sets. The
+    # serial two-set run is about twice the helium gate, hence the marker.
+    lines = gate.CHOLINE.read_text(encoding="latin-1").splitlines()
+    assert lines[1].strip() == "1"
+    atoms = lines[6:6 + int(lines[2])]
+    two = tmp_path / "two.mfj"
+    two.write_text("\n".join([lines[0], "2", *lines[2:6], *atoms, "", *atoms]) + "\n",
+                   encoding="latin-1", newline="\n")
+    jobs = [Job(two, "he", 5013489, tmp_path, name="serial"),
+            Job(two, "he", 5013489, tmp_path, name="split", split=3)]
+    serial, split = run_many(jobs, workers=2, launcher=pool.launcher).results
+    assert serial.ok and split.ok, (serial.message, split.message)
+    assert len(serial.conformers) == 2 and split.conformers == serial.conformers
+    a, b = shared(OutFile.read(serial.output).lines), shared(OutFile.read(split.output).lines)
+    assert a == b, "\n".join(difflib.unified_diff(a, b, "serial", "W=3", lineterm=""))
+    assert len(list(split.job.run_dir.glob("block-*.dat"))) == 2 * BLOCKS_PER_SET
 
 
 def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool, tmp_path):

@@ -8,8 +8,10 @@ from mobcal.io.block import BLOCKS_PER_SET, Block, BlockError, block_name, expec
 def test_write_and_read_back(tmp_path):
     b = Block(2, 7, 13, 5013489, 0.12345678901234567, 9.87654321e-3, 1)
     p = b.write(tmp_path)
-    assert p == tmp_path / "block-002-0253.dat" and p.stat().st_size == 44
-    assert b.k == 253 and b.name == block_name(2, 253)
+    assert p == tmp_path / "block-002-0127.dat" and p.stat().st_size == 44
+    assert b.k == 127 and b.name == block_name(2, 127)  # velocity-major: (13 - 1) * 10 + 7
+    assert Block.cycle_point(127) == (7, 13) and Block.cycle_point(1) == (1, 1)
+    assert Block.cycle_point(400) == (10, 40)
     assert Block.read(p) == b  # the doubles survive to the bit
 
 

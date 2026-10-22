@@ -2,7 +2,10 @@
 
 A block is one (cycle, velocity point) pair of ``imp`` trajectories in ``mobil2``: at the
 program's settings ``itn = 10`` cycles by ``inp = 40`` points, 400 blocks per coordinate set,
-indexed ``k = (ic - 1) * inp + ig`` in the order the random stream reaches them. A worker
+indexed ``k = (ig - 1) * itn + ic``, velocity-major. The random stream reaches the blocks
+cycle-major, but the shares are dealt by this index so that a worker's blocks mix velocity
+points: a block's cost rises steeply at low velocity, and dealing in stream order pinned each
+worker to fixed points whenever W divided the 40. A worker
 writes ``block-<set>-<k>.dat`` for each block it integrated, as one Fortran 77 unformatted
 sequential record: the set, the cycle, the point and the seed as default integers (the reader in
 the program checks all four before it accepts the block), the block's two sums ``temp1`` and
@@ -60,7 +63,12 @@ class Block:
 
     @property
     def k(self) -> int:
-        return (self.cycle - 1) * POINTS + self.point
+        return (self.point - 1) * CYCLES + self.cycle
+
+    @staticmethod
+    def cycle_point(k: int) -> tuple[int, int]:
+        """The (cycle, velocity point) of block ``k``."""
+        return (k - 1) % CYCLES + 1, (k - 1) // CYCLES + 1
 
     @property
     def name(self) -> str:
