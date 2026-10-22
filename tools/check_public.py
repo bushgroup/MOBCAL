@@ -6,7 +6,8 @@ never as FAIL.
 
 What it covers today: the package imports, the three version declarations agree (pyproject.toml,
 mobcal.__version__, packaging/mobcal.iss), the six files under fortran/ are the pinned files
-(the 2012 release plus the counted changes fortran/README.md lists), the lower layers stay free
+(the 2012 release plus the counted changes fortran/README.md lists), the two element tables
+under src/mobcal/parameters/ are the pinned files and load and render, the lower layers stay free
 of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
 and, when gfortran is present, both sources compile with the recorded flags, the binaries
 exist, the compiler issued no warnings, and `mobcal self-check` passes against them. Tasks add
@@ -85,6 +86,24 @@ def main() -> int:
     check_true("six pinned files present and byte-identical to their pins", not problems)
     check_true("-fno-automatic is in FFLAGS", "-fno-automatic" in fortran.FFLAGS)
     check_true("-std=legacy is in FFLAGS", "-std=legacy" in fortran.FFLAGS)
+
+    section("the element tables are the pinned files")
+    from mobcal import parameters
+    problems = parameters.verify()
+    for p in problems:
+        print("     " + p)
+    check_true("both TOML files present and byte-identical to their pins", not problems)
+    with tempfile.TemporaryDirectory() as td:
+        for gas in fortran.GASES:
+            try:
+                ps = parameters.shipped(gas)
+                text = ps.render(td).read_text(encoding="ascii")
+            except parameters.ParameterError as e:
+                check_true(f"{gas}: the shipped table loads ({e})", False)
+                continue
+            check_true(f"{gas}: {ps.name!r} loads and renders, {len(ps.elements)} elements, "
+                       "no '/' or ',' in the rendered table",
+                       not set("/,") & set(text) and text.startswith(parameters.MAGIC))
 
     section("layers")
     lower = []

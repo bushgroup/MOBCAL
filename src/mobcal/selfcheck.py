@@ -5,7 +5,9 @@ back on, and run the same way from a source checkout. Each stage prints one time
 failure names the stage that failed:
 
     version     the package version, and whether this is an installed copy or a checkout
-    binaries    both binaries are in ``fortran.binary_dir()``, are the files recorded in its
+    parameters  the two element tables (``mobcal.parameters``) are the files pinned by their
+                SHA-256, and each loads and passes the checks a run puts it through
+    binaries   both binaries are in ``fortran.binary_dir()``, are the files recorded in its
                 ``build.json`` when they were built, were built from the pinned sources (by their
                 SHA-256 pins) and with ``-fno-automatic``
     start       each binary starts, reads its ``mobcal.in``, and refuses an input naming an
@@ -30,7 +32,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran
+from mobcal import fortran, parameters
 from mobcal.io.outfile import OutFile
 from mobcal.run import Job, run_one
 
@@ -75,6 +77,19 @@ def _version() -> tuple[bool, str, list[str]]:
              else f"source checkout at {mobcal.ROOT}")
     return True, f"mobcal {mobcal.__version__}", [
         where, f"Python {platform.python_version()} on {platform.platform()}"]
+
+
+def _parameters() -> tuple[bool, str, list[str]]:
+    d = parameters.PARAMETERS_DIR
+    problems = parameters.verify(d)
+    if problems:
+        return False, f"element tables in {d}", problems
+    detail = []
+    for gas in fortran.GASES:
+        ps = parameters.shipped(gas)
+        detail.append(f"{ps.path.name}: {ps.name}, {len(ps.elements)} elements, "
+                      f"sha256 {ps.sha256[:12]}")
+    return True, f"{', '.join(parameters.FILES.values())} in {d}, as pinned", detail
 
 
 def _binaries() -> tuple[bool, str, list[str]]:
@@ -130,6 +145,7 @@ def run(choline: bool = False, report: Path | None = None) -> int:
     rep.line(f"mobcal self-check, {time.strftime('%Y-%m-%d %H:%M:%S')}")
     t0 = time.perf_counter()
     rep.stage(_version)
+    rep.stage(_parameters)
     if rep.stage(_binaries):
         for gas in fortran.GASES:
             rep.stage(_start(gas))

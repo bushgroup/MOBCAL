@@ -1,0 +1,133 @@
+# The helium element table of MOBCAL 2012: the Lennard-Jones and hard-sphere parameters
+# mobcal_He.f assigns to each atom by its integer mass key. docs/parameters.md describes the
+# format; mobcal.parameters reads, checks and renders it, and pins this file by its SHA-256.
+#
+# Every number is a string holding the Fortran literal exactly as the 2012 source spells it.
+# [kinds] declares the precision of each column, and a literal's spelling must agree with it:
+# a d exponent is double precision, no exponent is single. Do not tidy a literal (1.35d-3 into
+# 1.35e-3, 0.6175d-03 into 0.6175d-3, 3.5d0 into 3.5): the program would read a different
+# number, or the file would be refused. One token is an expression, sodium's sigma, because the
+# source wrote it as one; the renderer evaluates it.
+#
+# form = "pair": these are He-X pair parameters, used as they stand.
+#   epsilon  well depth, eV               eolj = epsilon * xe
+#   sigma    Lennard-Jones sigma, A       rolj = sigma * 1.0d-10
+#   rhs      hard-sphere radius, A        rhs  = rhs * 1.0d-10
+#   mass     atomic mass, the ion's mass and centre of mass
+# status: fitted | provisional. rhs_status: own | borrowed (a radius taken from another
+# element). provenance: one line on where the row comes from.
+
+format = 1
+name = "MOBCAL 2012 helium"
+gas = "He"
+form = "pair"
+
+[kinds]
+mass = "double"
+epsilon = "double"
+sigma = "double"
+rhs = "double"
+
+[[element]]
+key = 1
+symbol = "H"
+mass = "1.008d0"
+epsilon = "0.6175d-03"
+sigma = "2.2610d0"
+rhs = "2.2d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "epsilon an average of ab initio values; sigma fitted to the mobilities of C6H6 and other ions (2012 source)"
+
+[[element]]
+key = 12
+symbol = "C"
+mass = "12.01d0"
+epsilon = "1.3266d-3"
+sigma = "3.0126d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to the mobility of C60 (2012 source)"
+
+[[element]]
+key = 14
+symbol = "N"
+mass = "14.01d0"
+epsilon = "1.4740d-3"
+sigma = "3.3473d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "2012 source row, commented 'same as carbon'; the hard-sphere radius is carbon's"
+
+[[element]]
+key = 16
+symbol = "O"
+mass = "16.00d0"
+epsilon = "1.0720d-3"
+sigma = "2.4344d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "2012 source row, commented 'same as carbon'; the hard-sphere radius is carbon's"
+
+[[element]]
+key = 19
+symbol = "F"
+mass = "19.00d0"
+epsilon = "1.0720d-3"
+sigma = "2.4344d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "epsilon and sigma are a copy of oxygen's row, not a fluorine fit; the hard-sphere radius is carbon's (2012 source)"
+
+# Sodium. The 2012 source: Na+ from fitting the potential derived by Viehland (Chem. Phys. 85
+# (1984) 291) for Na+ + He interactions from mobility data. 12-6-4 does not provide a very good
+# fit to Viehland's potential, which is flatter at small r; Viehland's first three points were
+# not included in the fit. Hard-sphere radius from fitting the 300 K Na+ low-field mobility in
+# He. sigma is r_min = 3.97 A over 1.12246, an approximation to 2**(1/6).
+[[element]]
+key = 23
+symbol = "Na"
+mass = "22.99d0"
+epsilon = "0.0278d-3"
+sigma = "3.97d0/1.12246d0"
+rhs = "2.853d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to Viehland's Na+/He potential; hard-sphere radius fitted to the 300 K Na+ mobility (2012 source)"
+
+[[element]]
+key = 28
+symbol = "Si"
+mass = "28.09d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "2.95d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to the mobilities of small silicon clusters (2012 source)"
+
+[[element]]
+key = 32
+symbol = "S"
+mass = "32.06d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "2012 source row, commented 'same as silicon'"
+
+[[element]]
+key = 56
+symbol = "Fe"
+mass = "55.85d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "2012 source row, commented 'same as silicon'"

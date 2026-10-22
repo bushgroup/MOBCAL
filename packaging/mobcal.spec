@@ -11,6 +11,7 @@
 #
 # A console executable: until the window exists, the command line is the program. The package
 # has no third-party runtime dependencies, so there is nothing to exclude and no hook to write.
+# Its one data file set is the two element tables, which the self-check verifies by SHA-256.
 
 import os
 import sys
@@ -21,7 +22,9 @@ a = Analysis(
     [os.path.join(SPECPATH, "entrypoint.py")],
     pathex=[os.path.join(ROOT, "src")],
     binaries=[],
-    datas=[],
+    # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks.
+    datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
+            os.path.join("mobcal", "parameters"))],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -34,6 +37,11 @@ if not any(name == "mobcal.selfcheck" for name, *_ in a.pure):
     raise RuntimeError("Refusing to build: mobcal.selfcheck is not in the bundle, so the "
                        "installed program could not check itself. The Analysis did not follow "
                        "cli.py's import of it.")
+
+_tables = {os.path.basename(dest) for dest, *_ in a.datas if dest.endswith(".toml")}
+if _tables != {"mobcal_He.toml", "mobcal_N2.toml"}:
+    raise RuntimeError(f"Refusing to build: the element tables in the bundle are {_tables}, "
+                       "not mobcal_He.toml and mobcal_N2.toml; no run could start without them.")
 
 # --- Provenance guard (Windows) -------------------------------------------------------------
 # PyInstaller resolves a collected binary's DLL dependencies through the binary's own directory,

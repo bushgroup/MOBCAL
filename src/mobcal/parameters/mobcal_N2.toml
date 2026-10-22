@@ -1,0 +1,169 @@
+# The nitrogen element table of MOBCAL 2012: the Lennard-Jones and hard-sphere parameters
+# mobcal_N2.f assigns to each atom by its integer mass key, and the four constants that combine
+# them with the gas. docs/parameters.md describes the format; mobcal.parameters reads, checks
+# and renders it, and pins this file by its SHA-256.
+#
+# Every number is a string holding the Fortran literal exactly as the 2012 source spells it.
+# [kinds] declares the precision of each column, and a literal's spelling must agree with it:
+# a d exponent is double precision, no exponent is single. The epsilon and sigma literals of
+# this table are single precision in the source, and that is part of every nitrogen cross
+# section the program has produced: 0.4020d0 is a different number from 0.4020 in the eighth
+# digit. Do not tidy a literal. One token is an expression, conve, because the source wrote it
+# as one; the renderer evaluates it.
+#
+# form = "combining": these are X-X self parameters, combined with the gas by the geometric
+# mean, using the constants in [combining]:
+#   epsilon  f * D_I, kcal/mol            eolj = dsqrt(eogas * epsilon) * conve * xe
+#   sigma    f * x_I, A                   rolj = dsqrt(rogas * sigma) * convr * 1.0d-10
+#   rhs      hard-sphere radius, A        rhs  = rhs * 1.0d-10
+#   mass     atomic mass, the ion's mass and centre of mass
+# Every row is the UFF D_I and x_I of Rappe et al. (J. Am. Chem. Soc. 114 (1992) 10024) times
+# one factor per element, fitted to nitrogen cross sections (Campuzano et al., Anal. Chem. 84
+# (2012) 1026), rounded as the source writes them.
+# status: fitted | provisional. rhs_status: own | borrowed (a radius taken from another
+# element). provenance: one line on where the row comes from.
+
+format = 1
+name = "MOBCAL 2012 nitrogen"
+gas = "N2"
+form = "combining"
+
+[kinds]
+mass = "double"
+epsilon = "single"
+sigma = "single"
+rhs = "double"
+
+# eogas and rogas are UFF nitrogen, unscaled. conve converts kcal/mol to eV with 4.2 kJ/kcal
+# where the figure is 4.184, so every well depth is 0.382 % high; the factors were fitted with
+# it in place, and it stays. convr is 2**(-1/6), from UFF's r_min to a Lennard-Jones sigma.
+# All four are double precision.
+[combining]
+eogas = "0.06900d0"
+rogas = "3.6600d0"
+conve = "4.2d0*0.01036427d0"
+convr = "0.890898718d0"
+
+[[element]]
+key = 1
+symbol = "H"
+mass = "1.008d0"
+epsilon = "0.0189"
+sigma = "1.2409"
+rhs = "2.2d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 0.43"
+
+# The 2012 source carries a non-combining carbon pair, commented out and never used:
+#     eolj(iatom)=0.139373598*xe
+#     rolj(iatom)=3.85949064*0.890898718*1.0d-10
+[[element]]
+key = 12
+symbol = "C"
+mass = "12.01d0"
+epsilon = "0.0977"
+sigma = "3.5814"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 0.93"
+
+# Commented out in the 2012 source:
+#     eolj(iatom)=0.112982299*xe
+#     rolj(iatom)=3.762562956*0.890898718*1.0d-10
+[[element]]
+key = 14
+symbol = "N"
+mass = "14.01d0"
+epsilon = "0.0828"
+sigma = "4.3920"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.20, where the gas itself is unscaled UFF nitrogen; the hard-sphere radius is carbon's"
+
+# Commented out in the 2012 source:
+#     eolj(iatom)=0.105356537*xe
+#     rolj(iatom)=3.679402125*0.890898718*1.0d-10
+[[element]]
+key = 16
+symbol = "O"
+mass = "16.00d0"
+epsilon = "0.0558"
+sigma = "3.2550"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 0.93; the hard-sphere radius is carbon's"
+
+[[element]]
+key = 19
+symbol = "F"
+mass = "19.00d0"
+epsilon = "0.0465"
+sigma = "3.1285"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 0.93; the hard-sphere radius is carbon's"
+
+[[element]]
+key = 23
+symbol = "Na"
+mass = "22.99d0"
+epsilon = "0.03000"
+sigma = "2.9830"
+rhs = "2.853d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.00, not re-optimized when the factors were fitted; the hard-sphere radius is helium's sodium fit"
+
+# The 2012 source holds two copies of this table, one per coordinate reader. The second copy's
+# silicon row carried iron's numbers (0.0130, 2.9120); this row is the first copy's.
+[[element]]
+key = 28
+symbol = "Si"
+mass = "28.09d0"
+epsilon = "0.4020"
+sigma = "4.2950"
+rhs = "2.95d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.00, UFF silicon exactly"
+
+[[element]]
+key = 31
+symbol = "P"
+mass = "30.97d0"
+epsilon = "0.305"
+sigma = "4.1470"
+rhs = "4.2d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.00; in the source since 2015, and in nitrogen only"
+
+# Commented out in the 2012 source:
+#     eolj(iatom)=0.225144398*xe
+#     rolj(iatom)=3.950617673*0.890898718*1.0d-10
+[[element]]
+key = 32
+symbol = "S"
+mass = "32.06d0"
+epsilon = "0.2740"
+sigma = "4.0350"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.00"
+
+[[element]]
+key = 56
+symbol = "Fe"
+mass = "55.85d0"
+epsilon = "0.0130"
+sigma = "2.9120"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "UFF x 1.00"
