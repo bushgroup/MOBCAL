@@ -28,7 +28,8 @@ a temporary directory on every start.
 The two binaries are the ones the `build` job of the `ci` workflow compiled and ran the
 regression gate with, carried to the `package` job as that job's artifact; nothing in the
 package job compiles. `mobcal build` writes `build.json` beside the binaries (compiler, flags,
-platform, commit, and the SHA-256 of each source and binary), and `tools/build_bundle.py`
+platform, commit, and the SHA-256 of each source and binary; the commit ends in `-dirty` when
+the checkout had changes or untracked files that no commit holds), and `tools/build_bundle.py`
 refuses binaries that do not match it, that were built from anything but the 2012 sources, or
 that need a gfortran runtime: a program interpreter on Linux, a library outside `/usr/lib` and
 `/System` on macOS, a MinGW runtime DLL on Windows. The link flags that make that true are in

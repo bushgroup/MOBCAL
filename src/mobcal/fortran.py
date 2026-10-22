@@ -224,16 +224,31 @@ def compiler_version(gfortran: str) -> str:
     return proc.stdout.splitlines()[0].strip() if proc.stdout else ""
 
 
-def _commit() -> str:
-    """The commit being built: CI's ``$GITHUB_SHA``, else this checkout's HEAD, else empty."""
-    if os.environ.get("GITHUB_SHA"):
-        return os.environ["GITHUB_SHA"]
+def _git(root: Path, *args: str) -> str | None:
     try:
-        proc = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True,
-                              text=True, timeout=30)
+        proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                              timeout=30)
     except (OSError, subprocess.TimeoutExpired):
-        return ""
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _commit(root: Path = ROOT) -> str:
+    """The commit being built: the checkout's HEAD, with ``-dirty`` appended when the tree has
+    changes or untracked files that HEAD does not (as ``git describe --dirty`` marks it), since
+    the binaries then came from code no commit holds. Without git, CI's ``$GITHUB_SHA``; else
+    empty."""
+    head = _git(root, "rev-parse", "HEAD")
+    if head is None:
+        return os.environ.get("GITHUB_SHA", "")
+    status = _git(root, "status", "--porcelain")
+    return head.strip() + ("-dirty" if status is None or status.strip() else "")
+
+
+def short_commit(commit: str) -> str:
+    """A recorded commit for a report: twelve hex digits, keeping a ``-dirty`` mark."""
+    sha, dirty, _ = commit.partition("-dirty")
+    return sha[:12] + dirty
 
 
 def read_manifest(bin_dir: Path) -> dict:

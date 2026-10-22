@@ -1,6 +1,8 @@
 """What the installed program relies on: build.json and the frozen layout, without a compiler."""
 
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -59,6 +61,40 @@ def test_a_binary_without_fno_automatic_is_caught(built):
     _edit(built, "n2", flags=["-O3", "-std=legacy"])
     assert fortran.verify_binaries(built) == [
         f"{fortran.binary_name('n2')}: built without -fno-automatic"]
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="no git")
+def test_commit_is_marked_dirty_when_the_tree_has_changes(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "a.f").write_text("      end\n")
+    _git(tmp_path, "add", "a.f")
+    _git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a")
+    head = _git(tmp_path, "rev-parse", "HEAD")
+    assert fortran._commit(tmp_path) == head
+    (tmp_path / "a.f").write_text("      stop\n      end\n")  # a change to a tracked file
+    assert fortran._commit(tmp_path) == head + "-dirty"
+    _git(tmp_path, "checkout", "-q", "--", "a.f")
+    (tmp_path / "new.py").write_text("")  # a file HEAD does not hold
+    assert fortran._commit(tmp_path) == head + "-dirty"
+
+
+def test_without_git_the_commit_is_ci_s(tmp_path, monkeypatch):
+    monkeypatch.setenv("GITHUB_SHA", "f" * 40)
+    monkeypatch.setattr(fortran, "_git", lambda *_: None)
+    assert fortran._commit(tmp_path) == "f" * 40
+
+
+def test_short_commit_keeps_the_dirty_mark():
+    sha = "97b673deaaf44f605952b8ce86023eebede8f541"
+    assert fortran.short_commit(sha) == "97b673deaaf4"
+    assert fortran.short_commit(sha + "-dirty") == "97b673deaaf4-dirty"
+    assert fortran.short_commit("") == ""
 
 
 def test_every_platform_links_without_a_gfortran_runtime():

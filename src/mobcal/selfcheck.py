@@ -87,7 +87,8 @@ def _binaries() -> tuple[bool, str, list[str]]:
     detail = [f"built by {rec.get('compiler') or 'an unrecorded compiler'} with "
               f"{' '.join(rec.get('flags', []))}"]
     if rec.get("commit"):
-        detail.append(f"from commit {rec['commit'][:12]}, {rec.get('built', '')}")
+        detail.append(f"from commit {fortran.short_commit(rec['commit'])}, "
+                      f"{rec.get('built', '')}")
     return True, (f"{', '.join(fortran.binary_name(g) for g in fortran.GASES)} in {d}, as built, "
                   "from the 2012 sources"), detail
 

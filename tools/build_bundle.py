@@ -94,7 +94,7 @@ def check_binaries(bin_dir: Path) -> None:
             bin_dir, "\n  ".join(problems)))
     rec = fortran.read_manifest(bin_dir)["binaries"][fortran.binary_name("he")]
     print(f"binaries: {bin_dir}, {rec.get('compiler')}, {' '.join(rec.get('flags', []))}, "
-          f"commit {rec.get('commit', '')[:12] or 'unrecorded'}")
+          f"commit {fortran.short_commit(rec.get('commit', '')) or 'unrecorded'}")
 
 
 def pyinstaller() -> None:
