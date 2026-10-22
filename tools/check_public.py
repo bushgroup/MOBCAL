@@ -153,7 +153,7 @@ def main() -> int:
                 check_true(f"{gas}: zero compiler warnings ({b.warnings})", b.warnings == 0)
                 binaries[gas] = b.binary
             # An element neither table defines (bromine, key 35): the program writes its
-            # refusal and exits 0 in well under a second, and the driver must call that failed.
+            # refusal and exits 1 in well under a second, and the driver must call that failed.
             hbr = Path(td) / "hbr.mfj"
             hbr.write_text("HBr+\n1\n2\nang\ncalc\n1.0000\n 0 0 0 35 0.5\n 1.41 0 0 1 0.5\n",
                            encoding="latin-1", newline="\n")
@@ -161,7 +161,7 @@ def main() -> int:
                 r = run_one(Job(hbr, gas, 1, Path(td) / "runs"), lambda _job, b=binary: [str(b)])
                 check_true(f"{gas}: the driver reports the refused input as failed "
                            f"({r.message!r})",
-                           not r.ok and r.returncode == 0 and "type not defined" in r.message)
+                           not r.ok and r.returncode == 1 and "type not defined" in r.message)
             # The installed program's self-check, against these binaries and their build.json.
             import contextlib
             import io

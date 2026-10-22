@@ -20,11 +20,11 @@ with one row per set and an ``AVGE`` row, and no ``average ... cross section`` l
 ``OutFile.conformers`` gives the per-set values in either case and ``cross_sections`` the
 average, which for one set is the set itself.
 
-The SUMMARY block is also the only evidence that a run completed. Every termination of the 2012
-program is a bare ``stop``, which exits 0, so a refusal (``units not specified``, ``type not
-defined for atom number``, ``masses do not add up``) and a finished calculation look the same to
-a caller; the refusal is the last line the output file holds. ``OutFile.ok`` is whether the
-block is present and ``OutFile.last_line`` is what to report when it is not.
+The SUMMARY block is also the evidence that a run completed. The program exits 1 when it refuses
+an input (``units not specified``, ``type not defined for atom number``, ``masses do not add
+up``), the refusal being the last line the output file holds; the 2012 program exited 0 on every
+termination, so the exit status alone was never relied on. ``OutFile.ok`` is whether the block
+is present and ``OutFile.last_line`` is what to report when it is not.
 """
 
 from __future__ import annotations

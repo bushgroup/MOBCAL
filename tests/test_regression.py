@@ -83,14 +83,14 @@ def test_t3_whole_file(choline):
 
 def test_an_undefined_element_is_reported_as_failed(pool, tmp_path):
     # Bromide, key 35, which neither element table defines: the program writes the header, the
-    # refusal line and nothing else, and exits 0. The driver must report that as a failure.
+    # refusal line and nothing else, and exits 1. The driver must report that as a failure.
     inp = tmp_path / "hbr.mfj"
     inp.write_text("HBr+\n1\n2\nang\ncalc\n1.0000\n 0.0 0.0 0.0 35 0.5\n 1.41 0.0 0.0 1 0.5\n",
                    encoding="latin-1", newline="\n")
     for gas in pool.binaries:
         r: Result = run_one(Job(inp, gas, 1, tmp_path), pool.launcher)
-        assert not r.ok and r.returncode == 0, (gas, r)
-        assert r.message == "no SUMMARY: type not defined for atom number  1", (gas, r.message)
+        assert not r.ok and r.returncode == 1, (gas, r)
+        assert r.message == "exit 1: type not defined for atom number  1", (gas, r.message)
         assert r.cross_sections == {} and r.conformers == []
 
 

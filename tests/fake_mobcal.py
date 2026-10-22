@@ -9,7 +9,7 @@ output file named there. What it writes is chosen by the input file's first line
                  and ``PA``/``EHS`` in helium only, as the real program reports them)
     sets N       the same, with the multi-set SUMMARY the program writes for N coordinate sets
     refuse       the program's refusal of an undefined element: the header lines, then
-                 ``type not defined for atom number  1``, exit 0, no SUMMARY
+                 ``type not defined for atom number  1``, exit 1, no SUMMARY
     crash        a partial output, then exit 3
     silent       no output file at all, exit 0
     sleep S      wait S seconds, then as ``ok`` (the concurrency test)
@@ -57,7 +57,7 @@ def main() -> int:
              " coordinates in angstroms", " using a calculated (non-uniform) charge distribution"]
     if mode == "refuse":
         lines.append(" type not defined for atom number  1")
-        return write(out, lines, 0)
+        return write(out, lines, 1)
     lines += [" mass of ion = 1.0417E+02", " RANLUX INITIALIZED BY RLUXGO FROM SEEDS"
               f" {seed} 0 0", f" using RANLUX with seed integer ={seed:8d}"]
     if mode == "crash":
@@ -80,7 +80,7 @@ def main() -> int:
                     read_blocks += 1
                 elif me == 0:
                     lines.append(f" combining run: no file {block_name(s, k):<20} for this block")
-                    return write(out, lines, 0)
+                    return write(out, lines, 1)
                 else:
                     empty += 1
         lines += ["", f" blocks of imp trajectories: integrated{done:4d}, read from files"

@@ -137,7 +137,7 @@ c
       write(8,640) iwtot,iwme
   640 format(1x,'bad split record in mobcal.in:',2i8)
       close(8)
-      stop
+      stop 1
       endif
 c
 c     print switches ip=1  print scattering angles
@@ -536,7 +536,7 @@ c
       write(8,610)
   610 format(1x,'units not specified')
       close (8)
-      stop
+      stop 1
       endif
 c
       read(9,*) correct
@@ -554,7 +554,7 @@ c
       write (8,632)
   632 format(1x,'charge distribution not specified')
       close (8)
-      stop
+      stop 1
       endif
 c
       tcharge=0.d0
@@ -720,7 +720,7 @@ c
       write(8,602) iatom
   602 format(1x,'type not defined for atom number',i3)
       close (8)
-      stop
+      stop 1
       endif
 c
  2020 continue  
@@ -1801,7 +1801,7 @@ c
   602 format(1x,i4,5x,1pe11.4,3(5x,e11.4))
  1001 continue     
       close (8)
-      stop
+      stop 1
       endif
 c
 c     determine rmax, emax, and r00 along x, y, and z directions
@@ -1939,7 +1939,7 @@ c
       write(8,653)
   653 format(1x,'ibst greater than 500')
       close (8)
-      stop     
+      stop 1     
       endif
       goto 3000
  3020 b2max(ig)=dfloat(ibst-5)*dbst2
@@ -2012,7 +2012,7 @@ c
       write(8,691) fnblk
   691 format(/1x,'combining run: no file ',a,' for this block')
       close(8)
-      stop
+      stop 1
       endif
       iempt=iempt+1
       goto 3995
@@ -2025,7 +2025,7 @@ c
   692 format(/1x,'file ',a,' is not this block: set',i4,' cycle',i3,
      ?' point',i3,' seed',i10)
       close(8)
-      stop
+      stop 1
       endif
       iread=iread+1
       ifailc=ifailc+ifblk
@@ -2936,7 +2936,7 @@ c
       write(8,602) iatom
   602 format(1x,'type not defined for atom number',i3)
       close (8)
-      stop
+      stop 1
       endif
 c
  2020 continue  
@@ -2949,7 +2949,7 @@ c
       write(8,624)
   624 format(1x,'masses do not add up')
       close (8)
-      stop
+      stop 1
       endif
 c
       do 2030 iatom=1,inatom

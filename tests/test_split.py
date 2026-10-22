@@ -110,7 +110,7 @@ def test_a_split_run_with_two_coordinate_sets(pool, tmp_path):
 
 def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool, tmp_path):
     # Water: the trajectories fail energy conservation almost every time, the helium program
-    # stops at the hundredth with no SUMMARY (and exit 0), and the driver calls that failed.
+    # stops at the hundredth with no SUMMARY and exit 1, and the driver calls that failed.
     # Split, a worker reaches the cap on its own blocks and stops short of writing them, or the
     # combining run's sum reaches it; either way there is no SUMMARY and no number.
     water = tmp_path / "water.mfj"
@@ -118,8 +118,8 @@ def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool,
                      " 0.0000  0.7572 -0.4692  1 0.5\n 0.0000 -0.7572 -0.4692  1 0.5\n",
                      encoding="latin-1", newline="\n")
     serial = run_one(Job(water, "he", 5013489, tmp_path, name="serial"), pool.launcher)
-    assert not serial.ok and serial.returncode == 0
-    assert serial.message.startswith("no SUMMARY: ")
+    assert not serial.ok and serial.returncode == 1
+    assert serial.message.startswith("exit 1"), serial.message
     split = run_one(Job(water, "he", 5013489, tmp_path, name="split", split=2), pool.launcher)
     assert not split.ok and split.cross_sections == {}
     assert "blocks missing" in split.message or "reached ifail" in split.message, split.message

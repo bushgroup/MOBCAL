@@ -1,12 +1,13 @@
 """The driver: independent calculations one process each, and one calculation across W processes.
 
 The binary is a black box with a working directory. It reads ``mobcal.in`` from the directory
-it is started in, takes no arguments, writes its output where that file says, and exits 0
-whether it computed a cross section or refused its input. So every run gets a directory of its
-own, parallelism is one process per directory, and what the package knows about a run it learns
-from the output file: the SUMMARY block at the end is the evidence that the calculation
-completed, and an output without one is a failure whose message is the last line the file holds
-(``type not defined for atom number``, ``units not specified``, ``masses do not add up``).
+it is started in, takes no arguments, writes its output where that file says, and exits 0 when
+it computed a cross section and 1 when it refused its input. So every run gets a directory of
+its own, parallelism is one process per directory, and what the package knows about a run it
+learns from the exit status and the output file: a nonzero exit is a failure, and so is an
+output without the SUMMARY block that is the evidence the calculation completed, each with the
+last line the file holds as its message (``type not defined for atom number``, ``units not
+specified``, ``masses do not add up``).
 
 A ``Job`` is one calculation: an input file, a gas and a seed. ``run_one`` gives it the
 directory ``<out_dir>/<name>/`` holding a copy of the input (under the name the output will

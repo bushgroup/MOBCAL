@@ -38,7 +38,7 @@ CHOLINE_SEED = 5013489
 TOLERANCE = 1e-3  # relative, the regression gate's second tier
 
 # Bromine (key 35) is in neither gas's element table, so the program writes its header, then
-# "type not defined for atom number", and exits 0.
+# "type not defined for atom number", and exits 1.
 _UNDEFINED_ELEMENT = "HBr+\n1\n2\nang\ncalc\n1.0000\n 0 0 0 35 0.5\n 1.41 0 0 1 0.5\n"
 
 
@@ -100,7 +100,7 @@ def _start(gas: str) -> Callable[[], tuple[bool, str, list[str]]]:
             inp = Path(td) / "hbr.mfj"
             inp.write_text(_UNDEFINED_ELEMENT, encoding="latin-1", newline="\n")
             r = run_one(Job(inp, gas, 1, Path(td) / "runs"), lambda _job: [str(binary)])
-        ok = not r.ok and r.returncode == 0 and "type not defined" in r.message
+        ok = not r.ok and r.returncode == 1 and "type not defined" in r.message
         return ok, f"{gas}: the binary starts and refuses an undefined element", (
             [] if ok else [f"expected the refusal, got: {r.message or 'a completed run'}"])
     start.__name__ = f"start_{gas}"
