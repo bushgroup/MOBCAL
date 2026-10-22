@@ -128,6 +128,16 @@ that did not write every block it owed fails the run, and the combining run neve
 counts split calculations in flight, each of them `--split` processes. Without `--split`, or
 without the fourth record it writes to `mobcal.in`, the program is the 2012 program.
 
+Every process repeats the part of the calculation that precedes the trajectories (the
+projection and hard-sphere cross sections and the search for the largest impact parameter at
+each velocity), and the combining run repeats it once more, so the speedup falls short of the
+process count by that fixed cost: a few seconds per process for choline in helium, about
+fifteen in nitrogen. Measured on one workstation (Windows 11, 80 threads, shared with other
+work, MSYS2 gfortran 16.2.0), choline in helium ran 1.8, 4.0, 6.6 and 9.5 times faster than
+serial across 2, 5, 10 and 20 processes, and choline in nitrogen 8.8 times faster across 10
+and 15.8 times across 20, with every combined output equal to the 2012 output in every digit.
+The split pays best on the long calculations, which is what it is for.
+
 ## Testing against the 2012 outputs
 
 To check that a build still computes the 2012 numbers, the test suite runs `Choline.mfj`

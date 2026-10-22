@@ -102,7 +102,9 @@ mobcal run <installation>/examples/Choline.mfj --gas he --out runs
 
 writes its run directory and `summary.csv` under `runs` in the current directory. Adding
 `--split 8` runs that one calculation as eight processes and reports the serial result exactly,
-which is how a long nitrogen calculation is made short on a machine with cores to spare. Run
+which is how a long nitrogen calculation is made short on a machine with cores to spare: on
+one 80-thread workstation choline in nitrogen took 70 minutes serial, 8 minutes across ten
+processes and 4.5 minutes across twenty. Run
 calculations from a folder of your own, not from inside the installation, which an upgrade
 replaces.
 
