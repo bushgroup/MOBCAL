@@ -22,7 +22,10 @@ graphical interface is planned once the command line has been used.
 
 The physics of the 2012 code, including its Lennard-Jones parameters, is not being changed.
 Questions about the parameters are being taken up separately, and no change to them will land
-without a stated decision and a stated reason. The changes to the Fortran so far are listed
+without a stated decision and a stated reason. The element tables are now also kept as one data
+file per gas, every number the literal the 2012 source spells, which the package checks and
+renders into every run directory ([docs/parameters.md](docs/parameters.md)); the test suite
+holds the files to the source row for row. The changes to the Fortran so far are listed
 with their line counts in [fortran/README.md](fortran/README.md). Two add the statements that
 let one calculation run as several processes. The others correct defects in how the program
 reports: a refused input now exits with status 1, an input larger than the arrays is refused
@@ -41,10 +44,11 @@ to check an installation with `mobcal self-check`.
 - `fortran/`: the 2012 sources, the choline input, the run file and the two reference outputs.
   [`fortran/README.md`](fortran/README.md) lists every change since 2012, records the hashes,
   and says what the 2012 release said about compiling them. The reference outputs are unchanged.
-- `src/mobcal/`: the Python package.
+- `src/mobcal/`: the Python package, with the two element tables in `src/mobcal/parameters/`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
-- `docs/`: the installation guide.
+- `docs/`: the installation guide and the element-table format
+  ([`docs/parameters.md`](docs/parameters.md)).
 
 ## Building the Fortran
 
@@ -90,8 +94,10 @@ combination of the inputs given (paths or globs), the gas (`he`, `n2` or `both`;
 default) and the seeds (the 2012 seed, 5013489, by default), runs them `--workers` at a time
 (by default, as many as the machine has processors), and prints each result as it lands. Each
 run gets a directory of its own under `--out`, named for the input, the gas and the seed, and
-holding a copy of the input, the `mobcal.in` the program read, the output it wrote as
-`mobcal.out`, and whatever it printed to the console as `stdout.log`. The directory is a
+holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
+`parameters.tab`, the output it wrote as `mobcal.out`, whatever it printed to the console as
+`stdout.log`, and `record.json`, which records the program and its build, the input and its
+hash, the seed, the element table and its hash, the times and the result. The directory is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
 run directories, one row per run with its status, its cross sections in Å², and the time the

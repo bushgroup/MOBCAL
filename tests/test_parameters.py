@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from mobcal import fortran, parameters
+from mobcal import cli, fortran, parameters
 from mobcal.parameters import ParameterError
 
 # --- the 2012 source ------------------------------------------------------------------------
@@ -315,3 +315,42 @@ def test_a_missing_file_is_refused(tmp_path):
     with pytest.raises(ParameterError, match="cannot read"):
         parameters.load(tmp_path / "none.toml")
 
+
+# --- the command line -----------------------------------------------------------------------
+
+@pytest.mark.parametrize("gas", fortran.GASES)
+def test_render_parameters_writes_what_the_driver_writes(tmp_path, capsys, gas):
+    assert cli.main(["render-parameters", gas, str(tmp_path / "here")]) == 0
+    got = (tmp_path / "here" / "parameters.tab").read_bytes()
+    assert got == parameters.shipped(gas).render(tmp_path).read_bytes()
+    assert capsys.readouterr().out.startswith(f"wrote {tmp_path / 'here' / 'parameters.tab'}")
+
+
+def test_render_parameters_refuses_a_table_for_the_other_gas(tmp_path, capsys):
+    rc = cli.main(["render-parameters", "he", str(tmp_path),
+                   "--parameters", str(parameters.default_path("n2"))])
+    assert rc == 2 and "is a table for N2, not He" in capsys.readouterr().err
+    assert not (tmp_path / "parameters.tab").exists()
+
+
+def test_run_refuses_a_bad_table_before_anything_runs(tmp_path, capsys):
+    bad = _variant(tmp_path, "he", 'rhs = "2.95d0"', 'rhs = "2.95"')
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--parameters", str(bad),
+                   "--out", str(tmp_path / "runs")])
+    assert rc == 2 and "element 28: rhs" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()
+
+
+def test_run_refuses_a_table_the_program_would_not_read(tmp_path, capsys):
+    mine = _variant(tmp_path, "he", '"MOBCAL 2012 helium"', '"my helium"')
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--parameters", str(mine),
+                   "--out", str(tmp_path / "runs")])
+    assert rc == 2 and "do not yet read parameters.tab" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("gas", ["he", "both"])
+def test_run_refuses_a_table_for_another_gas(tmp_path, capsys, gas):
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--gas", gas,
+                   "--parameters", str(parameters.default_path("n2")),
+                   "--out", str(tmp_path / "runs")])
+    assert rc == 2 and "is a table for N2; run it with --gas n2" in capsys.readouterr().err

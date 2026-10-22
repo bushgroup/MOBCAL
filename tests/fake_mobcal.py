@@ -2,7 +2,9 @@
 
 Run as ``python fake_mobcal.py GAS`` in a directory holding ``mobcal.in``, exactly as the driver
 runs the real binary: it reads the records, opens the input file named there, and writes the
-output file named there. What it writes is chosen by the input file's first line, its label:
+output file named there. Like the program once it reads its element table from the run
+directory, it refuses, exit 1, when ``parameters.tab`` is missing or rendered for the other
+gas. What it writes is chosen by the input file's first line, its label:
 
     ok           a complete output ending in a SUMMARY block; the cross sections are a function
                  of the seed, so a result can be traced to its job (``TM = 50 + seed % 7``,
@@ -39,6 +41,10 @@ def main() -> int:
     records = Path("mobcal.in").read_text(encoding="latin-1").splitlines()
     inp, out, seed = records[0].strip(), records[1].strip(), int(records[2])
     split = tuple(int(x) for x in records[3].split()[:2]) if len(records) > 3 else None
+    table = Path("parameters.tab")
+    head = table.read_text(encoding="ascii").split()[:3] if table.is_file() else []
+    if head != ["MOBCAL-LJ", "1", {"he": "He", "n2": "N2"}[gas]]:
+        return write(out, [" no parameters.tab for this gas in the run directory"], 1)
     label = Path(inp).read_text(encoding="latin-1").splitlines()[0].strip()
     words = label.split()
     mode, arg = words[0], (words[1] if len(words) > 1 else None)

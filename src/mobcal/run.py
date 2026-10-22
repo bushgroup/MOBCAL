@@ -9,12 +9,16 @@ output without the SUMMARY block that is the evidence the calculation completed,
 last line the file holds as its message (``type not defined for atom number``, ``units not
 specified``, ``masses do not add up``).
 
-A ``Job`` is one calculation: an input file, a gas and a seed. ``run_one`` gives it the
-directory ``<out_dir>/<name>/`` holding a copy of the input (under the name the output will
-echo), its ``mobcal.in``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
-complete record that reruns by itself. ``run_many`` runs a list of jobs with a cap on how many
-are in flight, calls back as each lands, and returns a ``Summary`` that writes ``summary.csv``
-and ``summary.json`` beside the run directories.
+A ``Job`` is one calculation: an input file, a gas and a seed, and the element table to use,
+the package's own for the gas unless the job names another. ``run_one`` checks the table
+(``mobcal.parameters``) and gives the job the directory ``<out_dir>/<name>/`` holding a copy of
+the input (under the name the output will echo), its ``mobcal.in``, the table rendered as
+``parameters.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
+complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
+account of itself: the package, the binary and its build, the input and its hash, the seed, the
+parameter set and its hash, the times, the verdict and the cross sections. ``run_many`` runs a
+list of jobs with a cap on how many are in flight, calls back as each lands, and returns a
+``Summary`` that writes ``summary.csv`` and ``summary.json`` beside the run directories.
 
 A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
@@ -39,7 +43,9 @@ the callbacks.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import datetime as dt
+import hashlib
 import json
 import os
 import platform
@@ -54,14 +60,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran
+from mobcal import fortran, parameters
 from mobcal.io.block import BLOCKS_PER_SET, expected_names
 from mobcal.io.infile import FIELD_WIDTH, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
+from mobcal.parameters import ParameterError, ParameterSet
 
 OUTPUT_NAME = "mobcal.out"
 LOG_NAME = "stdout.log"
+RECORD_JSON = "record.json"
 FALLBACK_STAGED_NAME = "input.mfj"  # for an input whose name would not fit the a30 field
 SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
@@ -84,6 +92,7 @@ class Job:
     name: str | None = None  # the run directory's name; default <input stem>-<gas>-<seed>
     staged_name: str | None = None  # the input's name inside the run directory
     split: int | None = None  # W: run this one calculation across W processes
+    parameters: Path | None = None  # the element table; None is the package's for the gas
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
@@ -94,6 +103,8 @@ class Job:
                              f"not {self.split!r}")
         object.__setattr__(self, "input", Path(self.input))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
+        if self.parameters is not None:
+            object.__setattr__(self, "parameters", Path(self.parameters))
 
     @property
     def label(self) -> str:
@@ -113,6 +124,10 @@ class Job:
     def worker_dir(self, w: int) -> Path:
         return self.run_dir / f"w{w:02d}"
 
+    @property
+    def parameters_path(self) -> Path:
+        return self.parameters or parameters.default_path(self.gas)
+
 
 @dataclass(frozen=True)
 class Result:
@@ -124,6 +139,7 @@ class Result:
     output: Path | None  # the output file, whether or not it holds a SUMMARY
     cross_sections: dict[str, float]  # the run's reported values (the mean over sets)
     conformers: list[dict[str, float]]  # per coordinate set
+    parameters: dict = dataclasses.field(default_factory=dict)  # the set's record; {} if unread
 
     @property
     def status(self) -> str:
@@ -135,7 +151,8 @@ class Result:
                 "split": j.split, "status": self.status, "message": self.message,
                 "returncode": self.returncode, "seconds": round(self.seconds, 2),
                 "output": str(self.output or ""), "cross_sections": self.cross_sections,
-                "conformers": self.conformers}
+                "conformers": self.conformers, "parameters": self.parameters.get("name"),
+                "parameters_sha256": self.parameters.get("sha256")}
 
     def row(self) -> dict[str, object]:
         cs = self.cross_sections
@@ -164,16 +181,30 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
     return Result(job, False, message, returncode, seconds, output, {}, [])
 
 
-def _prepare(job: Job, d: Path, split: tuple[int, int] | None) -> None:
+def usable(pset: ParameterSet) -> None:
+    """Raise ParameterError for a table the binaries would not actually use: any but the
+    shipped one, while they still carry the 2012 tables in their source
+    (``fortran.READS_PARAMETERS``)."""
+    if not (pset.shipped or fortran.READS_PARAMETERS):
+        raise ParameterError(
+            f"{pset.path}: the programs in this version take the element table from their "
+            f"source, which equals the shipped {parameters.FILES[pset.gas]}, and do not yet "
+            f"read parameters.tab; a run can name no other table, since its record would name "
+            f"a table the program did not use")
+
+
+def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet) -> None:
     """Make ``d`` ready for one start of the program: the input copied in under its staged name,
-    ``mobcal.in`` written, and any output or block file of an earlier run removed, so that
-    nothing stale is ever read as this run's."""
+    ``mobcal.in`` written, the element table rendered, and any output, record or block file of
+    an earlier run removed, so that nothing stale is ever read as this run's."""
     d.mkdir(parents=True, exist_ok=True)
     (d / OUTPUT_NAME).unlink(missing_ok=True)
+    (d / RECORD_JSON).unlink(missing_ok=True)
     for p in d.glob(BLOCK_GLOB):
         p.unlink()
     shutil.copyfile(job.input, d / job.staged)
     InFile(job.staged, OUTPUT_NAME, job.seed, split).write(d)
+    pset.render(d)
 
 
 def _start(command: Sequence[str], d: Path,
@@ -216,10 +247,12 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
             blocks: BlocksProgress | None = None) -> Result:
     """Stage one job in its own directory, run the binary there, and read what it wrote.
 
-    The input is read first and a file the program would stop on is reported as failed without
-    starting the binary. A stale ``mobcal.out`` in the directory is removed before the run, so
-    that an output is never read from an earlier run. A job with ``split`` runs its workers and
-    then the combining run; see the module docstring.
+    The input and the element table are read first, and a file the program would stop on, or
+    a table ``mobcal.parameters`` refuses, is reported as failed without starting the binary or
+    making the run directory. A stale ``mobcal.out`` in the directory is removed before the run,
+    so that an output is never read from an earlier run. A job with ``split`` runs its workers
+    and then the combining run; see the module docstring. Every run that got as far as its
+    directory ends with ``record.json`` written there, failed or not.
     """
     try:
         mfj = Mfj.read(job.input)
@@ -227,6 +260,11 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
         return _failed(job, f"cannot read input: {e}")
     except MfjError as e:
         return _failed(job, f"input refused: {e}")
+    try:
+        pset = parameters.load(job.parameters_path, gas=job.gas)
+        usable(pset)
+    except ParameterError as e:
+        return _failed(job, f"parameters refused: {e}")
     try:
         InFile(job.staged, OUTPUT_NAME, job.seed)
     except InFileError as e:
@@ -236,31 +274,40 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     except (FileNotFoundError, ValueError) as e:
         return _failed(job, str(e))
 
+    started = dt.datetime.now().astimezone()
     if job.split:
-        return _run_split(job, command, mfj.coordinate_sets, _running, blocks)
+        r = _run_split(job, command, mfj.coordinate_sets, pset, _running, blocks)
+    else:
+        r = _run_serial(job, command, pset, _running)
+    r = dataclasses.replace(r, parameters=pset.record())
+    _write_record(r, command, mfj, started)
+    return r
 
+
+def _run_serial(job: Job, command: list[str], pset: ParameterSet,
+                running: set[subprocess.Popen] | None) -> Result:
     d = job.run_dir
-    _prepare(job, d, None)
+    _prepare(job, d, None, pset)
     t0 = time.perf_counter()
     try:
-        proc = _start(command, d, _running)
+        proc = _start(command, d, running)
     except OSError as e:
         return _failed(job, f"cannot start {command[0]}: {e}")
     try:
         rc = proc.wait()
     finally:
-        _finish(proc, _running)
+        _finish(proc, running)
     return _collect(job, d, rc, time.perf_counter() - t0)
 
 
-def _run_split(job: Job, command: list[str], coordinate_sets: int,
+def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: ParameterSet,
                running: set[subprocess.Popen] | None, blocks: BlocksProgress | None) -> Result:
     total, d = job.split, job.run_dir
     expected = {w: expected_names(coordinate_sets, total, w) for w in range(1, total + 1)}
     n_expected = sum(len(v) for v in expected.values())
-    _prepare(job, d, (total, 0))
+    _prepare(job, d, (total, 0), pset)
     for w in expected:
-        _prepare(job, job.worker_dir(w), (total, w))
+        _prepare(job, job.worker_dir(w), (total, w), pset)
 
     t0 = time.perf_counter()
     procs: dict[int, subprocess.Popen] = {}
@@ -317,6 +364,48 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int,
     finally:
         _finish(proc, running)
     return _collect(job, d, rc, time.perf_counter() - t0)
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime) -> Path:
+    """Write ``record.json`` into the run's directory: what ran, on what, with which table, and
+    what came of it. Its numbers are the ``Result``'s; the output file stays the evidence."""
+    j = r.job
+    exe = Path(command[0])
+    build = fortran.read_manifest(exe.parent).get("binaries", {}).get(exe.name)
+    doc = {
+        "mobcal_version": mobcal.__version__,
+        "name": j.label,
+        "binary": {"gas": j.gas, "path": str(exe), "command": list(command), "build": build},
+        "input": {"path": str(j.input), "staged_name": j.staged, "sha256": _sha256(j.input),
+                  "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
+        "mobcal_in": {"seed": j.seed, "split": j.split},
+        "parameters": r.parameters,
+        "started": started.isoformat(timespec="seconds"),
+        "seconds": round(r.seconds, 2),
+        "returncode": r.returncode,
+        "status": r.status,
+        "message": r.message,
+        "cross_sections": r.cross_sections,
+        "conformers": r.conformers,
+        "output": OUTPUT_NAME,
+        "console_log": LOG_NAME,
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+    }
+    j.run_dir.mkdir(parents=True, exist_ok=True)
+    out = j.run_dir / RECORD_JSON
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    return out
 
 
 Progress = Callable[[Result, int, int], None]

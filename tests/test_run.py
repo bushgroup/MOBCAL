@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+import hashlib
 import json
 import sys
 import time
@@ -9,8 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from mobcal import fortran
+import mobcal
+from mobcal import fortran, parameters, run
 from mobcal.io.infile import InFile
+from mobcal.io.mfj import Mfj
 from mobcal.io.outfile import OutFile
 from mobcal.run import FALLBACK_STAGED_NAME, Job, Result, run_many, run_one
 
@@ -177,3 +181,159 @@ def test_result_str():
     assert str(ok) == "Choline-he-1  ok  PA 61.075  TM 55.402 A^2  190 s"
     bad = Result(j, False, "no SUMMARY: masses do not add up", 0, 0.2, None, {}, [])
     assert str(bad) == "Choline-he-1  FAILED  no SUMMARY: masses do not add up"
+
+
+# --- the element table and the record --------------------------------------------------------
+
+def _my_table(tmp_path: Path, gas: str = "he", name: str = "my helium") -> Path:
+    p = tmp_path / f"mine-{gas}.toml"
+    text = parameters.default_path(gas).read_text(encoding="utf-8")
+    old = 'name = "MOBCAL 2012 helium"' if gas == "he" else 'name = "MOBCAL 2012 nitrogen"'
+    p.write_text(text.replace(old, f'name = "{name}"'), encoding="utf-8")
+    return p
+
+
+@pytest.mark.parametrize("gas", fortran.GASES)
+def test_every_run_directory_gets_the_rendered_table(tmp_path, gas):
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), gas, 1, tmp_path / "runs")
+    r = run_one(job, launcher)
+    assert r.ok
+    want = parameters.shipped(gas).render(tmp_path).read_bytes()
+    assert (job.run_dir / parameters.RENDERED).read_bytes() == want
+    assert r.parameters == parameters.shipped(gas).record()
+
+
+def test_without_the_rendered_table_the_stand_in_refuses(tmp_path, monkeypatch):
+    # The stand-in checks for the table as the program will; the driver is what supplies it.
+    monkeypatch.setattr(parameters.ParameterSet, "render", lambda self, d: None)
+    r = run_one(Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path), launcher)
+    assert not r.ok and r.message == "exit 1: no parameters.tab for this gas in the run directory"
+
+
+@pytest.fixture
+def reads_tables(monkeypatch):
+    """Binaries that read parameters.tab, as the stand-in does; the built ones do not yet."""
+    monkeypatch.setattr(fortran, "READS_PARAMETERS", True)
+
+
+def test_another_table_is_refused_while_the_program_carries_its_own(tmp_path):
+    assert not fortran.READS_PARAMETERS
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
+              parameters=_my_table(tmp_path))
+    r = run_one(job, launcher)
+    assert not r.ok and r.returncode is None and not job.run_dir.exists()
+    assert "do not yet read parameters.tab" in r.message
+    # A byte-identical copy of the shipped table is the shipped table.
+    copy = tmp_path / "copy.toml"
+    copy.write_bytes(parameters.default_path("he").read_bytes())
+    assert run_one(Job(job.input, "he", 1, tmp_path / "runs", parameters=copy), launcher).ok
+
+
+def test_a_job_can_name_its_own_table(tmp_path, reads_tables):
+    mine = _my_table(tmp_path)
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
+              parameters=str(mine))
+    assert job.parameters == mine and job.parameters_path == mine
+    r = run_one(job, launcher)
+    assert r.ok and r.parameters["name"] == "my helium" and not r.parameters["shipped"]
+    head = (job.run_dir / parameters.RENDERED).read_text(encoding="ascii").split()[:5]
+    assert head == ["MOBCAL-LJ", "1", "He", "my_helium", r.parameters["sha256"]]
+
+
+def test_a_refused_table_never_starts_the_binary(tmp_path):
+    bad = tmp_path / "bad.toml"
+    bad.write_text(parameters.default_path("he").read_text(encoding="utf-8")
+                   .replace('rhs = "2.95d0"', 'rhs = "2.95"'), encoding="utf-8")
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
+              parameters=bad)
+    r = run_one(job, launcher)
+    assert not r.ok and r.returncode is None
+    assert r.message.startswith(f"parameters refused: {bad}: element 28: rhs: ")
+    assert not job.run_dir.exists()
+
+
+def test_a_table_for_the_other_gas_is_refused(tmp_path):
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
+              parameters=parameters.default_path("n2"))
+    r = run_one(job, launcher)
+    assert not r.ok and r.message.endswith("is a table for N2, not He")
+
+
+def test_a_split_run_renders_into_every_directory(tmp_path):
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 3, tmp_path / "runs", split=3)
+    r = run_one(job, launcher)
+    assert r.ok
+    want = (job.run_dir / parameters.RENDERED).read_bytes()
+    assert want == parameters.shipped("he").render(tmp_path).read_bytes()
+    for w in (1, 2, 3):
+        assert (job.worker_dir(w) / parameters.RENDERED).read_bytes() == want
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["mobcal_in"] == {"seed": 3, "split": 3}
+
+
+def test_the_record_of_a_run(tmp_path):
+    inp = write_input(tmp_path / "ok.mfj", "ok")
+    job = Job(inp, "n2", 5013489, tmp_path / "runs")
+    r = run_one(job, launcher)
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["mobcal_version"] == mobcal.__version__ and rec["name"] == "ok-n2-5013489"
+    assert rec["binary"]["gas"] == "n2" and rec["binary"]["command"] == launcher(job)
+    assert rec["binary"]["build"] is None  # the stand-in has no build.json
+    assert rec["input"] == {"path": str(inp), "staged_name": "ok.mfj",
+                            "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
+                            "atoms": 21, "coordinate_sets": 1}
+    assert rec["mobcal_in"] == {"seed": 5013489, "split": None}
+    assert rec["parameters"] == parameters.shipped("n2").record()
+    assert rec["parameters"]["rendered"] == "parameters.tab"
+    assert (rec["status"], rec["returncode"], rec["message"]) == ("ok", 0, "")
+    assert rec["cross_sections"] == r.cross_sections == {"TM": 50 + 5013489 % 7}
+    assert rec["conformers"] == r.conformers
+    assert (rec["output"], rec["console_log"]) == ("mobcal.out", "stdout.log")
+    assert dt.datetime.fromisoformat(rec["started"]).tzinfo is not None
+    assert rec["seconds"] == round(r.seconds, 2)
+
+
+def test_a_failed_run_has_a_record_too(tmp_path):
+    job = Job(write_input(tmp_path / "x.mfj", "refuse"), "he", 1, tmp_path)
+    run_one(job, launcher)
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert (rec["status"], rec["returncode"]) == ("failed", 1)
+    assert rec["message"] == "exit 1: type not defined for atom number   1"
+    assert rec["cross_sections"] == {} and rec["conformers"] == []
+
+
+def test_the_record_quotes_the_binarys_build(tmp_path):
+    # A command whose first word is a recorded binary: the build.json beside it is quoted.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    exe = bin_dir / fortran.binary_name("he")
+    exe.write_bytes(b"not run")
+    fortran._record(bin_dir, "he", exe, "no-such-gfortran")
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs")
+    r = Result(job, True, "", 0, 1.0, None, {}, [], parameters={"name": "x"})
+    run._write_record(r, [str(exe)], Mfj.read(job.input), dt.datetime.now().astimezone())
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["binary"]["build"] == fortran.read_manifest(bin_dir)["binaries"][exe.name]
+
+
+def test_a_stale_record_does_not_survive_a_rerun_that_cannot_start(tmp_path):
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path)
+    assert run_one(job, launcher).ok
+    r = run_one(job, lambda j: [str(tmp_path / "no-such-program")])
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert not r.ok and rec["status"] == "failed" and rec["message"].startswith("cannot start")
+
+
+def test_the_summary_names_each_runs_table(tmp_path, reads_tables):
+    mine = _my_table(tmp_path)
+    jobs = [Job(write_input(tmp_path / "a.mfj", "ok"), "he", 1, tmp_path / "runs"),
+            Job(write_input(tmp_path / "b.mfj", "ok"), "he", 1, tmp_path / "runs",
+                parameters=mine)]
+    s = run_many(jobs, workers=2, launcher=launcher)
+    _, json_path = s.write(tmp_path / "runs")
+    runs = json.loads(json_path.read_text(encoding="utf-8"))["runs"]
+    shipped = parameters.shipped("he")
+    assert (runs[0]["parameters"], runs[0]["parameters_sha256"]) == (shipped.name,
+                                                                     shipped.sha256)
+    assert runs[1]["parameters"] == "my helium"
+    assert runs[1]["parameters_sha256"] == hashlib.sha256(mine.read_bytes()).hexdigest()

@@ -67,6 +67,14 @@ SHA256 = {
         "1da0eddc492d95282c5707a3c7f83489b9dcac8f5048453e533216da54a58e99",
 }
 
+# Whether the programs built from these sources take their element tables from the run
+# directory's parameters.tab, which the driver renders from mobcal.parameters. Not yet: the 2012
+# chains in fcoord and ncoord still assign every parameter, and the table is written beside them
+# unread. Until this is True the driver runs only the shipped tables, which the chains equal
+# token for token (the test suite holds them to it), so that a run's record never names a
+# table the program did not use.
+READS_PARAMETERS = False
+
 FFLAGS = ["-O3", "-fno-automatic", "-std=legacy"]
 LINK_FLAGS = {
     "win32": ["-static"],

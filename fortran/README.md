@@ -65,3 +65,18 @@ copies the input to the echoed name before running rather than editing either si
 fourth record, `W w`, is read when present and makes the run one process of a split
 calculation, as the Changes table describes; `mobcal run --split W` writes it, and the shipped
 file does not carry it.
+
+## The element tables
+
+The parameters each program assigns by element, in the `if(imass(iatom).eq.NN)` chains of
+`fcoord` and `ncoord`, are also kept as one data file per gas under `src/mobcal/parameters/`,
+every number the literal these sources spell, and `mobcal run` renders a table from that file,
+`parameters.tab`, into every run directory beside `mobcal.in`
+([docs/parameters.md](../docs/parameters.md)). The programs in this directory do not read it
+yet: they still take the 2012 tables from their source, which the test suite holds equal to the
+data files token for token. To prepare a directory by hand the way `mobcal run` does, so that it
+holds everything a run directory holds, render the table into it as well:
+
+```
+uv run mobcal render-parameters he path/to/run
+```

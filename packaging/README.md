@@ -10,7 +10,8 @@ One layout on every platform, PyInstaller's onedir folder plus two folders the b
 ```
 mobcal/
   mobcal(.exe)        the command, frozen with its own Python
-  _internal/          PyInstaller's runtime and the mobcal package
+  _internal/          PyInstaller's runtime and the mobcal package, with the element tables
+                      in mobcal/parameters/
   fortran/            mobcal_he(.exe), mobcal_n2(.exe), build.json
   examples/           Choline.mfj, sample-output/Choline_He.out, sample-output/Choline_N2.out
   LICENSE
