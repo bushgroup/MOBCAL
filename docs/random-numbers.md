@@ -48,6 +48,21 @@ seed, `5013489 philox`. A run file without the word is a RANLUX run, as every ru
 makes ends in `-ranlux`, so the same seed under both generators can share an output folder, and
 `record.json`, `summary.csv` and `summary.json` name the generator of every run.
 
+## How the two compare
+
+To test whether Philox gives the same cross sections as RANLUX, i.e., the same distribution
+over seeds rather than the same digits, we ran the choline input under both generators, each
+run split across 40 processes: 40 seeds per generator in helium and 10 in nitrogen, on one
+workstation (Windows 11, MSYS2 gfortran 16.2.0, October 2026; lab record, task 18). In helium
+the means differ by +0.017 Å² (projection approximation), +0.039 Å² (exact hard spheres) and
+−0.044 Å² (trajectory method), at most 1.7 times their combined standard error, and the
+standard deviations over seeds agree to within 5 %: 0.16 Å² for the trajectory-method value
+under either generator, 0.3 % of the cross section. In nitrogen the trajectory-method means
+differ by −0.10 Å², 0.8 times their combined standard error, and no trajectory failed energy
+conservation in any run under either generator. The two generators therefore give cross sections that are interchangeable
+at the precision a single calculation has. Note that this comparison used one ion, choline, a
+21-atom cation.
+
 ## Reproducing a published number
 
 A cross section published from MOBCAL 2012 reproduces only under RANLUX and at the seed it was
