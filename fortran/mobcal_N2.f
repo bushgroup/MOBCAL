@@ -88,16 +88,10 @@ c
       character*30 filen1,filen2,unit,dchar,xlabel
       character*80 rseed
       character*8 gen
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -522,17 +516,11 @@ c     Reads in coordinates and other parameters.
 c
       implicit double precision (a-h,m-z)
       character*30 filen1,unit,dchar,xlabel
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       dimension imass(len),xmass(len) 
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -729,16 +717,10 @@ c
 c     Rotates the cluster/molecule to a random orientation.  
 c
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -761,16 +743,10 @@ c
 c     Rotates the cluster/molecule.  
 c
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -826,16 +802,10 @@ c
 c     Subroutine to calculate L-J + ion-dipole potential.
 c
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1030,16 +1000,10 @@ c     distance from the center of mass
 c
       implicit double precision (a-h,m-z)
       dimension pot(3000),sdx(200),sdy(200),sdz(200)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1162,16 +1126,10 @@ c
 c     Runs a small set of trajectories at a collision energy of kT.
 c
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len) 
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1268,16 +1226,10 @@ c
 c     Runs one trajectory
 c
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len) 
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1317,16 +1269,10 @@ c
       implicit double precision (a-h,m-z)
       integer ns,nw,l
       dimension w(6),dw(6)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1512,16 +1458,10 @@ c
       implicit double precision (a-h,m-z)
       dimension w(6),dw(6),a(4),b(4),c(4),ampc(5),amcc(4),array(6,40),
      ?savw(40),savdw(40),q(40)
-      parameter (len=1000) 
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len), 
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1598,16 +1538,10 @@ c     of the coordinates and momenta.
 c
       implicit double precision (a-h,m-z)
       dimension w(6),dw(6)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -1651,16 +1585,10 @@ c
       dimension om11st(100),om12st(100),om13st(100),om22st(100)
       logical lblk
       character*20 fnblk
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -2097,16 +2025,10 @@ c     from code written by Alexandre Shvartsburg.
 c
       implicit double precision (a-h,m-z)
       dimension cof(-1:100),crof(100)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -2232,16 +2154,10 @@ c     Guides hard sphere scattering trajectory. Adapted from code
 c     written by Alexandre Shvartsburg.
 c 
       implicit double precision (a-h,m-z)
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
@@ -2705,17 +2621,11 @@ c     Reads in a new set of coordinates
 c
       implicit double precision (a-h,m-z)
       character*30 unit,dchar,dummy
-      parameter (len=1000)
+      include 'mobcal_arrays.inc'
       dimension imass(len),xmass(len) 
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
      ?xe,xeo,xk,xn,mconst,correct,romax,inatom,icoord,iic
-      common/charge/pcharge(len)
-      common/coordinates/fx(len),fy(len),fz(len),
-     ?ox(len),oy(len),oz(len)
-      common/ljparameters/eolj(len),rolj(len),eox4(len),
-     ?ro6lj(len),ro12lj(len),dro6(len),dro12(len)
-      common/hsparameters/rhs(len),rhs2(len)
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
