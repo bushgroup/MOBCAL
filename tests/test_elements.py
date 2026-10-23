@@ -16,10 +16,12 @@ two ways:
 
 - **Whole outputs through the real binaries.** The all-elements inputs of ``probe.py``, one atom
   per row and two identical coordinate sets, run as worker 400 of 400 so that both sets reach
-  the SUMMARY in seconds, must reproduce the captured outputs byte for byte: helium, and
-  nitrogen without silicon. Nitrogen with silicon differs in set 2 and nowhere else, because the
-  2012 ``ncoord`` gave silicon iron's well depth and radius and the table gives ``fcoord``'s;
-  those lines are the one difference the change was meant to make.
+  the SUMMARY in seconds, must reproduce the captured outputs byte for byte (but for the two
+  changes of print format made since the capture, the atom count's width and the q1st column,
+  which ``gate.underived`` allows and nothing else): helium, and nitrogen without silicon.
+  Nitrogen with silicon differs in set 2 and nowhere else, because the 2012 ``ncoord`` gave
+  silicon iron's well depth and radius and the table gives ``fcoord``'s; those lines are the
+  one difference the change was meant to make.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from pathlib import Path
 
 import pytest
 
+import gate
 import probe
 from mobcal import fortran, parameters
 from mobcal.io.outfile import OutFile
@@ -167,7 +170,8 @@ def test_the_probe_output_is_byte_identical_to_the_2012_chains(binaries, tmp_pat
     gas, drop = probe.INPUTS[stem]
     proc, out = _run(binaries[gas], tmp_path, gas, probe.all_elements(gas, drop))
     assert proc.returncode == 0, out.last_line
-    assert out.generator == probe.GENERATOR and out.text == _fixture(stem)
+    assert out.generator == probe.GENERATOR
+    assert gate.underived(_fixture(stem).splitlines(), out.lines) == []
 
 
 def test_nitrogen_with_silicon_differs_from_2012_in_set_2_only(binaries, tmp_path):
@@ -176,10 +180,10 @@ def test_nitrogen_with_silicon_differs_from_2012_in_set_2_only(binaries, tmp_pat
     ref = _fixture("n2").splitlines()
     new = out.lines
     assert len(new) == len(ref)
-    differing = [(a, b) for a, b in zip(ref, new, strict=True) if a != b]
+    differing = gate.underived(ref, new)
     assert [a for a, _ in differing] == SILICON_LINES
     second = ref.index(" coordinate set =    2")
-    assert ref[:second] == new[:second]
+    assert all(ref.index(a) > second for a, _ in differing)
     # Set 1's result stands; set 2's is silicon's now, not iron's.
     assert out.conformers[0] == OutFile(_fixture("n2")).conformers[0]
     assert out.conformers[1]["TM"] != OutFile(_fixture("n2")).conformers[1]["TM"]

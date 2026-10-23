@@ -13,7 +13,7 @@ the RANLUX ones. What it writes is chosen by the input file's first line, its la
                  helium only, as the real program reports them)
     sets N       the same, with the multi-set SUMMARY the program writes for N coordinate sets
     refuse       the program's refusal of an undefined element: the header lines, then
-                 ``type not defined for atom number   1``, exit 1, no SUMMARY
+                 ``type not defined for atom number      1``, exit 1, no SUMMARY
     crash        a partial output, then exit 3
     silent       no output file at all, exit 0
     sleep S      wait S seconds, then as ``ok`` (the concurrency test)
@@ -67,10 +67,10 @@ def main() -> int:
         mode = "ok"
 
     lines = [f" input file name = {inp:<30}", f" input file label = {label:<30}",
-             " number of coordinate sets =    1", " number of atoms =  21",
+             " number of coordinate sets =    1", " number of atoms =      21",
              " coordinates in angstroms", " using a calculated (non-uniform) charge distribution"]
     if mode == "refuse":
-        lines.append(" type not defined for atom number   1")
+        lines.append(" type not defined for atom number      1")
         return write(out, lines, 1)
     if generator == "ranlux":
         banner = [" RANLUX INITIALIZED BY RLUXGO FROM SEEDS" f" {seed} 0 0"]

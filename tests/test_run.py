@@ -84,7 +84,7 @@ def test_multi_set_output_gives_per_set_values_and_their_mean(tmp_path):
 def test_a_refusal_is_failed_not_a_number(tmp_path):
     r = run_one(Job(write_input(tmp_path / "x.mfj", "refuse"), "he", 1, tmp_path), launcher)
     assert not r.ok and r.returncode == 1
-    assert r.message == "exit 1: type not defined for atom number   1"
+    assert r.message == "exit 1: type not defined for atom number      1"
     assert r.cross_sections == {} and r.conformers == []
     assert r.output is not None and r.output.is_file()
 
@@ -146,7 +146,7 @@ def test_run_many_keeps_job_order_reports_progress_and_writes_the_summary(tmp_pa
     assert rows[0] == "name,input,gas,seed,rng,status,PA,EHS,TM,sets,seconds,output,message"
     assert rows[1].startswith("in0-he-10,") and ",10,philox,ok,59.0,61.5,53.5,1," in rows[1]
     assert rows[2].startswith("in1-he-11,") and ",failed,,,,," in rows[2]
-    assert rows[2].endswith(",exit 1: type not defined for atom number   1")
+    assert rows[2].endswith(",exit 1: type not defined for atom number      1")
     doc = json.loads(json_path.read_text(encoding="utf-8"))
     assert doc["workers"] == 2 and len(doc["runs"]) == 4
     assert doc["runs"][3] == {**doc["runs"][3], "status": "failed", "returncode": 3}
@@ -281,7 +281,7 @@ def test_a_failed_run_has_a_record_too(tmp_path):
     run_one(job, launcher)
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
     assert (rec["status"], rec["returncode"]) == ("failed", 1)
-    assert rec["message"] == "exit 1: type not defined for atom number   1"
+    assert rec["message"] == "exit 1: type not defined for atom number      1"
     assert rec["cross_sections"] == {} and rec["conformers"] == []
 
 

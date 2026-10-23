@@ -543,10 +543,10 @@ c
 c 
       read(9,*) inatom
       write(8,612) inatom
-  612 format(1x,'number of atoms =',i4)
+  612 format(1x,'number of atoms =',i7)
       if(inatom.gt.len) then
       write(8,652) len
-  652 format(1x,'number of atoms exceeds the limit of',i5)
+  652 format(1x,'number of atoms exceeds the limit of',i7)
       close (8)
       stop 1
       endif
@@ -623,7 +623,7 @@ c
 c
       if(itest.eq.0) then
       write(8,602) iatom
-  602 format(1x,'type not defined for atom number',i4)
+  602 format(1x,'type not defined for atom number',i7)
       close (8)
       stop 1
       endif
@@ -1643,7 +1643,7 @@ c
       do 1001 iatom=1,inatom
       hold=dsqrt(fx(iatom)**2+fy(iatom)**2+fz(iatom)**2)
       write(8,602) iatom,fx(iatom),fy(iatom),fz(iatom),hold
-  602 format(1x,i4,5x,1pe11.4,3(5x,e11.4))
+  602 format(1x,i7,5x,1pe11.4,3(5x,e11.4))
  1001 continue     
       close (8)
       stop 1
@@ -1957,7 +1957,7 @@ c
   675 format(//1x,'average values for q1st',//5x,
      ?'gst2',8x,'wgst',8x,'q1st')
       do 4012 ig=1,inp
- 4012 write(8,676) pgst(ig)*pgst(ig),wgst(ig),q1st(ig)/dfloat(inp)
+ 4012 write(8,676) pgst(ig)*pgst(ig),wgst(ig),q1st(ig)/dfloat(itn)
   676 format(1x,1pe11.4,1x,e11.4,1x,e11.4)
       endif
 c
@@ -2654,7 +2654,7 @@ c
 c
       if(itest.eq.0) then
       write(8,602) iatom
-  602 format(1x,'type not defined for atom number',i4)
+  602 format(1x,'type not defined for atom number',i7)
       close (8)
       stop 1
       endif

@@ -129,7 +129,7 @@ A run that did not finish is reported as failed, never as a number. The program 
 status 1 when it refuses its input (the 2012 program exited with status 0 either way), and the
 command also reads the output file: a completed calculation ends in a SUMMARY block. A nonzero
 exit or an output without that block is a failure whose message is the last line the program
-wrote, for example `type not defined for atom number   1` for an element its tables do not
+wrote, for example `type not defined for atom number      1` for an element its tables do not
 define. An input the
 program would stop on, such as more than 1,000 atoms, more than 100 coordinate sets, or a units
 line that is not exactly `ang` or `au`, is refused before the program starts. The command exits

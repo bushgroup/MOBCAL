@@ -48,15 +48,15 @@ def _chain(sets: int, atoms: int) -> str:
 REFUSALS = {
     # The array bounds: 100 coordinate sets (the main program's dimension tmc(100)) and 1,000
     # atoms (parameter len). At both bounds the input is accepted and runs on to the bromine,
-    # which is atom 1000 and prints as such under format 602's i4.
+    # which is atom 1000 and prints as such under format 602's i7.
     "sets over": (_chain(101, 2), ["1"], "number of coordinate sets exceeds the limit of 100"),
-    "atoms over": (_chain(1, 1001), ["1"], "number of atoms exceeds the limit of 1000"),
-    "both at bound": (_chain(100, 1000), ["1"], "type not defined for atom number1000"),
+    "atoms over": (_chain(1, 1001), ["1"], "number of atoms exceeds the limit of   1000"),
+    "both at bound": (_chain(100, 1000), ["1"], "type not defined for atom number   1000"),
     "units": (_HBR.format(**{**_OK, "unit": "nm"}), ["1"],
               "units not specified"),
     "charge": (_HBR.format(**{**_OK, "charge": "some"}), ["1"],
                "charge distribution not specified"),
-    "element": (_HBR.format(**_OK), ["1"], "type not defined for atom number   1"),
+    "element": (_HBR.format(**_OK), ["1"], "type not defined for atom number      1"),
     "split record": (_HBR.format(**_OK), ["1", "2 3"],
                      "bad split record in mobcal.in:       2       3"),
     # The generator word on the seed record: ranlux or philox, nothing else, and it is refused
@@ -101,7 +101,7 @@ TABLE_REFUSALS = {
                   "parameters.tab has   101 rows; 1 to 100 are allowed"),
     "rows at bound": (_table("he", lambda ls: ls[:2] + ["100"]
                              + [f"{k} 1.0d0 1.0d0 1.0d0 1.0d0" for k in range(101, 201)]),
-                      "type not defined for atom number   1"),  # read; no key of HBr in it
+                      "type not defined for atom number      1"),  # read; no key of HBr in it
     "short": (_table("he", lambda ls: ls[:5]),
               "parameters.tab cannot be read as a MOBCAL-LJ 1 table"),
     "token": (_table("he", _line(3, "1.008d0", "1.0x8d0")),

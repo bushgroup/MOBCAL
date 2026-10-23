@@ -1,7 +1,10 @@
 """The regression gate: choline through the built binaries, compared with the 2012 references.
 
-Each gas is built with the recorded recipe, run on ``fortran/Choline.mfj`` staged under the name
-the reference echoes and at the seed it records, and compared in three tiers after the one
+The references are ``tests/reference/``: the 2012 outputs as the current programs print them,
+which ``test_reference.py`` holds to the untouched originals under ``fortran/sample-output/``
+line by line (the atom count's width and the q1st column differ, nothing else). Each gas is
+built with the recorded recipe, run on ``fortran/Choline.mfj`` staged under the name the
+reference echoes and at the seed it records, and compared in three tiers after the one
 normalization of ``mobcal.io.outfile`` (end-of-line CR):
 
 - **T1, deterministic lines.** Every line that no pattern in ``stochastic-lines.txt`` matches,
@@ -91,7 +94,7 @@ def test_an_undefined_element_is_reported_as_failed(pool, tmp_path):
     for gas in pool.binaries:
         r: Result = run_one(Job(inp, gas, 1, tmp_path), pool.launcher)
         assert not r.ok and r.returncode == 1, (gas, r)
-        assert r.message == "exit 1: type not defined for atom number   1", (gas, r.message)
+        assert r.message == "exit 1: type not defined for atom number      1", (gas, r.message)
         assert r.cross_sections == {} and r.conformers == []
 
 

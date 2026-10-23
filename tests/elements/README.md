@@ -16,3 +16,6 @@ The tests hold the programs that read `parameters.tab` to these: every row of th
 table read back through the programs' own reader must give the pattern in `rows.json`, bit for
 bit, and the probe outputs must match byte for byte, except the second coordinate set of
 `n2.out`, where the chain gave silicon iron's parameters and the table gives silicon's.
+Since 2026-10-23 the programs print the atom count in a wider field and the q1st column divided
+by the number of cycles (four times what these files show; `fortran/README.md`, Changes), so the
+outputs are compared through `gate.underived`, which allows those two differences and no other.
