@@ -6,7 +6,8 @@ name: ci
 # on any compiler warning. The tests include the helium regression gate, a few minutes, and the
 # nitrogen program's one-cycle check, choline as worker 10 of 10 against cycle 10 of the 2012
 # reference, a tenth of the nitrogen gate run alongside helium's. The whole nitrogen gate, about
-# an hour, runs weekly and on a manual dispatch that asks for it.
+# an hour, runs weekly and on a manual dispatch that asks for it, beside a 200,000-atom ion read
+# through the helium program to the end of its reader (tests/test_bound.py).
 #
 # Then the installable program, from those artifacts: the Windows installer and the macOS and
 # Linux archives, each installed or unpacked where no compiler or Python is visible and run
@@ -105,11 +106,11 @@ jobs:
           MOBCAL_REQUIRE_GFORTRAN: "1"
         run: uv run pytest -ra
 
-      - name: Nitrogen regression gate
+      - name: Nitrogen regression gate, and an ion at the atom bound
         if: github.event_name == 'schedule' || inputs.nitrogen
         env:
           MOBCAL_REQUIRE_GFORTRAN: "1"
-        run: uv run pytest -ra -m nitrogen
+        run: uv run pytest -ra -m "nitrogen or bound"
 
       - name: Lint
         if: runner.os == 'Linux'

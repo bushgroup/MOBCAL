@@ -8,8 +8,9 @@ What it covers today: the package imports, the three version declarations agree 
 mobcal.__version__, packaging/mobcal.iss), the files under fortran/ are the pinned files
 (the 2012 release plus the counted changes fortran/README.md lists), the two element tables
 under src/mobcal/parameters/ are the pinned files and load and render, the lower layers stay free
-of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
-and, when gfortran is present, both sources compile with the recorded flags, the binaries
+of Qt, nothing shipped cites the development record by a path only a lab checkout resolves, the
+atom bound fortran/mobcal_arrays.inc declares is the one mobcal.io.mfj.MAX_ATOMS mirrors, and,
+when gfortran is present, both sources compile with the recorded flags, the binaries
 exist, the compiler issued no warnings, and `mobcal self-check` passes against them. Tasks add
 sections as they land code.
 
@@ -87,6 +88,13 @@ def main() -> int:
                not problems)
     check_true("-fno-automatic is in FFLAGS", "-fno-automatic" in fortran.FFLAGS)
     check_true("-std=legacy is in FFLAGS", "-std=legacy" in fortran.FFLAGS)
+
+    section("the atom bound")
+    from mobcal.io.mfj import MAX_ATOMS
+    with open(fortran.FORTRAN_DIR / "mobcal_arrays.inc", encoding="ascii") as f:
+        bound = [int(m) for m in re.findall(r"^      parameter \(len=(\d+)\)$", f.read(), re.M)]
+    check_true(f"mobcal_arrays.inc declares len={bound} once, and mobcal.io.mfj.MAX_ATOMS "
+               f"{MAX_ATOMS} mirrors it", bound == [MAX_ATOMS])
 
     section("the element tables are the pinned files")
     from mobcal import parameters

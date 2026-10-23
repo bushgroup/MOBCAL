@@ -48,10 +48,11 @@ dev = [
 testpaths = ["tests"]
 # Nitrogen is about an hour: `uv run pytest -m nitrogen` for it alone; `-m long` for the long
 # helium tests (the two-set split, about seven minutes); `-m ""` for everything.
-addopts = ["-m", "not nitrogen and not long"]
+addopts = ["-m", "not nitrogen and not long and not bound"]
 markers = [
     "nitrogen: the nitrogen regression run, about an hour; deselected by default",
     "long: helium tests of several minutes beyond the gate's; deselected by default",
+    "bound: an ion at the shipped atom bound, read to the end of the reader; weekly",
 ]
 
 [tool.ruff]

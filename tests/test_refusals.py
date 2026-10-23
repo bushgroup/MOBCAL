@@ -46,12 +46,12 @@ def _chain(sets: int, atoms: int) -> str:
 
 # (input, the records of mobcal.in after the two names, the output's last non-blank line)
 REFUSALS = {
-    # The array bounds: 100 coordinate sets (the main program's dimension tmc(100)) and 1,000
-    # atoms (parameter len). At both bounds the input is accepted and runs on to the bromine,
-    # which is atom 1000 and prints as such under format 602's i7.
+    # The array bounds: 100 coordinate sets (the main program's dimension tmc(100)) and 200,000
+    # atoms (parameter len, mobcal_arrays.inc). At both bounds the input is accepted and runs on
+    # to the bromine, which is atom 200000 and prints as such under format 602's i7.
     "sets over": (_chain(101, 2), ["1"], "number of coordinate sets exceeds the limit of 100"),
-    "atoms over": (_chain(1, 1001), ["1"], "number of atoms exceeds the limit of   1000"),
-    "both at bound": (_chain(100, 1000), ["1"], "type not defined for atom number   1000"),
+    "atoms over": (_chain(1, 200001), ["1"], "number of atoms exceeds the limit of 200000"),
+    "both at bound": (_chain(100, 200000), ["1"], "type not defined for atom number 200000"),
     "units": (_HBR.format(**{**_OK, "unit": "nm"}), ["1"],
               "units not specified"),
     "charge": (_HBR.format(**{**_OK, "charge": "some"}), ["1"],

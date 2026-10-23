@@ -69,7 +69,7 @@ SHA256 = {
     "mobcal_N2.f": "41deed0efb32d667a9ae24395f198f88e1c7793a7f2844cce1c89997c13df163",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
     "mobcal_rng.inc": "16ac0098bfb55d79e3a23c9377fbae25596a3f3a3a2af813eb64793f7d69c9fe",
-    "mobcal_arrays.inc": "d501c0c71faebcb5da6b10e6899bc2b90009e3a5b83db82929cd6b8ded81fe17",
+    "mobcal_arrays.inc": "6cfa5f8378315b1193dd154c9228f2b891165ee2437bef27f87833c2a9c6878a",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "5b7804c2fe64b28b1466f9d5df473014d8b623d44efb5674ca3ad78203bc3ecb",
     "sample-output/Choline_He.out":

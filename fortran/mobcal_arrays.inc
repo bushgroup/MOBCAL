@@ -15,7 +15,7 @@ c     mobcal_N2.f that uses the atom arrays.
 c
 c     ***************************************************************
 c
-      parameter (len=1000)
+      parameter (len=200000)
       common/charge/pcharge(len)
       common/coordinates/fx(len+1),fy(len+1),fz(len+1),
      ?ox(len),oy(len),oz(len)

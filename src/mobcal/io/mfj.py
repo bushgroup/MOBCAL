@@ -19,12 +19,13 @@ recorded here and not validated. The package has no element table of its own, an
 key is a refusal the program prints (``type not defined for atom number``), which the driver
 reports as a failed run.
 
-What this reader refuses, before a binary is launched: an atom count above 1,000 or a set count
-above 100 (``parameter (len=1000)`` and the main program's ``dimension tmc(100)``, which the
-2012 code read into without a check and the program now refuses too), a unit or charge mode the
-program would stop on, a
-missing or short atom line, and a file that ends before its last set. Nothing about charge or
-geometry is checked; the program's own checks (``masses do not add up``) stand.
+What this reader refuses, before a binary is launched: an atom count above 200,000 or a set
+count above 100 (``parameter (len=200000)`` in ``fortran/mobcal_arrays.inc``, which
+``MAX_ATOMS`` mirrors and ``tools/check_public.py`` compares, and the main program's
+``dimension tmc(100)``; the 2012 code read into both without a check and the program now
+refuses too), a unit or charge mode the program would stop on, a missing or short atom line,
+and a file that ends before its last set. Nothing about charge or geometry is checked; the
+program's own checks (``masses do not add up``) stand.
 
 Two points where the nitrogen source differs from the helium source, both in ``fcoord`` and
 neither in ``ncoord``: ``mobcal_N2.f`` reads five fields per atom of the first set whatever the
@@ -44,7 +45,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
-MAX_ATOMS = 1000
+MAX_ATOMS = 200000
 MAX_SETS = 100
 UNITS = ("ang", "au")
 CHARGE_MODES = ("equal", "calc", "none")
