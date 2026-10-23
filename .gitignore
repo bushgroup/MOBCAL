@@ -17,3 +17,4 @@ build/
 *.out
 !fortran/sample-output/*.out
 !tests/elements/*.out
+!tests/reference/*.out
