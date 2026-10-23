@@ -60,8 +60,8 @@ INCLUDE = "mobcal_ljread.inc"  # included by both sources: the element-table rea
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the changes fortran/README.md lists under Changes, and the include they share.
 SHA256 = {
-    "mobcal_He.f": "698eb8a9e8688b3a01ad8e1a359b478d89e283512f5ac592502076d18ecd96c9",
-    "mobcal_N2.f": "d437568154af76285e90a15c4f0c866519d6fed4e88eadca7e85db7ef3811b22",
+    "mobcal_He.f": "3e3298f780b0bc8a4b6aa8e17bef34b32c9de0dbbf3a5cd0c46ceb540a8fac13",
+    "mobcal_N2.f": "4e3ae7160003b2310f87255f89cb00d247a323304773ae9b25bf372f6779f638",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "5b7804c2fe64b28b1466f9d5df473014d8b623d44efb5674ca3ad78203bc3ecb",

@@ -62,8 +62,8 @@ c     by Alexandre Shvartsburg.
 c
 c     XRAND/RANLUX are random number generators. RANLUX is the standard
 c     ranlux number generator of M. Luscher (code from F. James). XRAND
-c     is a function that calls either RANLUX or RAND (the standard F77
-c     random number generator).
+c     is a function that calls RANLUX. (The 2012 code's other branch,
+c     the standard F77 RAND, was never selected and is removed.)
 c
 c     FCOORD reads in the coordinates, integer masses, and partial charges.  
 c
@@ -237,8 +237,8 @@ c
 c
 c     Define parameters for random number generator
 c
-c     If i5=1 RANLUX is used otherwise RAND is used. If RAND is used 
-c     i2 is the seed integer. If RANLUX is used i2, i3, and i4 are seed
+c     i5 selects the generator XRAND draws from; 1 is RANLUX, the
+c     only one (the RAND branch was dead code). i2, i3, and i4 are seed
 c     integers. i3 and i4 (which are used to start RANLUX in a particular
 c     place) are usually set to zero. i1 contain the "luxury level" - how
 c     good the random number generator is. Values of 0 to 4 can be used
@@ -250,16 +250,10 @@ c
       i3=0
       i4=0
       i5=1
-      if(i5.ne.1) then 
-      write(8,604) i2
-  604 format(1x,'using RAND with seed integer =',i8)
-      else
       write(8,619) 
   619 format(/1x,'using RANLUX',/)
-      endif
-c     initialize the random number generators
+c     initialize the random number generator
       call rluxgo(i1,i2,i3,i4)
-      call srand(i2)
       hold=xrand()
 c
 c     Define parameters for POTENT
@@ -378,13 +372,8 @@ c
   608 format(1x,'using no charge - only LJ interactions')
       write(8,616) t
   616 format(1x,'temperature =',1pe11.4)
-      if(i5.ne.1) then 
-      write(8,617) i2
-  617 format(1x,'using RAND with seed integer =',i8)
-      else
       write(8,620) i2 
   620 format(1x,'using RANLUX with seed integer =',i8)
-      endif 
 c
       if(icoord.gt.1) goto 9997
       write(8,636) asympp(1)
@@ -2205,25 +2194,19 @@ c
       dimension rvec(10)
       common/xrandom/i1,i2,i3,i4,i5,i6
 c
-c     XRAND is a random number generator that uses RANLUX if i5=1
-c     otherwise it uses the standard RAND subroutine available in 
-c     FORTRAN 77. If RANLUX is used i1 contains the luxury level
-c     (1-4, 4 is the highest, 3 is default in RANLUX). i2, i3, and
-c     i4 are seed integers. i3 and i4 will normally be zero. If the
-c     standard RAND subroutine is to be employed, i2 contains the 
-c     seed integer. RANLUX was downloaded from http://kumo.swcp.
+c     XRAND is a random number generator that uses RANLUX (i5=1;
+c     the 2012 code's other branch, the standard RAND subroutine of
+c     FORTRAN 77, was dead and is removed). i1 contains the luxury
+c     level (1-4, 4 is the highest, 3 is default in RANLUX). i2, i3,
+c     and i4 are seed integers. i3 and i4 will normally be zero.
+c     RANLUX was downloaded from http://kumo.swcp.
 c     com/fortran/random2.f90. 
 c 
       i6=i6+1
 c
-      if (i5.eq.1) then
       call ranlux(rvec,1)
       xrand=rvec(1)
       return
-      else
-      xrand=rand()
-      return
-      endif
 c
       end
 c
