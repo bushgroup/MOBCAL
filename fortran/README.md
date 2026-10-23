@@ -1,18 +1,21 @@
 # fortran/
 
-The 2012 release of MOBCAL, with one addition and a few corrections. These six files are the
+The 2012 release of MOBCAL, with two additions and a few corrections. Six of these files are the
 content of [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) at its tag `v1.0`,
 copied from those blobs on 2026-10-21 with LF line endings, plus the changes listed under Changes
-below: statements that let one calculation run as several processes, and corrections to defects
-that leave every number the 2012 program printed unchanged. `mobcal.fortran.SHA256` pins each file as it
-is committed, and `tools/check_public.py` and the test suite compare. They are not edited
-casually: a change to any of them is a decision recorded elsewhere, lands with new pins and a
-new row below in the same commit, and counts its diff line by line in the commit message.
+below: statements that let one calculation run as several processes, the reading of the element
+table from a file, and corrections to defects that leave every number the 2012 program printed
+unchanged. The seventh file is the element-table reader both sources include.
+`mobcal.fortran.SHA256` pins each file as it is committed, and `tools/check_public.py` and the
+test suite compare. They are not edited casually: a change to any of them is a decision
+recorded elsewhere, lands with new pins and a new row below in the same commit, and counts its
+diff line by line in the commit message.
 
 | File | What it is |
 |---|---|
 | `mobcal_He.f` | Fortran 77 source, helium |
 | `mobcal_N2.f` | Fortran 77 source, nitrogen |
+| `mobcal_ljread.inc` | The element-table reader, included by both sources (added 2026-10-22) |
 | `mobcal.in` | Run file: input file name, output file name, random seed, one per line |
 | `Choline.mfj` | The choline input used in the 2012 paper |
 | `sample-output/Choline_He.out` | The 2012 output for choline in helium |
@@ -20,11 +23,14 @@ new row below in the same commit, and counts its diff line by line in the commit
 
 ## Changes since 2012
 
-Each row is one commit. No change moves a number the 2012 program prints: the regression test
-runs the choline input in both gases and holds every line of the output to the 2012 references,
-byte for byte after stripping end-of-line carriage returns. The additions are statements a run
-file without the records they read never reaches; the corrections alter how a line is printed
-or what the program does when it refuses an input, never a value it computes.
+Each row is one commit. No change moves a number the 2012 program prints for the choline
+input: the regression test runs it in both gases and holds every line of the output to the 2012
+references, byte for byte after stripping end-of-line carriage returns. The additions are
+statements a run file without the records they read never reaches, and the reading of the
+element table from a file, which the test suite holds to the 2012 tables row by row to the last
+bit; the corrections alter how a line is printed or what the program does when it refuses an
+input, never a value it computes, with one exception recorded in its row: a copy error in the
+nitrogen table that gave silicon iron's parameters from the second coordinate set of an input on.
 
 | Date | Lines added, removed | What |
 |---|---|---|
@@ -34,6 +40,7 @@ or what the program does when it refuses an input, never a value it computes.
 | 2026-10-22 | `mobcal_He.f` +12, −12; `mobcal_N2.f` +10, −10 | **A refusal exits with status 1.** Every termination was a bare `stop`, which exits 0, so a refusal and a finished calculation looked the same to a caller. Each refusal's `stop` is `stop 1`: in both files `units not specified`, `charge distribution not specified`, `type not defined for atom number` (twice, once per coordinate-set reader), `masses do not add up`, `Problem orientating along x axis`, `ibst greater than 500`, and the three refusals of the split reader above; in helium also the `ifail` cap in `gsang` and the split reader's own `ifail` stop. The normal end is the one bare `stop` left in each file, and exits 0. No line of any output file changes. |
 | 2026-10-22 | `mobcal_He.f` +14, −2; `mobcal_N2.f` +14, −2 | **The array bounds are checked.** The number of coordinate sets and the number of atoms were read with no check against the arrays they index, 100 sets (the main program's `dimension tmc(100)` and its neighbours) and 1,000 atoms (`parameter (len=1000)`), so a larger input wrote past them. Each count is now checked in `fcoord` right after it is echoed, with `.gt.` because the bound itself is legal: above it the program writes `number of coordinate sets exceeds the limit of 100` or `number of atoms exceeds the limit of 1000` and stops with status 1, the set count being refused before the atom count is read. Six lines per guard. The `type not defined for atom number` refusal's format 602 widens from `i3` to `i4` in both of its copies, so that atom 1,000 prints as a number rather than `***`. No line of the choline outputs changes. |
 | 2026-10-22 | `mobcal.in` +1, −1 | **The shipped run file names a neutral output.** Its second record was `temp.choline.n2.out` for both gases, so a helium run by hand wrote a file named for nitrogen. It is `choline.out`. Input, seed and output contents are unchanged; `mobcal run` writes its own run file and never read this one. |
+| 2026-10-22 | `mobcal_He.f` +13, −194; `mobcal_N2.f` +13, −235; `mobcal_ljread.inc` +186, new | **The element table is read from a file.** Each program assigned every atom its mass, Lennard-Jones well depth and radius and hard-sphere radius from a chain of `if(imass(iatom).eq.NN)` blocks, written once in `fcoord` and again in `ncoord`, with nitrogen's four combining constants assigned above each chain. Both chains and the constants are gone from both sources. In their place the main program calls `ljread` once, after it opens the output file and before it reads the input, and each reader calls `ljparm` per atom; both live in the new include. `ljread` reads `parameters.tab` from the working directory, the table `mobcal run` renders from the gas's data file: the format line, the kind in bytes of each column, in nitrogen the constants, the row count, and one row per element. Every token is read as text and converted by its column's kind, single or double precision, and promoted, so a literal the 2012 source spelled in single precision gives the number the compiled source gave; each well depth and radius is evaluated term for term as the 2012 statement evaluated it. `ljparm` looks an atom's key up and assigns the four quantities with the same final factors, and an atom whose key is not in the table meets the same format 602 refusal as before. The set's name and hash go to the screen; no output file gains a line, and the comments that stood over each chain travel with the numbers into the data files. A table that is missing, not of this format, for the other gas, of a kind the reader does not convert, longer than 100 rows or unreadable is refused with status 1 before anything is calculated. One number does move, and on purpose: in nitrogen, `ncoord`'s silicon block held iron's well depth and radius (0.0130 and 2.9120 where `fcoord`'s held 0.4020 and 4.2950), a copy error, so the second and later coordinate sets of a nitrogen input containing silicon were computed with iron's parameters; the table carries `fcoord`'s row and both readers now agree. Of the removed lines, 66 in helium and 81 in nitrogen are comments. Choline contains no silicon, and both choline outputs are unchanged. |
 
 ## What the 2012 release said about building
 
@@ -68,14 +75,15 @@ file does not carry it.
 
 ## The element tables
 
-The parameters each program assigns by element, in the `if(imass(iatom).eq.NN)` chains of
-`fcoord` and `ncoord`, are also kept as one data file per gas under `src/mobcal/parameters/`,
-every number the literal these sources spell, and `mobcal run` renders a table from that file,
-`parameters.tab`, into every run directory beside `mobcal.in`
-([docs/parameters.md](../docs/parameters.md)). The programs in this directory do not read it
-yet: they still take the 2012 tables from their source, which the test suite holds equal to the
-data files token for token. To prepare a directory by hand the way `mobcal run` does, so that it
-holds everything a run directory holds, render the table into it as well:
+The parameters each program assigns by element are kept as one data file per gas under
+`src/mobcal/parameters/`, every number the literal the 2012 source spelled, and `mobcal run`
+renders a table from that file, `parameters.tab`, into every run directory beside `mobcal.in`
+([docs/parameters.md](../docs/parameters.md)). The programs read that table and nothing else:
+started in a directory without one they stop with status 1 and say so. The reader is
+`mobcal_ljread.inc`, which both sources include; the test suite reads every row back through it
+and holds each to the number the 2012 chain computed, to the last bit. To prepare a directory by
+hand the way `mobcal run` does, so that it holds everything a run directory holds, render the
+table into it as well:
 
 ```
 uv run mobcal render-parameters he path/to/run

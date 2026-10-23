@@ -5,7 +5,7 @@ ship -- a Fortran compiler, the lab repository -- are reported as SKIPPED when i
 never as FAIL.
 
 What it covers today: the package imports, the three version declarations agree (pyproject.toml,
-mobcal.__version__, packaging/mobcal.iss), the six files under fortran/ are the pinned files
+mobcal.__version__, packaging/mobcal.iss), the files under fortran/ are the pinned files
 (the 2012 release plus the counted changes fortran/README.md lists), the two element tables
 under src/mobcal/parameters/ are the pinned files and load and render, the lower layers stay free
 of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
@@ -83,7 +83,8 @@ def main() -> int:
     problems = fortran.verify_sources()
     for p in problems:
         print("     " + p)
-    check_true("six pinned files present and byte-identical to their pins", not problems)
+    check_true(f"{len(fortran.SHA256)} pinned files present and byte-identical to their pins",
+               not problems)
     check_true("-fno-automatic is in FFLAGS", "-fno-automatic" in fortran.FFLAGS)
     check_true("-std=legacy is in FFLAGS", "-std=legacy" in fortran.FFLAGS)
 

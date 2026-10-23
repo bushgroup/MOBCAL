@@ -148,9 +148,14 @@ directory for running a program without `mobcal run`, render the table there:
 uv run mobcal render-parameters he path/to/run
 ```
 
-The programs built from `fortran/` in this version still assign the parameters from the chains
-in their source and do not read `parameters.tab`. The chains and the shipped files are the same
-numbers, token for token, which the test suite checks on every change.
+The programs read this table and nothing else. Started in a directory without one, or with a
+table that is not of this format, is for the other gas, declares a kind other than 4 or 8
+bytes, has more than 100 rows or cannot be read to its end, a program stops with status 1 and
+says which, on the screen and as the only line of its output file. The set's name and hash are
+printed to the screen; the output file gains no line, so it still compares byte for byte with
+the 2012 references. The test suite reads every row of both shipped tables back through the
+programs' own reader and holds each number to the one the 2012 source computed, to the last
+bit.
 
 ## Choosing a table for a run
 
@@ -161,9 +166,8 @@ uv run mobcal run choline.mfj --gas n2 --parameters my_nitrogen.toml
 ```
 
 The file is checked the same way as the shipped ones, and a file for the other gas is refused.
-Because the programs in this version do not yet read `parameters.tab`, a run accepts only a table
-that is byte for byte one of the shipped files, and refuses any other with a message saying so;
-otherwise its record would name a table the calculation did not use.
+The run's record names the table it used, by path, name and hash, so that a result from another
+table is never mistaken for one from the shipped one.
 
 ## The record of a run
 

@@ -16,3 +16,4 @@ build/
 # mobcal.in says; tests and the driver run in temporary directories.
 *.out
 !fortran/sample-output/*.out
+!tests/elements/*.out

@@ -1,12 +1,10 @@
-"""The element tables: the TOML files say what the 2012 source says, and refuse what it cannot.
+"""The element tables: the TOML files are checked, pinned, and rendered as the program reads them.
 
-The first group is the proof that moving the tables out of the Fortran moved no number: it
-parses the ``if(imass(iatom).eq.NN)`` chains and the nitrogen combining constants out of
-``fortran/mobcal_*.f`` and holds every token of each TOML file to the literal the source spells,
-row for row, in both of each source's coordinate readers (``fcoord`` and ``ncoord``). The one
-place the two readers disagree is nitrogen's silicon row, where ``ncoord`` carries iron's
-numbers; the file carries ``fcoord``'s. When the program reads the rendered table and the chains
-leave the source, this group is retired with them.
+That the files hold the 2012 numbers is proved elsewhere: ``test_elements.py`` reads every row
+of the rendered table back through the program's own reader and holds it, bit for bit, to what
+the 2012 source's ``if(imass(iatom).eq.NN)`` chains computed. Here: the two expressions fold as
+the compiler folds them, the files verify against their pins, the rendered table has the shape
+the reader expects, and every rule of the schema refuses what it should, naming where.
 """
 
 from __future__ import annotations
@@ -20,95 +18,7 @@ import pytest
 from mobcal import cli, fortran, parameters
 from mobcal.parameters import ParameterError
 
-# --- the 2012 source ------------------------------------------------------------------------
-
-_IF = re.compile(r"^\s+if\(imass\(iatom\)\.eq\.(\d+)\)\s*then\s*$")
-_CONSTANT = re.compile(r"^\s+(eogas|rogas|conve|convr)=(\S+)\s*$")
-_ASSIGN = {
-    "he": {
-        "mass": re.compile(r"^\s+xmass\(iatom\)=(\S+)$"),
-        "epsilon": re.compile(r"^\s+eolj\(iatom\)=(\S+)\*xe$"),
-        "sigma": re.compile(r"^\s+rolj\(iatom\)=(\S+)\*1\.0d-10$"),
-        "rhs": re.compile(r"^\s+rhs\(iatom\)=(\S+)\*1\.0d-10$"),
-    },
-    "n2": {
-        "mass": re.compile(r"^\s+xmass\(iatom\)=(\S+)$"),
-        "epsilon": re.compile(r"^\s+eolj\(iatom\)=dsqrt\(eogas\*(\S+)\)\*conve\*xe$"),
-        "sigma": re.compile(r"^\s+rolj\(iatom\)=dsqrt\(rogas\*(\S+)\)\*convr\*1\.0d-10$"),
-        "rhs": re.compile(r"^\s+rhs\(iatom\)=(\S+)\*1\.0d-10$"),
-    },
-}
-
-
-def _unparen(token: str) -> str:
-    return token[1:-1] if token.startswith("(") and token.endswith(")") else token
-
-
-def _subroutine(gas: str, name: str) -> list[str]:
-    """The code lines of one subroutine, fixed-form comment lines dropped."""
-    lines = (fortran.FORTRAN_DIR / fortran.SOURCE[gas]).read_text(
-        encoding="latin-1").splitlines()
-    start = next(i for i, s in enumerate(lines)
-                 if re.match(rf"^\s+subroutine\s+{name}\b", s))
-    end = next((i for i in range(start + 1, len(lines))
-                if re.match(r"^\s+subroutine\s", lines[i])), len(lines))
-    return [s.rstrip() for s in lines[start:end] if s[:1] not in "cC*!"]
-
-
-def source_table(gas: str, name: str) -> tuple[dict[int, dict[str, str]], dict[str, str]]:
-    """The element chain of one coordinate reader, key -> column -> literal, in source order,
-    and the combining constants it assigns."""
-    table: dict[int, dict[str, str]] = {}
-    constants: dict[str, str] = {}
-    key = None
-    for line in _subroutine(gas, name):
-        if m := _IF.match(line):
-            key = int(m.group(1))
-            assert key not in table, f"{name}: key {key} twice"
-            table[key] = {}
-            continue
-        if key is not None and line.strip() == "endif":
-            assert set(table[key]) == set(parameters.COLUMNS), f"{name} {key}: {table[key]}"
-            key = None
-            continue
-        if key is not None:
-            for col, pat in _ASSIGN[gas].items():
-                if m := pat.match(line):
-                    table[key][col] = _unparen(m.group(1))
-        elif m := _CONSTANT.match(line):
-            constants[m.group(1)] = _unparen(m.group(2))
-    return table, constants
-
-
-def toml_table(gas: str) -> dict[int, dict[str, str]]:
-    return {e.key: {c: getattr(e, c) for c in parameters.COLUMNS}
-            for e in parameters.shipped(gas).elements}
-
-
-@pytest.mark.parametrize("gas", fortran.GASES)
-def test_the_toml_tokens_are_fcoords_literals_row_for_row(gas):
-    src, _ = source_table(gas, "fcoord")
-    assert len(src) == {"he": 9, "n2": 10}[gas]
-    assert toml_table(gas) == src
-
-
-def test_ncoords_helium_chain_is_fcoords():
-    assert source_table("he", "ncoord")[0] == toml_table("he")
-
-
-def test_ncoords_nitrogen_chain_differs_only_in_silicon_which_holds_iron():
-    ncoord, toml = source_table("n2", "ncoord")[0], toml_table("n2")
-    assert {k for k in toml if ncoord[k] != toml[k]} == {28}
-    assert (ncoord[28]["epsilon"], ncoord[28]["sigma"]) == (toml[56]["epsilon"], toml[56]["sigma"])
-    assert (toml[28]["epsilon"], toml[28]["sigma"]) == ("0.4020", "4.2950")
-
-
-@pytest.mark.parametrize("reader", ["fcoord", "ncoord"])
-def test_the_combining_constants_are_the_sources(reader):
-    assert source_table("n2", reader)[1] == parameters.shipped("n2").constants
-    assert source_table("he", reader)[1] == {}
-    assert parameters.shipped("he").constants == {}
-
+# --- the files' literals and the rendered tokens --------------------------------------------
 
 @pytest.mark.parametrize("gas", fortran.GASES)
 def test_every_literal_renders_verbatim(gas):
@@ -339,13 +249,6 @@ def test_run_refuses_a_bad_table_before_anything_runs(tmp_path, capsys):
                    "--out", str(tmp_path / "runs")])
     assert rc == 2 and "element 28: rhs" in capsys.readouterr().err
     assert not (tmp_path / "runs").exists()
-
-
-def test_run_refuses_a_table_the_program_would_not_read(tmp_path, capsys):
-    mine = _variant(tmp_path, "he", '"MOBCAL 2012 helium"', '"my helium"')
-    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--parameters", str(mine),
-                   "--out", str(tmp_path / "runs")])
-    assert rc == 2 and "do not yet read parameters.tab" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("gas", ["he", "both"])

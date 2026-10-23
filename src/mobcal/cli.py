@@ -29,7 +29,7 @@ from pathlib import Path
 
 from mobcal import ROOT, __version__, fortran, parameters
 from mobcal.io.block import BLOCKS_PER_SET
-from mobcal.run import Job, Result, run_many, usable
+from mobcal.run import Job, Result, run_many
 
 # The seed the shipped mobcal.in carries, at which the 2012 references were run.
 DEFAULT_SEED = 5013489
@@ -161,7 +161,6 @@ def _run(args: argparse.Namespace) -> int:
     if args.parameters is not None:
         try:
             ps = parameters.load(args.parameters)
-            usable(ps)
         except parameters.ParameterError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2

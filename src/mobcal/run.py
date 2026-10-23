@@ -181,18 +181,6 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
     return Result(job, False, message, returncode, seconds, output, {}, [])
 
 
-def usable(pset: ParameterSet) -> None:
-    """Raise ParameterError for a table the binaries would not actually use: any but the
-    shipped one, while they still carry the 2012 tables in their source
-    (``fortran.READS_PARAMETERS``)."""
-    if not (pset.shipped or fortran.READS_PARAMETERS):
-        raise ParameterError(
-            f"{pset.path}: the programs in this version take the element table from their "
-            f"source, which equals the shipped {parameters.FILES[pset.gas]}, and do not yet "
-            f"read parameters.tab; a run can name no other table, since its record would name "
-            f"a table the program did not use")
-
-
 def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet) -> None:
     """Make ``d`` ready for one start of the program: the input copied in under its staged name,
     ``mobcal.in`` written, the element table rendered, and any output, record or block file of
@@ -262,7 +250,6 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
         return _failed(job, f"input refused: {e}")
     try:
         pset = parameters.load(job.parameters_path, gas=job.gas)
-        usable(pset)
     except ParameterError as e:
         return _failed(job, f"parameters refused: {e}")
     try:

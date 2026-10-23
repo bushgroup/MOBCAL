@@ -1,11 +1,13 @@
 """Locate, verify and build the 2012 Fortran.
 
-The six files under ``fortran/`` are the 2012 release of MOBCAL plus the changes that
+The files under ``fortran/`` are the 2012 release of MOBCAL plus the changes that
 ``fortran/README.md`` lists, each counted line by line, and this module is where that claim is
 made checkable: ``SHA256`` pins each file as committed and ``verify_sources`` compares. A change
 to any of them is a decision taken in the lab record, lands with new pins in the same commit,
 and counts its diff in the commit message. The 2012 numbers are untouched: no change alters a
 value the program computes, and the regression gate reproduces both 2012 outputs byte for byte.
+Both sources include ``mobcal_ljread.inc``, the reader of the element table that ``mobcal.run``
+renders into every run directory as ``parameters.tab``; it is pinned and recorded like them.
 
 The build recipe is also stated here and nowhere else. ``-fno-automatic`` is mandatory: the code
 relies on local variables keeping their values between calls, which g77 gave it by default. An
@@ -52,13 +54,15 @@ FORTRAN_DIR = ROOT / "fortran"
 
 GASES = ("he", "n2")
 SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
+INCLUDE = "mobcal_ljread.inc"  # included by both sources: the element-table reader
 
 # The 2012 files, as committed at bushgroup/MOBCAL-2012 tag v1.0 (commit 4f3be72) and copied
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
-# with the changes fortran/README.md lists under Changes.
+# with the changes fortran/README.md lists under Changes, and the include they share.
 SHA256 = {
-    "mobcal_He.f": "2ee87153cc405bf3fde37ac2408684e733450693a6007da32764888415ed1691",
-    "mobcal_N2.f": "dc1b449ffad70246d8c466888f78c38ca9246f99b2bc9971f1549cac0f70d96a",
+    "mobcal_He.f": "698eb8a9e8688b3a01ad8e1a359b478d89e283512f5ac592502076d18ecd96c9",
+    "mobcal_N2.f": "d437568154af76285e90a15c4f0c866519d6fed4e88eadca7e85db7ef3811b22",
+    "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "5b7804c2fe64b28b1466f9d5df473014d8b623d44efb5674ca3ad78203bc3ecb",
     "sample-output/Choline_He.out":
@@ -66,14 +70,6 @@ SHA256 = {
     "sample-output/Choline_N2.out":
         "1da0eddc492d95282c5707a3c7f83489b9dcac8f5048453e533216da54a58e99",
 }
-
-# Whether the programs built from these sources take their element tables from the run
-# directory's parameters.tab, which the driver renders from mobcal.parameters. Not yet: the 2012
-# chains in fcoord and ncoord still assign every parameter, and the table is written beside them
-# unread. Until this is True the driver runs only the shipped tables, which the chains equal
-# token for token (the test suite holds them to it), so that a run's record never names a
-# table the program did not use.
-READS_PARAMETERS = False
 
 FFLAGS = ["-O3", "-fno-automatic", "-std=legacy"]
 LINK_FLAGS = {
@@ -210,11 +206,8 @@ def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Build:
     out = out_dir / binary_name(gas)
     src = FORTRAN_DIR / SOURCE[gas]
     cmd = [gfortran, *flags(), "-o", str(out), str(src)]
-    env = dict(os.environ, LC_ALL="C")
-    if sys.platform == "win32":
-        env["PATH"] = str(Path(gfortran).parent) + os.pathsep + env.get("PATH", "")
-    proc = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, errors="replace")
+    proc = subprocess.run(cmd, env=_env(gfortran), stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, text=True, errors="replace")
     sys.stderr.write(proc.stdout)
     if proc.returncode != 0:
         raise subprocess.CalledProcessError(proc.returncode, cmd, output=proc.stdout)
@@ -222,14 +215,20 @@ def build(gas: str, out_dir: Path, gfortran: str | None = None) -> Build:
     return Build(out, proc.stdout)
 
 
-def compiler_version(gfortran: str) -> str:
-    """The first line of ``gfortran --version``, or an empty string if it will not say."""
+def _env(gfortran: str) -> dict[str, str]:
+    """The environment a gfortran subprocess runs in: messages in English, and on Windows the
+    compiler's own directory first on PATH, where MSYS2's gfortran finds its tools."""
     env = dict(os.environ, LC_ALL="C")
     if sys.platform == "win32":
         env["PATH"] = str(Path(gfortran).parent) + os.pathsep + env.get("PATH", "")
+    return env
+
+
+def compiler_version(gfortran: str) -> str:
+    """The first line of ``gfortran --version``, or an empty string if it will not say."""
     try:
-        proc = subprocess.run([gfortran, "--version"], env=env, capture_output=True, text=True,
-                              errors="replace", timeout=30)
+        proc = subprocess.run([gfortran, "--version"], env=_env(gfortran), capture_output=True,
+                              text=True, errors="replace", timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return proc.stdout.splitlines()[0].strip() if proc.stdout else ""
@@ -278,6 +277,8 @@ def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
         "gas": gas,
         "source": SOURCE[gas],
         "source_sha256": _sha256(FORTRAN_DIR / SOURCE[gas]),
+        "include": INCLUDE,
+        "include_sha256": _sha256(FORTRAN_DIR / INCLUDE),
         "sha256": _sha256(binary),
         "compiler": compiler_version(gfortran),
         "flags": flags(),
@@ -293,8 +294,8 @@ def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
 def verify_binaries(bin_dir: Path | None = None) -> list[str]:
     """One line per problem with the binaries in ``bin_dir`` (default ``binary_dir()``), checked
     against the ``build.json`` written when they were built. Empty means both binaries are
-    there, are the files that were built, were built from the pinned sources, and were
-    built with ``-fno-automatic``."""
+    there, are the files that were built, were built from the pinned source and include, and
+    were built with ``-fno-automatic``."""
     d = bin_dir or binary_dir()
     m = read_manifest(d)
     if not m:
@@ -311,6 +312,8 @@ def verify_binaries(bin_dir: Path | None = None) -> list[str]:
             problems.append(f"{name}: sha256 differs from the one recorded when it was built")
         elif rec.get("source_sha256") != SHA256[SOURCE[gas]]:
             problems.append(f"{name}: built from a {SOURCE[gas]} that is not the pinned file")
+        elif rec.get("include_sha256") != SHA256[INCLUDE]:
+            problems.append(f"{name}: built from a {INCLUDE} that is not the pinned file")
         elif "-fno-automatic" not in rec.get("flags", []):
             problems.append(f"{name}: built without -fno-automatic")
     return problems

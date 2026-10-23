@@ -188,6 +188,11 @@ c     line 8: as above for all atoms. if multiple conformations are
 c             included the conformations are separated by a blank line
 c
 c
+c     the element table, from the file the driver renders into the
+c     working directory (mobcal_ljread.inc)
+c
+      call ljread('N2')
+c
       call fcoord(filen1,unit,dchar,xlabel,asympp(1))
 c
 c     Lennard-Jones scaling parameters
@@ -605,128 +610,8 @@ c      if(dchar.eq.'calc') write(8,615) tcharge,acharge
      ?'total absolute charge =',e11.4)
 c
       do 2020 iatom=1,inatom
-      itest=0
-
-      eogas=0.06900d0
-      rogas=3.6600d0
-c     convert epsilon from kcal/mol to meV
-      conve=(4.2d0*0.01036427d0)
-      convr=0.890898718d0
-      
-c             
-c     hydrogen (average value of eo from ab initio calculations
-c     and ro from fitting mobilities of C6H6 and others) 
-
-      if(imass(iatom).eq.1) then
-      itest=1
-      xmass(iatom)=1.008d0
-      eolj(iatom)=dsqrt(eogas*0.0189)*conve*xe
-      rolj(iatom)=dsqrt(rogas*1.2409)*convr*1.0d-10
-      rhs(iatom)=2.2d0*1.0d-10
-      endif
-c
-c     carbon (from fitting C60 mobility)
-c
-      if(imass(iatom).eq.12) then
-      itest=1
-      xmass(iatom)=12.01d0
-      eolj(iatom)=dsqrt(eogas*0.0977)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.5814)*convr*1.0d-10
-c      eolj(iatom)=0.139373598*xe
-c      rolj(iatom)=3.85949064*0.890898718*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     nitrogen (same as carbon)
-c
-      if(imass(iatom).eq.14) then
-      itest=1
-      xmass(iatom)=14.01d0
-      eolj(iatom)=dsqrt(eogas*0.0828)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.3920)*convr*1.0d-10
-c      eolj(iatom)=0.112982299*xe
-c      rolj(iatom)=3.762562956*0.890898718*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c     
-c     oxygen (same as carbon)
-c
-      if(imass(iatom).eq.16) then
-      itest=1
-      xmass(iatom)=16.00d0
-      eolj(iatom)=dsqrt(eogas*0.0558)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.2550)*convr*1.0d-10
-c      eolj(iatom)=0.105356537*xe
-c      rolj(iatom)=3.679402125*0.890898718*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     sodium - Na+ from fitting potential derived by Viehland 
-c     (Chem. Phys. 85 (1984) 291) for Na+ + He interactions from mobility
-c     data. Note 12-6-4 doesn't provide a very good fit to Viehland's 
-c     potential. Viehland's potential is flatter at small r. We didn't
-c     include Viehland's first three points in the fit.
-c     Hard sphere radius from fitting 300 K Na+ low field mobility in He.
-c
-      if(imass(iatom).eq.23) then
-      itest=1
-      xmass(iatom)=22.99d0
-      eolj(iatom)=dsqrt(eogas*0.03000)*conve*xe
-      rolj(iatom)=dsqrt(rogas*2.9830)*convr*1.0d-10
-      rhs(iatom)=2.853d0*1.0d-10
-      endif
-c
-c     silicon (from fitting mobilities of small silicon clusters)
-c
-      if(imass(iatom).eq.28) then
-      itest=1
-      xmass(iatom)=28.09d0
-      eolj(iatom)=dsqrt(eogas*0.4020)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.2950)*convr*1.0d-10
-      rhs(iatom)=2.95d0*1.0d-10
-      endif
-c
-c     sulfur (same as silicon)
-c
-      if(imass(iatom).eq.32) then
-      itest=1
-      xmass(iatom)=32.06d0
-      eolj(iatom)=dsqrt(eogas*0.2740)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.0350)*convr*1.0d-10
-c      eolj(iatom)=0.225144398*xe
-c      rolj(iatom)=3.950617673*0.890898718*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     iron (same as silicon)
-c
-      if(imass(iatom).eq.56) then
-      itest=1
-      xmass(iatom)=55.85d0
-      eolj(iatom)=dsqrt(eogas*0.0130)*conve*xe
-      rolj(iatom)=dsqrt(rogas*2.9120)*convr*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     Phosphorous
-c
-      if(imass(iatom).eq.31) then
-      itest=1
-      xmass(iatom)=30.97d0
-      eolj(iatom)=dsqrt(eogas*0.305)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.1470)*convr*1.0d-10
-      rhs(iatom)=4.2d0*1.0d-10
-      endif
-c
-c     Flourine
-c
-      if(imass(iatom).eq.19) then
-      itest=1
-      xmass(iatom)=19.00d0
-      eolj(iatom)=dsqrt(eogas*0.0465)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.1285)*convr*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
+      call ljparm(imass(iatom),xe,itest,xmass(iatom),eolj(iatom),
+     ?rolj(iatom),rhs(iatom))
 c
       if(itest.eq.0) then
       write(8,602) iatom
@@ -2830,119 +2715,8 @@ c
  2000 continue
 c
       do 2020 iatom=1,inatom
-      itest=0
-c
-      eogas=0.06900d0
-      rogas=3.6600d0
-c     convert epsilon from kcal/mol to meV
-      conve=(4.2d0*0.01036427d0)
-      convr=0.890898718d0
- 
-c     hydrogen (average value of eo from ab initio calculations
-c     and ro from fitting mobilities of C6H6 and others) 
-c
-      if(imass(iatom).eq.1) then
-      itest=1
-      xmass(iatom)=1.008d0
-      eolj(iatom)=dsqrt(eogas*0.0189)*conve*xe
-      rolj(iatom)=dsqrt(rogas*1.2409)*convr*1.0d-10
-      rhs(iatom)=2.2d0*1.0d-10
-      endif
-c
-c     carbon (from fitting C60 mobility)
-c
-      if(imass(iatom).eq.12) then
-      itest=1
-      xmass(iatom)=12.01d0
-      eolj(iatom)=dsqrt(eogas*0.0977)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.5814)*convr*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     nitrogen (same as carbon)
-c
-      if(imass(iatom).eq.14) then
-      itest=1
-      xmass(iatom)=14.01d0
-      eolj(iatom)=dsqrt(eogas*0.0828)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.3920)*convr*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c     
-c     oxygen (same as carbon)
-c
-      if(imass(iatom).eq.16) then
-      itest=1
-      xmass(iatom)=16.00d0
-      eolj(iatom)=dsqrt(eogas*0.0558)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.2550)*convr*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     sodium - Na+ from fitting potential derived by Viehland 
-c     (Chem. Phys. 85 (1984) 291) for Na+ + He interactions from mobility
-c     data. Note 12-6-4 doesn't provide a very good fit to Viehland's 
-c     potential. Viehland's potential is flatter at small r. We didn't
-c     include Viehland's first three points in the fit.
-c     Hard sphere radius from fitting 300 K Na+ low field mobility in He.
-c
-      if(imass(iatom).eq.23) then
-      itest=1
-      xmass(iatom)=22.99d0
-      eolj(iatom)=dsqrt(eogas*0.03000)*conve*xe
-      rolj(iatom)=dsqrt(rogas*2.9830)*convr*1.0d-10
-      rhs(iatom)=2.853d0*1.0d-10
-      endif
-c
-c     silicon (from fitting mobilities of small silicon clusters)
-c
-      if(imass(iatom).eq.28) then
-      itest=1
-      xmass(iatom)=28.09d0
-      eolj(iatom)=dsqrt(eogas*0.0130)*conve*xe
-      rolj(iatom)=dsqrt(rogas*2.9120)*convr*1.0d-10
-      rhs(iatom)=2.95d0*1.0d-10
-      endif
-c
-c     sulfur (same as silicon)
-c
-      if(imass(iatom).eq.32) then
-      itest=1
-      xmass(iatom)=32.06d0
-      eolj(iatom)=dsqrt(eogas*0.2740)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.0350)*convr*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     iron (same as silicon)
-c
-      if(imass(iatom).eq.56) then
-      itest=1
-      xmass(iatom)=55.85d0
-      eolj(iatom)=dsqrt(eogas*0.0130)*conve*xe
-      rolj(iatom)=dsqrt(rogas*2.9120)*convr*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     Phosphorous
-c
-      if(imass(iatom).eq.31) then
-      itest=1
-      xmass(iatom)=30.97d0
-      eolj(iatom)=dsqrt(eogas*0.305)*conve*xe
-      rolj(iatom)=dsqrt(rogas*4.1470)*convr*1.0d-10
-      rhs(iatom)=4.2d0*1.0d-10
-      endif
-c
-c     Flourine
-c
-      if(imass(iatom).eq.19) then
-      itest=1
-      xmass(iatom)=19.00d0
-      eolj(iatom)=dsqrt(eogas*0.0465)*conve*xe
-      rolj(iatom)=dsqrt(rogas*3.1285)*convr*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
+      call ljparm(imass(iatom),xe,itest,xmass(iatom),eolj(iatom),
+     ?rolj(iatom),rhs(iatom))
 c
       if(itest.eq.0) then
       write(8,602) iatom
@@ -3021,3 +2795,7 @@ c
 c
 c     ***************************************************************
 c
+c
+c     ***************************************************************
+c
+      include 'mobcal_ljread.inc'

@@ -188,6 +188,11 @@ c     line 8: as above for all atoms. if multiple conformations are
 c             included the conformations are separated by a blank line
 c
 c
+c     the element table, from the file the driver renders into the
+c     working directory (mobcal_ljread.inc)
+c
+      call ljread('He')
+c
       call fcoord(filen1,unit,dchar,xlabel,asympp(1))
 c
 c     Lennard-Jones scaling parameters
@@ -601,103 +606,8 @@ c
      ?'total absolute charge =',e11.4)
 c
       do 2020 iatom=1,inatom
-      itest=0
-c             
-c     hydrogen (average value of eo from ab initio calculations
-c     and ro from fitting mobilities of C6H6 and others) 
-c
-      if(imass(iatom).eq.1) then
-      itest=1
-      xmass(iatom)=1.008d0
-      eolj(iatom)=0.6175d-03*xe
-      rolj(iatom)=2.2610d0*1.0d-10
-      rhs(iatom)=2.2d0*1.0d-10
-      endif
-c
-c     carbon (from fitting C60 mobility)
-c
-      if(imass(iatom).eq.12) then
-      itest=1
-      xmass(iatom)=12.01d0
-      eolj(iatom)=1.3266d-3*xe
-      rolj(iatom)=3.0126d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     nitrogen (same as carbon)
-c
-      if(imass(iatom).eq.14) then
-      itest=1
-      xmass(iatom)=14.01d0
-      eolj(iatom)=1.4740d-3*xe
-      rolj(iatom)=3.3473d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c     
-c     oxygen (same as carbon)
-c
-      if(imass(iatom).eq.16) then
-      itest=1
-      xmass(iatom)=16.00d0
-      eolj(iatom)=1.0720d-3*xe
-      rolj(iatom)=2.4344d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     sodium - Na+ from fitting potential derived by Viehland 
-c     (Chem. Phys. 85 (1984) 291) for Na+ + He interactions from mobility
-c     data. Note 12-6-4 doesn't provide a very good fit to Viehland's 
-c     potential. Viehland's potential is flatter at small r. We didn't
-c     include Viehland's first three points in the fit.
-c     Hard sphere radius from fitting 300 K Na+ low field mobility in He.
-c
-      if(imass(iatom).eq.23) then
-      itest=1
-      xmass(iatom)=22.99d0
-      eolj(iatom)=0.0278d-3*xe
-      rolj(iatom)=(3.97d0/1.12246d0)*1.0d-10
-      rhs(iatom)=2.853d0*1.0d-10
-      endif
-c
-c     silicon (from fitting mobilities of small silicon clusters)
-c
-      if(imass(iatom).eq.28) then
-      itest=1
-      xmass(iatom)=28.09d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=2.95d0*1.0d-10
-      endif
-c
-c     sulfur (same as silicon)
-c
-      if(imass(iatom).eq.32) then
-      itest=1
-      xmass(iatom)=32.06d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     iron (same as silicon)
-c
-      if(imass(iatom).eq.56) then
-      itest=1
-      xmass(iatom)=55.85d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     fluorine (same as carbon)
-c
-      if(imass(iatom).eq.19) then
-      itest=1
-      xmass(iatom)=19.00d0
-      eolj(iatom)=1.0720d-3*xe
-      rolj(iatom)=2.4344d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
+      call ljparm(imass(iatom),xe,itest,xmass(iatom),eolj(iatom),
+     ?rolj(iatom),rhs(iatom))
 c
       if(itest.eq.0) then
       write(8,602) iatom
@@ -2693,103 +2603,8 @@ c
  2000 continue
 c
       do 2020 iatom=1,inatom
-      itest=0
-c
-c     hydrogen (average value of eo from ab initio calculations
-c     and ro from fitting mobilities of C6H6 and others) 
-c
-      if(imass(iatom).eq.1) then
-      itest=1
-      xmass(iatom)=1.008d0
-      eolj(iatom)=0.6175d-03*xe
-      rolj(iatom)=2.2610d0*1.0d-10
-      rhs(iatom)=2.2d0*1.0d-10
-      endif
-c
-c     carbon (from fitting C60 mobility)
-c
-      if(imass(iatom).eq.12) then
-      itest=1
-      xmass(iatom)=12.01d0
-      eolj(iatom)=1.3266d-3*xe
-      rolj(iatom)=3.0126d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     nitrogen (same as carbon)
-c
-      if(imass(iatom).eq.14) then
-      itest=1
-      xmass(iatom)=14.01d0
-      eolj(iatom)=1.4740d-3*xe
-      rolj(iatom)=3.3473d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c     
-c     oxygen (same as carbon)
-c
-      if(imass(iatom).eq.16) then
-      itest=1
-      xmass(iatom)=16.00d0
-      eolj(iatom)=1.0720d-3*xe
-      rolj(iatom)=2.4344d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
-c
-c     sodium - Na+ from fitting potential derived by Viehland 
-c     (Chem. Phys. 85 (1984) 291) for Na+ + He interactions from mobility
-c     data. Note 12-6-4 doesn't provide a very good fit to Viehland's 
-c     potential. Viehland's potential is flatter at small r. We didn't
-c     include Viehland's first three points in the fit.
-c     Hard sphere radius from fitting 300 K Na+ low field mobility in He.
-c
-      if(imass(iatom).eq.23) then
-      itest=1
-      xmass(iatom)=22.99d0
-      eolj(iatom)=0.0278d-3*xe
-      rolj(iatom)=(3.97d0/1.12246d0)*1.0d-10
-      rhs(iatom)=2.853d0*1.0d-10
-      endif
-c
-c     silicon (from fitting mobilities of small silicon clusters)
-c
-      if(imass(iatom).eq.28) then
-      itest=1
-      xmass(iatom)=28.09d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=2.95d0*1.0d-10
-      endif
-c
-c     sulfur (same as silicon)
-c
-      if(imass(iatom).eq.32) then
-      itest=1
-      xmass(iatom)=32.06d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     iron (same as silicon)
-c
-      if(imass(iatom).eq.56) then
-      itest=1
-      xmass(iatom)=55.85d0
-      eolj(iatom)=1.35d-3*xe
-      rolj(iatom)=3.5d0*1.0d-10
-      rhs(iatom)=3.5d0*1.0d-10
-      endif
-c
-c     fluorine (same as carbon)
-c
-      if(imass(iatom).eq.19) then
-      itest=1
-      xmass(iatom)=19.00d0
-      eolj(iatom)=1.0720d-3*xe
-      rolj(iatom)=2.4344d0*1.0d-10
-      rhs(iatom)=2.7d0*1.0d-10
-      endif
+      call ljparm(imass(iatom),xe,itest,xmass(iatom),eolj(iatom),
+     ?rolj(iatom),rhs(iatom))
 c
       if(itest.eq.0) then
       write(8,602) iatom
@@ -2868,3 +2683,7 @@ c
 c
 c     ***************************************************************
 c
+c
+c     ***************************************************************
+c
+      include 'mobcal_ljread.inc'

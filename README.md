@@ -22,16 +22,20 @@ graphical interface is planned once the command line has been used.
 
 The physics of the 2012 code, including its Lennard-Jones parameters, is not being changed.
 Questions about the parameters are being taken up separately, and no change to them will land
-without a stated decision and a stated reason. The element tables are now also kept as one data
-file per gas, every number the literal the 2012 source spells, which the package checks and
-renders into every run directory ([docs/parameters.md](docs/parameters.md)); the test suite
-holds the files to the source row for row. The changes to the Fortran so far are listed
-with their line counts in [fortran/README.md](fortran/README.md). Two add the statements that
-let one calculation run as several processes. The others correct defects in how the program
-reports: a refused input now exits with status 1, an input larger than the arrays is refused
-instead of overrunning them, two output formats print what they were meant to, and the shipped
-run file names a neutral output. None of them changes a number the program computes, and the
-regression test holds it to the 2012 outputs byte for byte on every change.
+without a stated decision and a stated reason. The element tables are kept as one data file per
+gas, every number the literal the 2012 source spelled, which the package checks and renders into
+every run directory, and the programs read them from there
+([docs/parameters.md](docs/parameters.md)); the test suite reads every row back through the
+programs' own reader and holds it to the 2012 number to the last bit. The changes to the Fortran
+so far are listed with their line counts in [fortran/README.md](fortran/README.md). Two add the
+statements that let one calculation run as several processes, and one replaces the element
+tables in the source with the reading of that file. The others correct defects in how the
+program reports: a refused input now exits with status 1, an input larger than the arrays is
+refused instead of overrunning them, two output formats print what they were meant to, and the
+shipped run file names a neutral output. None of them changes a number the program computes for
+the 2012 choline input, and the regression test holds it to the 2012 outputs byte for byte on
+every change. One copy error is corrected: the nitrogen program gave silicon iron's parameters
+from the second coordinate set of an input on.
 
 ## Installing
 

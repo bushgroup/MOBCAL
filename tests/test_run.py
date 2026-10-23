@@ -210,26 +210,7 @@ def test_without_the_rendered_table_the_stand_in_refuses(tmp_path, monkeypatch):
     assert not r.ok and r.message == "exit 1: no parameters.tab for this gas in the run directory"
 
 
-@pytest.fixture
-def reads_tables(monkeypatch):
-    """Binaries that read parameters.tab, as the stand-in does; the built ones do not yet."""
-    monkeypatch.setattr(fortran, "READS_PARAMETERS", True)
-
-
-def test_another_table_is_refused_while_the_program_carries_its_own(tmp_path):
-    assert not fortran.READS_PARAMETERS
-    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
-              parameters=_my_table(tmp_path))
-    r = run_one(job, launcher)
-    assert not r.ok and r.returncode is None and not job.run_dir.exists()
-    assert "do not yet read parameters.tab" in r.message
-    # A byte-identical copy of the shipped table is the shipped table.
-    copy = tmp_path / "copy.toml"
-    copy.write_bytes(parameters.default_path("he").read_bytes())
-    assert run_one(Job(job.input, "he", 1, tmp_path / "runs", parameters=copy), launcher).ok
-
-
-def test_a_job_can_name_its_own_table(tmp_path, reads_tables):
+def test_a_job_can_name_its_own_table(tmp_path):
     mine = _my_table(tmp_path)
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
               parameters=str(mine))
@@ -324,7 +305,7 @@ def test_a_stale_record_does_not_survive_a_rerun_that_cannot_start(tmp_path):
     assert not r.ok and rec["status"] == "failed" and rec["message"].startswith("cannot start")
 
 
-def test_the_summary_names_each_runs_table(tmp_path, reads_tables):
+def test_the_summary_names_each_runs_table(tmp_path):
     mine = _my_table(tmp_path)
     jobs = [Job(write_input(tmp_path / "a.mfj", "ok"), "he", 1, tmp_path / "runs"),
             Job(write_input(tmp_path / "b.mfj", "ok"), "he", 1, tmp_path / "runs",
