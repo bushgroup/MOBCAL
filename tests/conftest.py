@@ -4,7 +4,8 @@ runs' wall times, printed at the end of the session.
 The pool builds each gas the session's tests ask for, then runs every real choline calculation
 they need in one ``run_many`` batch: the serial run per gas for the regression gate, the
 split runs in helium for the exactness tests, and the helium runs under Philox, serial and
-split, for the generator's own exactness tests, each on its own processes. The one-cycle nitrogen
+split, for the generator's own exactness tests, each on its own processes. Every run compared
+with a 2012 reference says ``ranlux``, the driver's default being Philox. The one-cycle nitrogen
 check's worker, for which ``mobcal.run`` has no mode (a split job runs all W workers and the
 combining run), is started directly before the batch and waited for after it. Everything that
 needs gfortran waits for the longest of them, not for their sum. Without gfortran the pool
@@ -88,12 +89,12 @@ def selected_cycles(session) -> list[str]:
 class _Worker:
     """Choline as worker ``gate.CYCLE`` of a split run, started alone in ``d`` and prepared as
     ``mobcal.run`` prepares a worker: the input staged under the reference's name, ``mobcal.in``
-    at the reference's seed with the fourth record, the shipped table rendered."""
+    at the reference's seed and generator with the fourth record, the shipped table rendered."""
 
     def __init__(self, binary: Path, gas: str, ref: OutFile, d: Path):
         self.gas, self.ref, self.d = gas, ref, d
         shutil.copyfile(gate.CHOLINE, d / ref.input_name)
-        InFile(ref.input_name, OUTPUT_NAME, ref.seed, gate.CYCLE).write(d)
+        InFile(ref.input_name, OUTPUT_NAME, ref.seed, gate.CYCLE, ref.generator).write(d)
         parameters.shipped(gas).render(d)
         with open(d / LOG_NAME, "wb") as log:
             self.proc = subprocess.Popen([str(binary)], cwd=d, stdout=log,
@@ -130,11 +131,13 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
     refs = {g: OutFile.read(gate.REFS / gate.REFERENCE[g]) for g in built}
     for g, ref in refs.items():
         assert ref.input_name and ref.seed is not None, f"{g}: reference has no SUMMARY"
+        assert ref.generator == "ranlux", f"{g}: the 2012 reference is a RANLUX run"
     out = tmp_path_factory.mktemp("gate")
-    jobs = [Job(gate.CHOLINE, g, refs[g].seed, out, name=g, staged_name=refs[g].input_name)
-            for g in gases]
+    jobs = [Job(gate.CHOLINE, g, refs[g].seed, out, name=g, staged_name=refs[g].input_name,
+                generator=refs[g].generator) for g in gases]
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"split-{w}",
-                 staged_name=refs["he"].input_name, split=w) for w in splits]
+                 staged_name=refs["he"].input_name, split=w, generator=refs["he"].generator)
+             for w in splits]
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"philox-{w}",
                  staged_name=refs["he"].input_name, split=w or None, generator="philox")
              for w in philox]

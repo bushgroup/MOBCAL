@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 import mobcal
-from mobcal import fortran, parameters, run
+from mobcal import cli, fortran, parameters, run
 from mobcal.io.infile import InFile
 from mobcal.io.mfj import Mfj
 from mobcal.io.outfile import OutFile
@@ -38,12 +38,13 @@ def test_run_one_stages_runs_and_collects(tmp_path):
     job = Job(inp, "he", 5013489, tmp_path / "runs")
     r = run_one(job, launcher)
     assert r.ok and r.message == "" and r.returncode == 0
-    tm = 50 + 5013489 % 7
+    tm = 50 + 5013489 % 7 + 0.5  # the stand-in's Philox half
     assert r.cross_sections == {"PA": tm + 5.5, "EHS": tm + 8, "TM": tm}
     assert r.conformers == [r.cross_sections]
     d = tmp_path / "runs" / "ok-he-5013489"
     assert r.output == d / "mobcal.out"
-    assert InFile.read(d / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489)
+    assert InFile.read(d / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489,
+                                                  generator="philox")
     assert (d / "ok.mfj").read_bytes() == inp.read_bytes()
     assert (d / "stdout.log").is_file()
     assert OutFile.read(r.output).input_name == "ok.mfj"
@@ -51,7 +52,7 @@ def test_run_one_stages_runs_and_collects(tmp_path):
 
 def test_nitrogen_reports_tm_only(tmp_path):
     r = run_one(Job(write_input(tmp_path / "ok.mfj", "ok"), "n2", 8, tmp_path), launcher)
-    assert r.ok and r.cross_sections == {"TM": 51.0}
+    assert r.ok and r.cross_sections == {"TM": 51.5}
 
 
 def test_staged_name_and_label_can_be_chosen(tmp_path):
@@ -75,9 +76,9 @@ def test_a_long_input_name_is_staged_under_the_fallback(tmp_path):
 def test_multi_set_output_gives_per_set_values_and_their_mean(tmp_path):
     r = run_one(Job(write_input(tmp_path / "two.mfj", "sets 2"), "he", 7, tmp_path), launcher)
     assert r.ok
-    assert r.conformers == [{"PA": 56.5, "EHS": 59.0, "TM": 51.0},
-                            {"PA": 57.5, "EHS": 60.0, "TM": 52.0}]
-    assert r.cross_sections == {"PA": 57.0, "EHS": 59.5, "TM": 51.5}
+    assert r.conformers == [{"PA": 57.0, "EHS": 59.5, "TM": 51.5},
+                            {"PA": 58.0, "EHS": 60.5, "TM": 52.5}]
+    assert r.cross_sections == {"PA": 57.5, "EHS": 60.0, "TM": 52.0}
 
 
 def test_a_refusal_is_failed_not_a_number(tmp_path):
@@ -91,7 +92,7 @@ def test_a_refusal_is_failed_not_a_number(tmp_path):
 def test_a_nonzero_exit_is_failed(tmp_path):
     r = run_one(Job(write_input(tmp_path / "x.mfj", "crash"), "he", 1, tmp_path), launcher)
     assert not r.ok and r.returncode == 3
-    assert r.message.startswith("exit 3: using RANLUX with seed integer")
+    assert r.message.startswith("exit 3: using Philox4x32-10 with seed integer")
 
 
 def test_no_output_file_is_failed(tmp_path):
@@ -137,19 +138,20 @@ def test_run_many_keeps_job_order_reports_progress_and_writes_the_summary(tmp_pa
     assert s.workers == 2 and len(s.ok) == 2 and len(s.failed) == 2
     assert sorted(lab for lab, _, _ in seen) == sorted(j.label for j in jobs)
     assert [(d, n) for _, d, n in seen] == [(1, 4), (2, 4), (3, 4), (4, 4)]
-    assert s.results[0].cross_sections["TM"] == 50 + 10 % 7
-    assert s.results[2].cross_sections["TM"] == 50 + 12 % 7
+    assert s.results[0].cross_sections["TM"] == 50 + 10 % 7 + 0.5
+    assert s.results[2].cross_sections["TM"] == 50 + 12 % 7 + 0.5
 
     csv_path, json_path = s.write(tmp_path / "runs")
     rows = csv_path.read_text(encoding="utf-8").splitlines()
-    assert rows[0] == "name,input,gas,seed,status,PA,EHS,TM,sets,seconds,output,message"
-    assert rows[1].startswith("in0-he-10,") and ",ok,58.5,61.0,53.0,1," in rows[1]
+    assert rows[0] == "name,input,gas,seed,rng,status,PA,EHS,TM,sets,seconds,output,message"
+    assert rows[1].startswith("in0-he-10,") and ",10,philox,ok,59.0,61.5,53.5,1," in rows[1]
     assert rows[2].startswith("in1-he-11,") and ",failed,,,,," in rows[2]
     assert rows[2].endswith(",exit 1: type not defined for atom number   1")
     doc = json.loads(json_path.read_text(encoding="utf-8"))
     assert doc["workers"] == 2 and len(doc["runs"]) == 4
     assert doc["runs"][3] == {**doc["runs"][3], "status": "failed", "returncode": 3}
-    assert doc["runs"][0]["conformers"] == [{"PA": 58.5, "EHS": 61.0, "TM": 53.0}]
+    assert doc["runs"][0]["conformers"] == [{"PA": 59.0, "EHS": 61.5, "TM": 53.5}]
+    assert {run["rng"] for run in doc["runs"]} == {"philox"}
 
 
 def test_run_many_runs_jobs_at_once(tmp_path):
@@ -249,7 +251,7 @@ def test_a_split_run_renders_into_every_directory(tmp_path):
     for w in (1, 2, 3):
         assert (job.worker_dir(w) / parameters.RENDERED).read_bytes() == want
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
-    assert rec["mobcal_in"] == {"seed": 3, "generator": "ranlux", "split": 3}
+    assert rec["mobcal_in"] == {"seed": 3, "generator": "philox", "split": 3}
 
 
 def test_the_record_of_a_run(tmp_path):
@@ -263,11 +265,11 @@ def test_the_record_of_a_run(tmp_path):
     assert rec["input"] == {"path": str(inp), "staged_name": "ok.mfj",
                             "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
                             "atoms": 21, "coordinate_sets": 1}
-    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "ranlux", "split": None}
+    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
     assert rec["parameters"] == parameters.shipped("n2").record()
     assert rec["parameters"]["rendered"] == "parameters.tab"
     assert (rec["status"], rec["returncode"], rec["message"]) == ("ok", 0, "")
-    assert rec["cross_sections"] == r.cross_sections == {"TM": 50 + 5013489 % 7}
+    assert rec["cross_sections"] == r.cross_sections == {"TM": 50 + 5013489 % 7 + 0.5}
     assert rec["conformers"] == r.conformers
     assert (rec["output"], rec["console_log"]) == ("mobcal.out", "stdout.log")
     assert dt.datetime.fromisoformat(rec["started"]).tzinfo is not None
@@ -335,3 +337,36 @@ def test_a_job_under_philox(tmp_path):
     assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
     with pytest.raises(ValueError, match="generator must be one of"):
         Job(inp, "he", 1, tmp_path, generator="rand")
+
+
+# --- the generator: the driver's default, the label, the record and the summary ----------------
+
+def test_the_drivers_generator_is_philox_and_the_run_files_is_ranlux():
+    # Loud on purpose: the driver draws from Philox unless told otherwise, while a run file
+    # without the word stays the 2012 run. Every comparison with a 2012 output says ranlux.
+    assert run.DEFAULT_RNG == "philox" and Job(CHOLINE, "he", 1, Path("runs")).generator == "philox"
+    assert InFile("a", "b", 1).generator == "ranlux"
+    assert cli.parser().parse_args(["run", "x.mfj"]).rng == "philox"
+    assert cli.parser().parse_args(["run", "x.mfj", "--rng", "ranlux"]).rng == "ranlux"
+    with pytest.raises(SystemExit):
+        cli.parser().parse_args(["run", "x.mfj", "--rng", "mersenne"])
+
+
+def test_one_seed_under_both_generators_shares_an_output_directory(tmp_path):
+    inp = write_input(tmp_path / "ok.mfj", "ok")
+    jobs = [Job(inp, "he", 5013489, tmp_path / "runs", generator=g) for g in ("philox", "ranlux")]
+    assert [j.label for j in jobs] == ["ok-he-5013489", "ok-he-5013489-ranlux"]
+    assert Job(inp, "he", 1, tmp_path, name="gate", generator="ranlux").label == "gate"
+    s = run_many(jobs, workers=2, launcher=launcher)
+    philox, ranlux = s.results
+    assert philox.ok and ranlux.ok and philox.job.run_dir != ranlux.job.run_dir
+    assert philox.cross_sections["TM"] == ranlux.cross_sections["TM"] + 0.5
+    assert OutFile.read(ranlux.output).generator == "ranlux"
+    assert (ranlux.job.run_dir / "mobcal.in").read_bytes() == b"ok.mfj\nmobcal.out\n5013489\n"
+    rec = json.loads((ranlux.job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["mobcal_in"]["generator"] == "ranlux"
+    csv_path, _ = s.write(tmp_path / "runs")
+    rows = csv_path.read_text(encoding="utf-8").splitlines()
+    assert rows[1].startswith("ok-he-5013489,") and ",5013489,philox,ok," in rows[1]
+    assert rows[2].startswith("ok-he-5013489-ranlux,") and ",5013489,ranlux,ok," in rows[2]
+    assert str(ranlux).startswith("ok-he-5013489-ranlux  ok  ")

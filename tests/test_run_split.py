@@ -23,12 +23,13 @@ def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
     seen: list[tuple[int, int]] = []
     r = run_one(job, launcher, blocks=lambda j, n, t: seen.append((n, t)))
     assert r.ok and r.message == "" and r.returncode == 0, r.message
-    tm = 50 + 5013489 % 7
+    tm = 50 + 5013489 % 7 + 0.5  # the stand-in's Philox half
     assert r.cross_sections == {"PA": tm + 5.5, "EHS": tm + 8, "TM": tm}  # the serial numbers
 
     d = job.run_dir
     assert r.output == d / "mobcal.out"
-    assert InFile.read(d / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489, (3, 0))
+    assert InFile.read(d / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489, (3, 0),
+                                                  "philox")
     assert (d / "ok.mfj").read_bytes() == inp.read_bytes()
     assert len(list(d.glob("block-*.dat"))) == BLOCKS_PER_SET
     combined = OutFile.read(r.output)
@@ -37,11 +38,12 @@ def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
     for w in (1, 2, 3):
         wd = job.worker_dir(w)
         assert wd == d / f"w0{w}"
-        assert InFile.read(wd / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489, (3, w))
+        assert InFile.read(wd / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489, (3, w),
+                                                       "philox")
         names = expected_names(1, 3, w)
         assert sorted(p.name for p in wd.glob("block-*.dat")) == sorted(names)
         b = Block.read(wd / names[0])
-        assert b.seed == 5013489 and b.coordinate_set == 1
+        assert b.seed == 5013489 and b.coordinate_set == 1 and b.generator == "philox"
         assert (wd / "stdout.log").is_file()
         assert OutFile.read(wd / "mobcal.out").ok  # a worker's partial summary, not a result
     assert seen and seen[-1] == (BLOCKS_PER_SET, BLOCKS_PER_SET)

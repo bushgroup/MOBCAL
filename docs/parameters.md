@@ -181,4 +181,5 @@ shipped one, and the name of the rendered table; the start time, the wall time, 
 the verdict and its message; the cross sections and the values for each coordinate set; and the
 names of the output and console files. The program's output file is unchanged by any of this, so
 it still compares byte for byte with the 2012 references. `summary.json` names each run's table
-and its SHA-256 as well.
+and its SHA-256 as well, and both summary files name each run's random number generator in their
+`rng` column ([random-numbers.md](random-numbers.md)).

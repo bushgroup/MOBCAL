@@ -86,8 +86,9 @@ exercises everything a calculation does except the trajectories. It ends with
 mobcal self-check --choline
 ```
 
-also runs the 2012 choline input in helium at the 2012 random seed and compares the three cross
-sections with the 2012 output, which takes about three minutes. A correct installation
+also runs the 2012 choline input in helium at the 2012 random seed, under RANLUX, the random
+number generator the 2012 output was computed with, and compares the three cross sections with
+the 2012 output, which takes about three minutes. A correct installation
 reproduces the 2012 values, 61.075 Å² (projection approximation), 63.473 Å² (exact hard
 spheres) and 55.402 Å² (trajectory method), and every package is tested this way before it is
 kept.
@@ -106,8 +107,10 @@ writes its run directory and `summary.csv` under `runs` in the current directory
 `--split 8` runs that one calculation as eight processes and reports the serial result exactly,
 which is how a long nitrogen calculation is made short on a machine with cores to spare: on
 one 80-thread workstation choline in nitrogen took 70 minutes serial, 8 minutes across ten
-processes and 4.5 minutes across twenty. Run
-calculations from a folder of your own, not from inside the installation, which an upgrade
+processes and 4.5 minutes across twenty. The run draws its random numbers from Philox4x32-10
+unless `--rng ranlux` is added, which selects the generator of the 2012 release and, at the
+default seed, reproduces the 2012 choline values above ([random-numbers.md](random-numbers.md)).
+Run calculations from a folder of your own, not from inside the installation, which an upgrade
 replaces.
 
 ## Source code

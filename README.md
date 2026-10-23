@@ -2,8 +2,10 @@
 
 MOBCAL calculates the collision cross sections of ions in helium and in nitrogen by the
 trajectory method. The Fortran at its core is the 2012 release of MOBCAL described in
-Campuzano et al., *Anal. Chem.* 2012, 84, 1026, kept here with one addition: the program can
-run one calculation as several processes and report the serial result exactly. Around it this
+Campuzano et al., *Anal. Chem.* 2012, 84, 1026, kept here with two additions: the program can
+run one calculation as several processes and report the serial result exactly, and it can draw
+its random numbers from a second generator, Philox4x32-10, in place of the 2012 generator,
+RANLUX. Around it this
 repository is building a Python package that compiles the Fortran, runs many calculations at
 once on separate cores or one calculation across them, collects the results, and will ship as
 an installer for people who do not manage compilers or Python environments.
@@ -28,13 +30,14 @@ every run directory, and the programs read them from there
 ([docs/parameters.md](docs/parameters.md)); the test suite reads every row back through the
 programs' own reader and holds it to the 2012 number to the last bit. The changes to the Fortran
 so far are listed with their line counts in [fortran/README.md](fortran/README.md). Two add the
-statements that let one calculation run as several processes, and one replaces the element
-tables in the source with the reading of that file. The others correct defects in how the
+statements that let one calculation run as several processes, one replaces the element
+tables in the source with the reading of that file, and one adds the second random number
+generator ([docs/random-numbers.md](docs/random-numbers.md)). The others correct defects in how the
 program reports: a refused input now exits with status 1, an input larger than the arrays is
 refused instead of overrunning them, two output formats print what they were meant to, and the
 shipped run file names a neutral output. None of them changes a number the program computes for
-the 2012 choline input, and the regression test holds it to the 2012 outputs byte for byte on
-every change. One copy error is corrected: the nitrogen program gave silicon iron's parameters
+the 2012 choline input under the 2012 generator, and the regression test holds it to the 2012
+outputs byte for byte on every change. One copy error is corrected: the nitrogen program gave silicon iron's parameters
 from the second coordinate set of an input on.
 
 ## Installing
@@ -51,8 +54,9 @@ to check an installation with `mobcal self-check`.
 - `src/mobcal/`: the Python package, with the two element tables in `src/mobcal/parameters/`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
-- `docs/`: the installation guide and the element-table format
-  ([`docs/parameters.md`](docs/parameters.md)).
+- `docs/`: the installation guide, the element-table format
+  ([`docs/parameters.md`](docs/parameters.md)) and the two random number generators
+  ([`docs/random-numbers.md`](docs/random-numbers.md)).
 
 ## Building the Fortran
 
@@ -93,20 +97,33 @@ and several at once:
 uv run mobcal run choline.mfj --gas both --seeds 5013489,1234567 --workers 4 --out runs
 ```
 
-A calculation is one input file, one gas and one seed. The command makes one job for every
-combination of the inputs given (paths or globs), the gas (`he`, `n2` or `both`; helium by
-default) and the seeds (the 2012 seed, 5013489, by default), runs them `--workers` at a time
-(by default, as many as the machine has processors), and prints each result as it lands. Each
-run gets a directory of its own under `--out`, named for the input, the gas and the seed, and
-holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
+A calculation is one input file, one gas, one seed and one random number generator. The
+command makes one job for every combination of the inputs given (paths or globs), the gas
+(`he`, `n2` or `both`; helium by default) and the seeds (the 2012 seed, 5013489, by default),
+under the generator `--rng` names (Philox4x32-10 by default, or `ranlux`), runs them
+`--workers` at a time (by default, as many as the machine has processors), and prints each
+result as it lands. Each run gets a directory of its own under `--out`, named for the input, the
+gas and the seed, with `-ranlux` appended under RANLUX, and holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
 `parameters.tab`, the output it wrote as `mobcal.out`, whatever it printed to the console as
 `stdout.log`, and `record.json`, which records the program and its build, the input and its
-hash, the seed, the element table and its hash, the times and the result. The directory is a
+hash, the seed and the generator, the element table and its hash, the times and the result. The directory is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
-run directories, one row per run with its status, its cross sections in Å², and the time the
-program took. For an input with several coordinate sets the row carries the mean over sets, as
+run directories, one row per run with its seed and generator, its status, its cross sections
+in Å², and the time the program took. For an input with several coordinate sets the row carries the mean over sets, as
 the program reports it, and `summary.json` the value for each set.
+
+A number published from MOBCAL 2012 reproduces only under the generator it was computed with,
+RANLUX, and at its seed:
+
+```
+uv run mobcal run choline.mfj --rng ranlux
+```
+
+reports the 2012 choline cross sections in helium to every printed digit, whereas the default,
+Philox, reports cross sections from a different random number stream, which differ in their
+last digits as a run at another seed would. [`docs/random-numbers.md`](docs/random-numbers.md)
+describes the two generators and why the default is the newer one.
 
 A run that did not finish is reported as failed, never as a number. The program exits with
 status 1 when it refuses its input (the 2012 program exited with status 0 either way), and the
@@ -131,16 +148,19 @@ because the random number stream is partitioned rather than re-drawn and the sum
 the serial program's own statements. The trajectory method integrates 400 blocks of 1,000
 trajectories per coordinate set, one per cycle and velocity point, and each of the eight
 processes integrates every eighth block in velocity-major order, so that its share mixes the
-slow collisions with the fast, draws the random stream through the others so that it reaches each of its own in the state the
-serial run would have had, and writes a 44-byte file per block it integrated. When all eight
+slow collisions with the fast, reaches each of its own blocks with the random number stream in
+the state the serial run would have had, by moving the draw count past the other blocks under
+Philox or by drawing through them under RANLUX, and writes a 48-byte file per block it
+integrated. When all eight
 have landed, the program runs once more in the run directory as the combining run, which
 integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY
 with the same statements the serial run uses. That output is the run's output, read as any
 other; the eight workers' directories, `w01` to `w08`, are kept beside it as records. A worker
 that did not write every block it owed fails the run, and the combining run never starts. Any
 `--split` from 1 to 400 balances, since the blocks are dealt round robin, and `--workers` then
-counts split calculations in flight, each of them `--split` processes. Without `--split`, or
-without the fourth record it writes to `mobcal.in`, the program runs the 2012 calculation.
+counts split calculations in flight, each of them `--split` processes. Without the fourth record
+that `--split` writes to `mobcal.in`, the program runs as one process, and without a generator
+word on the seed record as well, it runs the 2012 calculation.
 
 Every process repeats the part of the calculation that precedes the trajectories (the
 projection and hard-sphere cross sections and the search for the largest impact parameter at
@@ -149,13 +169,15 @@ process count by that fixed cost: a few seconds per process for choline in heliu
 fifteen in nitrogen. Measured on one workstation (Windows 11, 80 threads, shared with other
 work, MSYS2 gfortran 16.2.0), choline in helium ran 1.8, 4.0, 6.6 and 9.5 times faster than
 serial across 2, 5, 10 and 20 processes, and choline in nitrogen 8.8 times faster across 10
-and 15.8 times across 20, with every combined output equal to the 2012 output in every digit.
+and 15.8 times across 20, with every combined output equal to the 2012 output in every digit;
+those runs were made under RANLUX, before the second generator existed.
 The split pays best on the long calculations, which is what it is for.
 
 ## Testing against the 2012 outputs
 
 To check that a build still computes the 2012 numbers, the test suite runs `Choline.mfj`
-through each binary at seed 5013489, the seed the references were produced with, and compares
+through each binary under RANLUX at seed 5013489, the generator and seed the references were
+produced with, and compares
 the output with `fortran/sample-output/` in three tiers. The first compares every line that does
 not depend on the random number stream character for character. `tests/stochastic-lines.txt`
 lists the lines that do, so a line that is not listed has to match, and a line the 2012 code
@@ -167,7 +189,9 @@ fourth test runs the same helium calculation split across one process and across
 requires each combined output to match the serial run's line for line, with no tolerance, apart
 from the energy-conservation diagnostics, which the process that integrated the failing
 trajectory prints, and the one line that marks a combined output as combined; the diagnostics
-themselves must be conserved across the workers.
+themselves must be conserved across the workers. The same helium calculation runs under
+Philox as well, serially and split across 10 and 40 processes, and each split output must
+match the serial Philox output by the same rule.
 
 To check the nitrogen program in every run of the suite without the hour its full comparison
 takes, a fifth test runs a tenth of it. The 2012 calculation is ten cycles of 40,000

@@ -14,9 +14,10 @@ failure names the stage that failed:
                 element its tables do not define; the driver reads the refusal as a failure.
                 Under a second, and it exercises everything a calculation does except the
                 trajectories
-    choline     with ``--choline`` only: the 2012 choline input in helium at the 2012 seed,
-                with the three cross sections compared with the 2012 output within 0.1 %, the
-                regression gate's second tier. About three minutes
+    choline     with ``--choline`` only: the 2012 choline input in helium at the 2012 seed
+                and the 2012 generator, RANLUX (the driver's default is Philox, which gives
+                other digits), with the three cross sections compared with the 2012 output
+                within 0.1 %, the regression gate's second tier. About three minutes
 
 ``--report PATH`` writes the same lines to a file as well. The exit status is 1 if any stage
 failed. No Qt here.
@@ -37,6 +38,7 @@ from mobcal.io.outfile import OutFile
 from mobcal.run import Job, run_one
 
 CHOLINE_SEED = 5013489
+CHOLINE_RNG = "ranlux"  # the generator the 2012 output was produced with
 TOLERANCE = 1e-3  # relative, the regression gate's second tier
 
 # Bromine (key 35) is in neither gas's element table, so the program writes its header, then
@@ -126,7 +128,8 @@ def _choline() -> tuple[bool, str, list[str]]:
     ex = fortran.examples_dir()
     ref = OutFile.read(ex / "sample-output" / "Choline_He.out").cross_sections
     with tempfile.TemporaryDirectory(prefix="mobcal-self-check-") as td:
-        r = run_one(Job(ex / "Choline.mfj", "he", CHOLINE_SEED, Path(td)))
+        r = run_one(Job(ex / "Choline.mfj", "he", CHOLINE_SEED, Path(td),
+                        generator=CHOLINE_RNG))
     if not r.ok:
         return False, "choline in helium", [r.message]
     detail, ok = [], True
@@ -136,7 +139,8 @@ def _choline() -> tuple[bool, str, list[str]]:
         ok &= within
         detail.append(f"{k:3s} {got if got is not None else 'missing'} A^2 against 2012's "
                       f"{want}" + ("" if within else f"  (outside {TOLERANCE:.1%})"))
-    return ok, f"choline in helium at seed {CHOLINE_SEED}, against the 2012 output", detail
+    return ok, (f"choline in helium at seed {CHOLINE_SEED} under RANLUX, against the 2012 "
+                "output"), detail
 
 
 def run(choline: bool = False, report: Path | None = None) -> int:

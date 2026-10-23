@@ -14,7 +14,9 @@ combining run's (which repeats the b2max search, where the only trajectories it 
 plus each worker's beyond those.
 
 W = 1 is the block files' round trip; W = 3 is uneven shares (134, 133, 133 blocks) and three
-interleaved streams. Both run in every session with gfortran. Larger W and nitrogen split runs
+interleaved streams. Both run in every session with gfortran. Every run here is at RANLUX,
+the 2012 generator, whose split draws the other workers' blocks through; Philox's seek is
+``test_philox_split.py``'s. Larger W and nitrogen split runs
 are measured in the lab record and are not CI's business; ``test_nitrogen_cycle.py`` runs one
 nitrogen worker alone against the 2012 reference.
 """
@@ -93,8 +95,8 @@ def test_a_split_run_with_two_coordinate_sets(pool, tmp_path):
     two = tmp_path / "two.mfj"
     two.write_text("\n".join([lines[0], "2", *lines[2:6], *atoms, "", *atoms]) + "\n",
                    encoding="latin-1", newline="\n")
-    jobs = [Job(two, "he", 5013489, tmp_path, name="serial"),
-            Job(two, "he", 5013489, tmp_path, name="split", split=3)]
+    jobs = [Job(two, "he", 5013489, tmp_path, name="serial", generator="ranlux"),
+            Job(two, "he", 5013489, tmp_path, name="split", split=3, generator="ranlux")]
     serial, split = run_many(jobs, workers=2, launcher=pool.launcher).results
     assert serial.ok and split.ok, (serial.message, split.message)
     assert len(serial.conformers) == 2 and split.conformers == serial.conformers
@@ -112,9 +114,11 @@ def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool,
     water.write_text("H2O+\n1\n3\nang\ncalc\n1.0000\n 0.0000  0.0000  0.1173 16 0.0\n"
                      " 0.0000  0.7572 -0.4692  1 0.5\n 0.0000 -0.7572 -0.4692  1 0.5\n",
                      encoding="latin-1", newline="\n")
-    serial = run_one(Job(water, "he", 5013489, tmp_path, name="serial"), pool.launcher)
+    serial = run_one(Job(water, "he", 5013489, tmp_path, name="serial", generator="ranlux"),
+                     pool.launcher)
     assert not serial.ok and serial.returncode == 1
     assert serial.message.startswith("exit 1"), serial.message
-    split = run_one(Job(water, "he", 5013489, tmp_path, name="split", split=2), pool.launcher)
+    split = run_one(Job(water, "he", 5013489, tmp_path, name="split", split=2,
+                        generator="ranlux"), pool.launcher)
     assert not split.ok and split.cross_sections == {}
     assert "blocks missing" in split.message or "reached ifail" in split.message, split.message

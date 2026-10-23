@@ -8,8 +8,9 @@ or rendered for the other gas; at ``philox`` it prints the program's Philox line
 the RANLUX ones. What it writes is chosen by the input file's first line, its label:
 
     ok           a complete output ending in a SUMMARY block; the cross sections are a function
-                 of the seed, so a result can be traced to its job (``TM = 50 + seed % 7``,
-                 and ``PA``/``EHS`` in helium only, as the real program reports them)
+                 of the seed and the generator, so a result can be traced to its job
+                 (``TM = 50 + seed % 7``, half an Å² more at ``philox``, and ``PA``/``EHS`` in
+                 helium only, as the real program reports them)
     sets N       the same, with the multi-set SUMMARY the program writes for N coordinate sets
     refuse       the program's refusal of an undefined element: the header lines, then
                  ``type not defined for atom number   1``, exit 1, no SUMMARY
@@ -104,7 +105,7 @@ def main() -> int:
         lines += ["", f" blocks of imp trajectories: integrated{done:4d}, read from files"
                       f"{read_blocks:4d}, empty{empty:4d} (worker{me:3d} of{total:3d})"]
 
-    tm = 50 + seed % 7
+    tm = 50 + seed % 7 + (0.5 if generator == "philox" else 0)
     if split is not None and split[1] > 0:
         tm = tm / split[0]  # a worker's partial sum, which is not a result
     pa, ehs = tm + 5.5, tm + 8

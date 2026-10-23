@@ -3,14 +3,17 @@
     mobcal version
     mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
-    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--workers N]
-               [--split W] [--parameters PATH] [--out DIR]
+    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--rng philox|ranlux]
+               [--workers N] [--split W] [--parameters PATH] [--out DIR]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
 ``summary.csv`` and ``summary.json`` beside the run directories. With ``--split W`` each
-calculation runs across W processes and reports the serial result exactly. With
+calculation runs across W processes and reports the serial result exactly. ``--rng`` picks the
+random number generator: Philox4x32-10 by default, or ``ranlux``, the 2012 generator, which
+with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
+default is not the run file's). With
 ``--parameters PATH`` every run uses that element table instead of the package's own, checked
 the same way and recorded the same way. Its exit status is 1 if any run failed.
 ``render-parameters`` writes ``parameters.tab`` into a directory, as the driver does into each
@@ -29,7 +32,8 @@ from pathlib import Path
 
 from mobcal import ROOT, __version__, fortran, parameters
 from mobcal.io.block import BLOCKS_PER_SET
-from mobcal.run import Job, Result, run_many
+from mobcal.io.infile import GENERATORS
+from mobcal.run import DEFAULT_RNG, Job, Result, run_many
 
 # The seed the shipped mobcal.in carries, at which the 2012 references were run.
 DEFAULT_SEED = 5013489
@@ -57,7 +61,7 @@ def expand_inputs(patterns: list[str]) -> list[Path]:
     return found
 
 
-def main(argv: list[str] | None = None) -> int:
+def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="mobcal", description="Collision cross sections by the trajectory method: the 2012 "
         "MOBCAL Fortran, run many calculations at a time.")
@@ -82,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="which binary (default he)")
     r.add_argument("--seeds", type=_seeds, default=[DEFAULT_SEED], metavar="N[,N...]",
                    help=f"one run per seed (default {DEFAULT_SEED}, the 2012 seed)")
+    r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
+                   default=DEFAULT_RNG,
+                   help=f"random number generator (default {DEFAULT_RNG}); ranlux is the 2012 "
+                        "generator, which reproduces the 2012 numbers at the 2012 seed")
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help="runs in flight at once (default: the number of CPUs)")
     r.add_argument("--split", type=int, default=None, metavar="W",
@@ -100,8 +108,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="where to write parameters.tab (default: the current directory)")
     p.add_argument("--parameters", type=Path, default=None, metavar="PATH",
                    help="render this TOML file instead of the package's own for the gas")
+    return ap
 
-    args = ap.parse_args(argv)
+
+def main(argv: list[str] | None = None) -> int:
+    args = parser().parse_args(argv)
 
     if args.cmd == "version":
         print(__version__)
@@ -179,7 +190,8 @@ def _run(args: argparse.Namespace) -> int:
         print(f"error: --split takes a worker count from 1 to {BLOCKS_PER_SET}", file=sys.stderr)
         return 2
     try:
-        jobs = [Job(p, gas, seed, args.out, split=split, parameters=args.parameters)
+        jobs = [Job(p, gas, seed, args.out, split=split, parameters=args.parameters,
+                    generator=args.rng)
                 for p in inputs for gas in gases for seed in args.seeds]
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
@@ -188,6 +200,7 @@ def _run(args: argparse.Namespace) -> int:
     workers = max(1, min(args.workers or (cpus // split if split else cpus), len(jobs)))
     print(f"{len(jobs)} run{'s' if len(jobs) != 1 else ''} on {workers} worker"
           f"{'s' if workers != 1 else ''}" + (f", each across {split} processes" if split else "")
+          + f", generator {args.rng}"
           + f", binaries from {fortran.binary_dir()}, output under {args.out}/"
           + (f", element table {args.parameters}" if args.parameters else ""), flush=True)
 

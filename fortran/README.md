@@ -74,10 +74,14 @@ copies the input to the echoed name before running rather than editing either si
 `5013489`, which is the seed the references were run at. The 2012 file named
 `temp.choline.n2.out` as output for both gases; the name is now neutral (Changes, above). The
 seed may be followed on its record by the word `ranlux` or `philox`, naming the random number
-generator: RANLUX, the 2012 generator, or Philox4x32-10 (Changes, below); no word is `ranlux`,
+generator: RANLUX, the 2012 generator, or Philox4x32-10 (Changes, above); no word is `ranlux`,
 and any other word is refused before anything is calculated. A fourth record, `W w`, is read
 when present and makes the run one process of a split calculation, as the Changes table
-describes; `mobcal run --split W` writes it, and the shipped file does not carry it.
+describes; `mobcal run --split W` writes it, and the shipped file does not carry it. The shipped
+file, and any run file with three records and no generator word, runs the 2012 calculation,
+whereas `mobcal run` writes `philox` after the seed unless it is given `--rng ranlux`, so a
+calculation it runs by default draws from Philox and does not reproduce a 2012 output
+([docs/random-numbers.md](../docs/random-numbers.md)).
 
 ## The element tables
 

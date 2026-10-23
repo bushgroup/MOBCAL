@@ -11,7 +11,9 @@ specified``, ``masses do not add up``).
 
 A ``Job`` is one calculation: an input file, a gas and a seed, the element table to use, the
 package's own for the gas unless the job names another, and the random number generator,
-RANLUX as in 2012 unless the job says ``philox``. ``run_one`` checks the table
+Philox4x32-10 unless the job says ``ranlux``, the 2012 generator, which is what reproduces a
+2012 number. The run directory's name carries ``-ranlux`` when the job does, so the same seed
+under both generators can share an output directory. ``run_one`` checks the table
 (``mobcal.parameters``) and gives the job the directory ``<out_dir>/<name>/`` holding a copy of
 the input (under the name the output will echo), its ``mobcal.in``, the table rendered as
 ``parameters.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
@@ -40,6 +42,7 @@ the callbacks.
     jobs = [Job(Path("choline.mfj"), gas, 5013489, Path("runs")) for gas in ("he", "n2")]
     summary = run_many(jobs, workers=2, progress=print)
     split = run_one(Job(Path("choline.mfj"), "he", 5013489, Path("runs"), split=8))
+    as_2012 = run_one(Job(Path("choline.mfj"), "he", 5013489, Path("runs"), generator="ranlux"))
 """
 
 from __future__ import annotations
@@ -64,7 +67,7 @@ from pathlib import Path
 import mobcal
 from mobcal import fortran, parameters
 from mobcal.io.block import BLOCKS_PER_SET, expected_names
-from mobcal.io.infile import DEFAULT_GENERATOR, FIELD_WIDTH, GENERATORS, InFile, InFileError
+from mobcal.io.infile import FIELD_WIDTH, GENERATORS, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
@@ -75,10 +78,14 @@ RECORD_JSON = "record.json"
 FALLBACK_STAGED_NAME = "input.mfj"  # for an input whose name would not fit the a30 field
 SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
-CSV_COLUMNS = ("name", "input", "gas", "seed", "status", "PA", "EHS", "TM", "sets", "seconds",
-               "output", "message")
+CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", "status", "PA", "EHS", "TM", "sets",
+               "seconds", "output", "message")
 BLOCK_GLOB = "block-*.dat"
 POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
+# The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
+# word is the 2012 run (ranlux), so a file written by hand or shipped means what it meant in
+# 2012; a job the driver writes draws from Philox, whose split runs are exact by construction.
+DEFAULT_RNG = "philox"
 
 Launcher = Callable[["Job"], Sequence[str]]
 """The command line to run for a job, in the job's directory. The default is the built binary
@@ -91,11 +98,11 @@ class Job:
     gas: str
     seed: int
     out_dir: Path
-    name: str | None = None  # the run directory's name; default <input stem>-<gas>-<seed>
+    name: str | None = None  # the run directory's name; default <stem>-<gas>-<seed>[-ranlux]
     staged_name: str | None = None  # the input's name inside the run directory
     split: int | None = None  # W: run this one calculation across W processes
     parameters: Path | None = None  # the element table; None is the package's for the gas
-    generator: str = DEFAULT_GENERATOR  # the random number generator: ranlux (2012) or philox
+    generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
@@ -113,7 +120,10 @@ class Job:
 
     @property
     def label(self) -> str:
-        return self.name or f"{self.input.stem}-{self.gas}-{self.seed}"
+        if self.name:
+            return self.name
+        rng = "" if self.generator == DEFAULT_RNG else f"-{self.generator}"
+        return f"{self.input.stem}-{self.gas}-{self.seed}{rng}"
 
     @property
     def run_dir(self) -> Path:
@@ -153,16 +163,17 @@ class Result:
     def record(self) -> dict:
         j = self.job
         return {"name": j.label, "input": str(j.input), "gas": j.gas, "seed": j.seed,
-                "split": j.split, "status": self.status, "message": self.message,
-                "returncode": self.returncode, "seconds": round(self.seconds, 2),
-                "output": str(self.output or ""), "cross_sections": self.cross_sections,
+                "rng": j.generator, "split": j.split, "status": self.status,
+                "message": self.message, "returncode": self.returncode,
+                "seconds": round(self.seconds, 2), "output": str(self.output or ""),
+                "cross_sections": self.cross_sections,
                 "conformers": self.conformers, "parameters": self.parameters.get("name"),
                 "parameters_sha256": self.parameters.get("sha256")}
 
     def row(self) -> dict[str, object]:
         cs = self.cross_sections
         return {"name": self.job.label, "input": str(self.job.input), "gas": self.job.gas,
-                "seed": self.job.seed, "status": self.status,
+                "seed": self.job.seed, "rng": self.job.generator, "status": self.status,
                 "PA": cs.get("PA", ""), "EHS": cs.get("EHS", ""), "TM": cs.get("TM", ""),
                 "sets": len(self.conformers) if self.ok else "",
                 "seconds": round(self.seconds, 1), "output": str(self.output or ""),

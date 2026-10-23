@@ -66,6 +66,7 @@ def test_the_captured_input_is_the_generated_one(stem):
     out = OutFile(_fixture(stem))
     assert out.ok and out.coordinate_sets == 2 and out.input_name == probe.INPUT
     assert out.seed == probe.SEED and len(out.conformers) == 2
+    assert out.generator == probe.GENERATOR
 
 
 @pytest.mark.parametrize("gas", fortran.GASES)
@@ -166,7 +167,7 @@ def test_the_probe_output_is_byte_identical_to_the_2012_chains(binaries, tmp_pat
     gas, drop = probe.INPUTS[stem]
     proc, out = _run(binaries[gas], tmp_path, gas, probe.all_elements(gas, drop))
     assert proc.returncode == 0, out.last_line
-    assert out.text == _fixture(stem)
+    assert out.generator == probe.GENERATOR and out.text == _fixture(stem)
 
 
 def test_nitrogen_with_silicon_differs_from_2012_in_set_2_only(binaries, tmp_path):

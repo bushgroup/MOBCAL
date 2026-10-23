@@ -18,6 +18,9 @@ from mobcal import parameters
 from mobcal.io.block import BLOCKS_PER_SET
 
 SEED = 5013489
+# The fixtures were captured under the 2012 generator, so the run file carries no generator
+# word: the program's own default, RANLUX, whatever the driver's default is.
+GENERATOR = "ranlux"
 WORKER = (BLOCKS_PER_SET, BLOCKS_PER_SET)  # the last worker of 400: one block per set
 INPUT = "probe.mfj"  # the name the output echoes, so the fixtures carry it
 OUTPUT = "out.txt"
