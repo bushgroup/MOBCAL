@@ -14,7 +14,8 @@ The runs go through the driver, ``mobcal.run.run_many``, from the session's ``po
 (``conftest.py``): all the selected gases in one batch with one worker each, so a session that
 asks for both gases waits for the longer one and not for their sum. Helium is minutes and runs
 by default; nitrogen is about an hour and carries the ``nitrogen`` marker, deselected unless
-asked for (``uv run pytest -m nitrogen``; ``-m ""`` for both).
+asked for (``uv run pytest -m nitrogen``; ``-m ""`` for both). One cycle of the nitrogen run is
+checked in every session by ``test_nitrogen_cycle.py``.
 """
 
 from __future__ import annotations

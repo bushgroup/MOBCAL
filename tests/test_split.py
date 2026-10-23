@@ -14,8 +14,9 @@ combining run's (which repeats the b2max search, where the only trajectories it 
 plus each worker's beyond those.
 
 W = 1 is the block files' round trip; W = 3 is uneven shares (134, 133, 133 blocks) and three
-interleaved streams. Both run in every session with gfortran. Larger W and nitrogen are
-measured in the lab record and are not CI's business.
+interleaved streams. Both run in every session with gfortran. Larger W and nitrogen split runs
+are measured in the lab record and are not CI's business; ``test_nitrogen_cycle.py`` runs one
+nitrogen worker alone against the 2012 reference.
 """
 
 from __future__ import annotations
@@ -32,12 +33,11 @@ from mobcal.io.outfile import OutFile
 from mobcal.run import OUTPUT_NAME, Job, run_many, run_one
 
 ENERGY = [re.compile(r"^ energy not conserved:"), re.compile(r"^ gst2 = .*theta = ")]
-PROVENANCE = re.compile(r"^ blocks of imp trajectories: ")
 
 
 def shared(lines: list[str]) -> list[str]:
     """The lines a combining run and a serial run must agree on."""
-    return gate.deterministic(lines, ENERGY + [PROVENANCE])
+    return gate.deterministic(lines, ENERGY + [gate.PROVENANCE])
 
 
 def diagnostics(lines: list[str]) -> Counter[str]:
@@ -45,11 +45,6 @@ def diagnostics(lines: list[str]) -> Counter[str]:
     pairs = [lines[i] + "\n" + lines[i + 1] for i in range(len(lines) - 1)
              if ENERGY[0].search(lines[i]) and ENERGY[1].search(lines[i + 1])]
     return Counter(pairs)
-
-
-def provenance(integrated: int, read: int, empty: int, me: int, total: int) -> str:
-    return (f" blocks of imp trajectories: integrated{integrated:4d}, read from files{read:4d},"
-            f" empty{empty:4d} (worker{me:3d} of{total:3d})")
 
 
 def failed_count(out: OutFile) -> int:
@@ -67,14 +62,14 @@ def test_a_split_run_reproduces_the_serial_output(pool, W):
     a, b = shared(serial.lines), shared(combined.lines)
     assert a == b, "\n".join(difflib.unified_diff(a, b, "serial", f"W={W}", lineterm=""))
     assert combined.cross_sections == serial.cross_sections
-    assert provenance(0, BLOCKS_PER_SET, 0, 0, W) in combined.lines
+    assert gate.provenance(0, BLOCKS_PER_SET, 0, 0, W) in combined.lines
 
     seen = diagnostics(combined.lines)
     conserved = Counter(seen)
     for w in range(1, W + 1):
         worker = OutFile.read(r.job.worker_dir(w) / OUTPUT_NAME)
         mine = len(expected_names(1, W, w))
-        assert provenance(mine, 0, BLOCKS_PER_SET - mine, w, W) in worker.lines
+        assert gate.provenance(mine, 0, BLOCKS_PER_SET - mine, w, W) in worker.lines
         conserved += diagnostics(worker.lines) - seen
     assert conserved == diagnostics(serial.lines)
 

@@ -3,8 +3,10 @@ name: ci
 # Does it build, and does it still compute the 2012 numbers: the 2012 Fortran compiled on Linux,
 # macOS and Windows with the recipe in mobcal.fortran (this file does not restate the flags), the
 # self-check and the tests run, and both binaries kept as artifacts. tools/check_public.py fails
-# on any compiler warning. The tests include the helium regression gate, a few minutes; the
-# nitrogen gate, about an hour, runs weekly and on a manual dispatch that asks for it.
+# on any compiler warning. The tests include the helium regression gate, a few minutes, and the
+# nitrogen program's one-cycle check, choline as worker 10 of 10 against cycle 10 of the 2012
+# reference, a tenth of the nitrogen gate run alongside helium's. The whole nitrogen gate, about
+# an hour, runs weekly and on a manual dispatch that asks for it.
 #
 # Then the installable program, from those artifacts: the Windows installer and the macOS and
 # Linux archives, each installed or unpacked where no compiler or Python is visible and run
@@ -98,7 +100,7 @@ jobs:
         run: uv run tools/check_public.py
 
       # MOBCAL_REQUIRE_GFORTRAN turns the regression gate's no-compiler skip into a failure.
-      - name: Tests, with the helium regression gate
+      - name: Tests, with the helium regression gate and one nitrogen cycle
         env:
           MOBCAL_REQUIRE_GFORTRAN: "1"
         run: uv run pytest -ra

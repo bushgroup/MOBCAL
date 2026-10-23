@@ -169,9 +169,18 @@ from the energy-conservation diagnostics, which the process that integrated the 
 trajectory prints, and the one line that marks a combined output as combined; the diagnostics
 themselves must be conserved across the workers.
 
-Both runs go through the same driver as `mobcal run`, and when both gases are selected they run
-at the same time. The helium comparison takes about 3 minutes and runs with every
-`uv run pytest`. The nitrogen comparison takes about an hour and runs only when asked for:
+To check the nitrogen program in every run of the suite without the hour its full comparison
+takes, a fifth test runs a tenth of it. The 2012 calculation is ten cycles of 40,000
+trajectories, and a calculation split across ten processes gives the tenth process exactly the
+trajectories of cycle 10, drawn from the random number stream where the nine cycles before it
+leave off. The test runs that one process on the choline input in nitrogen and requires its
+deterministic lines, and the cross section and inverse mobility it prints for cycle 10, to
+match the nitrogen reference character for character.
+
+The helium and full nitrogen comparisons go through the same driver as `mobcal run`, and the
+runs a session needs, the one-cycle nitrogen process included, run at the same time. The helium comparison takes
+about 3 minutes and the nitrogen cycle about 8, and both run with every `uv run pytest`. The
+full nitrogen comparison takes about an hour and runs only when asked for:
 
 ```
 uv run pytest -m nitrogen
