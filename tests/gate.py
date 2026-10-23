@@ -56,11 +56,13 @@ class WorkerRun:
 class Pool:
     """What the session built and ran: one binary per gas a selected test needs, the serial
     choline run per selected gas, the split choline runs in helium per selected worker count,
-    and the one-cycle worker run per gas checked that way."""
+    the one-cycle worker run per gas checked that way, and the choline runs in helium under
+    Philox per selected worker count (0 is the serial run)."""
     binaries: dict[str, Path]
     runs: dict[str, GateRun] = field(default_factory=dict)
     splits: dict[int, Result] = field(default_factory=dict)
     cycles: dict[str, WorkerRun] = field(default_factory=dict)
+    philox: dict[int, Result] = field(default_factory=dict)
 
     def launcher(self, job: Job) -> list[str]:
         return [str(self.binaries[job.gas])]

@@ -7,7 +7,9 @@ to any of them is a decision taken in the lab record, lands with new pins in the
 and counts its diff in the commit message. The 2012 numbers are untouched: no change alters a
 value the program computes, and the regression gate reproduces both 2012 outputs byte for byte.
 Both sources include ``mobcal_ljread.inc``, the reader of the element table that ``mobcal.run``
-renders into every run directory as ``parameters.tab``; it is pinned and recorded like them.
+renders into every run directory as ``parameters.tab``, and ``mobcal_rng.inc``, the
+counter-based generator the seed record of ``mobcal.in`` can select; both are pinned and
+recorded like them.
 
 The build recipe is also stated here and nowhere else. ``-fno-automatic`` is mandatory: the code
 relies on local variables keeping their values between calls, which g77 gave it by default. An
@@ -54,15 +56,17 @@ FORTRAN_DIR = ROOT / "fortran"
 
 GASES = ("he", "n2")
 SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
-INCLUDE = "mobcal_ljread.inc"  # included by both sources: the element-table reader
+# Included by both sources: the element-table reader, and the Philox4x32-10 generator.
+INCLUDES = ("mobcal_ljread.inc", "mobcal_rng.inc")
 
 # The 2012 files, as committed at bushgroup/MOBCAL-2012 tag v1.0 (commit 4f3be72) and copied
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
-# with the changes fortran/README.md lists under Changes, and the include they share.
+# with the changes fortran/README.md lists under Changes, and the includes they share.
 SHA256 = {
-    "mobcal_He.f": "3e3298f780b0bc8a4b6aa8e17bef34b32c9de0dbbf3a5cd0c46ceb540a8fac13",
-    "mobcal_N2.f": "4e3ae7160003b2310f87255f89cb00d247a323304773ae9b25bf372f6779f638",
+    "mobcal_He.f": "d8eeaacafe863e47f381195e09bf27f060b7a1730a52f9feb20fa6fe3441e755",
+    "mobcal_N2.f": "2a940158b2be032987ef4f0e0586a7a8b9e951e677bd9cbd355425bf2712fe5f",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
+    "mobcal_rng.inc": "16ac0098bfb55d79e3a23c9377fbae25596a3f3a3a2af813eb64793f7d69c9fe",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "5b7804c2fe64b28b1466f9d5df473014d8b623d44efb5674ca3ad78203bc3ecb",
     "sample-output/Choline_He.out":
@@ -277,8 +281,7 @@ def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
         "gas": gas,
         "source": SOURCE[gas],
         "source_sha256": _sha256(FORTRAN_DIR / SOURCE[gas]),
-        "include": INCLUDE,
-        "include_sha256": _sha256(FORTRAN_DIR / INCLUDE),
+        "includes": {inc: _sha256(FORTRAN_DIR / inc) for inc in INCLUDES},
         "sha256": _sha256(binary),
         "compiler": compiler_version(gfortran),
         "flags": flags(),
@@ -294,7 +297,7 @@ def _record(out_dir: Path, gas: str, binary: Path, gfortran: str) -> None:
 def verify_binaries(bin_dir: Path | None = None) -> list[str]:
     """One line per problem with the binaries in ``bin_dir`` (default ``binary_dir()``), checked
     against the ``build.json`` written when they were built. Empty means both binaries are
-    there, are the files that were built, were built from the pinned source and include, and
+    there, are the files that were built, were built from the pinned source and includes, and
     were built with ``-fno-automatic``."""
     d = bin_dir or binary_dir()
     m = read_manifest(d)
@@ -312,8 +315,9 @@ def verify_binaries(bin_dir: Path | None = None) -> list[str]:
             problems.append(f"{name}: sha256 differs from the one recorded when it was built")
         elif rec.get("source_sha256") != SHA256[SOURCE[gas]]:
             problems.append(f"{name}: built from a {SOURCE[gas]} that is not the pinned file")
-        elif rec.get("include_sha256") != SHA256[INCLUDE]:
-            problems.append(f"{name}: built from a {INCLUDE} that is not the pinned file")
+        elif any(rec.get("includes", {}).get(inc) != SHA256[inc] for inc in INCLUDES):
+            inc = next(i for i in INCLUDES if rec.get("includes", {}).get(i) != SHA256[i])
+            problems.append(f"{name}: built from a {inc} that is not the pinned file")
         elif "-fno-automatic" not in rec.get("flags", []):
             problems.append(f"{name}: built without -fno-automatic")
     return problems

@@ -4,8 +4,9 @@ The 2012 release of MOBCAL, with two additions and a few corrections. Six of the
 content of [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) at its tag `v1.0`,
 copied from those blobs on 2026-10-21 with LF line endings, plus the changes listed under Changes
 below: statements that let one calculation run as several processes, the reading of the element
-table from a file, and corrections to defects that leave every number the 2012 program printed
-unchanged. The seventh file is the element-table reader both sources include.
+table from a file, a second random number generator the run file can select, and corrections to
+defects that leave every number the 2012 program printed unchanged. The seventh and eighth files
+are the element-table reader and that generator, which both sources include.
 `mobcal.fortran.SHA256` pins each file as it is committed, and `tools/check_public.py` and the
 test suite compare. They are not edited casually: a change to any of them is a decision
 recorded elsewhere, lands with new pins and a new row below in the same commit, and counts its
@@ -16,6 +17,7 @@ diff line by line in the commit message.
 | `mobcal_He.f` | Fortran 77 source, helium |
 | `mobcal_N2.f` | Fortran 77 source, nitrogen |
 | `mobcal_ljread.inc` | The element-table reader, included by both sources (added 2026-10-22) |
+| `mobcal_rng.inc` | Philox4x32-10, the second random number generator, included by both sources (added 2026-10-22) |
 | `mobcal.in` | Run file: input file name, output file name, random seed, one per line |
 | `Choline.mfj` | The choline input used in the 2012 paper |
 | `sample-output/Choline_He.out` | The 2012 output for choline in helium |
@@ -42,6 +44,7 @@ nitrogen table that gave silicon iron's parameters from the second coordinate se
 | 2026-10-22 | `mobcal.in` +1, −1 | **The shipped run file names a neutral output.** Its second record was `temp.choline.n2.out` for both gases, so a helium run by hand wrote a file named for nitrogen. It is `choline.out`. Input, seed and output contents are unchanged; `mobcal run` writes its own run file and never read this one. |
 | 2026-10-22 | `mobcal_He.f` +13, −194; `mobcal_N2.f` +13, −235; `mobcal_ljread.inc` +186, new | **The element table is read from a file.** Each program assigned every atom its mass, Lennard-Jones well depth and radius and hard-sphere radius from a chain of `if(imass(iatom).eq.NN)` blocks, written once in `fcoord` and again in `ncoord`, with nitrogen's four combining constants assigned above each chain. Both chains and the constants are gone from both sources. In their place the main program calls `ljread` once, after it opens the output file and before it reads the input, and each reader calls `ljparm` per atom; both live in the new include. `ljread` reads `parameters.tab` from the working directory, the table `mobcal run` renders from the gas's data file: the format line, the kind in bytes of each column, in nitrogen the constants, the row count, and one row per element. Every token is read as text and converted by its column's kind, single or double precision, and promoted, so a literal the 2012 source spelled in single precision gives the number the compiled source gave; each well depth and radius is evaluated term for term as the 2012 statement evaluated it. `ljparm` looks an atom's key up and assigns the four quantities with the same final factors, and an atom whose key is not in the table meets the same format 602 refusal as before. The set's name and hash go to the screen; no output file gains a line, and the comments that stood over each chain travel with the numbers into the data files. A table that is missing, not of this format, for the other gas, of a kind the reader does not convert, longer than 100 rows or unreadable is refused with status 1 before anything is calculated. One number does move, and on purpose: in nitrogen, `ncoord`'s silicon block held iron's well depth and radius (0.0130 and 2.9120 where `fcoord`'s held 0.4020 and 4.2950), a copy error, so the second and later coordinate sets of a nitrogen input containing silicon were computed with iron's parameters; the table carries `fcoord`'s row and both readers now agree. Of the removed lines, 66 in helium and 81 in nitrogen are comments. Choline contains no silicon, and both choline outputs are unchanged. |
 | 2026-10-22 | `mobcal_He.f` +11, −28; `mobcal_N2.f` +11, −28 | **The dead RAND branch is gone.** `xrand` chose between RANLUX and the F77 `rand` intrinsic on `i5`, which the main program set to 1 and nothing changed, so the `rand` arm, the `call srand(i2)` that seeded it on every run, and the two `using RAND with seed integer` formats (604 in the main program and 617 in the SUMMARY) with their `if(i5.ne.1)` branches were never reached. They are removed: `xrand` calls RANLUX and returns, the banner and the SUMMARY print their RANLUX lines unconditionally, and `i5` keeps its name as the generator selector. Of the 28 lines removed per file, 16 are statements and 12 are comments; the 11 added are all comments, re-worded for one generator. `rluxgo` and the first draw are unchanged. No line of any output changes. |
+| 2026-10-22 | `mobcal_He.f` +65, −23; `mobcal_N2.f` +65, −23; `mobcal_rng.inc` +157, new | **A second random number generator, chosen by the run file.** The third record of `mobcal.in` is the seed integer followed by an optional word, `ranlux` or `philox`. The main program reads the record as a line and takes the seed and then the word from it with internal list-directed reads (`end=` for the bare record), sets `i5` to 1 or 2, and refuses any other word with status 1 before the element table or the input is read. At `ranlux` nothing differs: `rluxgo` is called and prints its lines, the banner and the SUMMARY print their RANLUX lines, `xrand` draws from RANLUX. At `philox`, `xrand` draws from Philox4x32-10 (Salmon, Moraes, Dror and Shaw, SC 2011, as the Random123 library defines it; the test suite holds the include to the library's known-answer vectors) in the new include: the key is (seed, 0), the counter is the running count of draws, draw n being counter block (n−1)/2 and its output words 0 and 1 or 2 and 3, and the uniform is 52 bits of the two words plus a half, (k + 1/2)/2^52, an odd multiple of 2^−53 that is never 0 or 1 and exact in double precision; the banner and the SUMMARY print `using Philox4x32-10 with seed integer =` where the RANLUX lines print (formats 604 and 617, the labels the removed RAND lines had), and `rluxgo` is not called. The draw count lives in the include's own common block; `i6` stays the 2012 call count. In a split run a worker at `philox` moves the count past another worker's block, 4·imp draws, instead of drawing through it with `rantate`; at `ranlux` the draw-through stays. The block file gains the generator as a fifth integer after the seed, and the reader refuses a block from the other generator as it refuses one from another seed, naming it in format 692. Of the 65 lines added per file 43 are statements and 22 comments; of the 23 removed, 9 are statements and 14 comments; the include is 157 lines, 70 of them comments. A run file without the word is the 2012 run: the choline gate holds in both gases. |
 
 ## What the 2012 release said about building
 
@@ -69,10 +72,12 @@ copies the input to the echoed name before running rather than editing either si
 
 `mobcal.in` as shipped names `Choline.mfj` as input, `choline.out` as output, and seed
 `5013489`, which is the seed the references were run at. The 2012 file named
-`temp.choline.n2.out` as output for both gases; the name is now neutral (Changes, above). A
-fourth record, `W w`, is read when present and makes the run one process of a split
-calculation, as the Changes table describes; `mobcal run --split W` writes it, and the shipped
-file does not carry it.
+`temp.choline.n2.out` as output for both gases; the name is now neutral (Changes, above). The
+seed may be followed on its record by the word `ranlux` or `philox`, naming the random number
+generator: RANLUX, the 2012 generator, or Philox4x32-10 (Changes, below); no word is `ranlux`,
+and any other word is refused before anything is calculated. A fourth record, `W w`, is read
+when present and makes the run one process of a split calculation, as the Changes table
+describes; `mobcal run --split W` writes it, and the shipped file does not carry it.
 
 ## The element tables
 

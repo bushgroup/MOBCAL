@@ -62,8 +62,9 @@ c     by Alexandre Shvartsburg.
 c
 c     XRAND/RANLUX are random number generators. RANLUX is the standard
 c     ranlux number generator of M. Luscher (code from F. James). XRAND
-c     is a function that calls RANLUX. (The 2012 code's other branch,
-c     the standard F77 RAND, was never selected and is removed.)
+c     is a function that calls RANLUX or, when the seed record of
+c     mobcal.in says philox, the Philox4x32-10 generator of
+c     mobcal_rng.inc, whose draws are addressed by their index.
 c
 c     FCOORD reads in the coordinates, integer masses, and partial charges.  
 c
@@ -85,6 +86,8 @@ c
       dimension tmc(100),tmm(100),ehsc(100),ehsm(100),
      ?pac(100),pam(100),asympp(100)
       character*30 filen1,filen2,unit,dchar,xlabel
+      character*80 rseed
+      character*8 gen
       parameter (len=1000)
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
@@ -107,7 +110,7 @@ c     information is now entered from a file
 c
 c     1. file for input
 c     2. file for output
-c     3. random number seed
+c     3. random number seed, then optionally ranlux or philox
 c
 c     filen1='gly3h1'
 c     filen2='temp.out'
@@ -118,7 +121,16 @@ c
       open(20,file='mobcal.in')
       read(20,'(a30)') filen1
       read(20,'(a30)') filen2
-      read(20,*) i2
+c
+c     the third record is the seed integer, followed by an optional
+c     word naming the generator, ranlux or philox; no word means
+c     ranlux, the 2012 generator
+c
+      read(20,'(a80)') rseed
+      read(rseed,*) i2
+      gen='ranlux'
+      read(rseed,*,end=19,err=19) idum,gen
+   19 continue
 c
 c     an optional fourth record, W w, makes this run worker w of W in a
 c     calculation split across W processes (w = 0 is the combining run
@@ -136,6 +148,17 @@ c
       if(iwtot.lt.0.or.iwme.lt.0.or.iwme.gt.iwtot) then
       write(8,640) iwtot,iwme
   640 format(1x,'bad split record in mobcal.in:',2i8)
+      close(8)
+      stop 1
+      endif
+      if(gen.eq.'ranlux') then
+      i5=1
+      else if(gen.eq.'philox') then
+      i5=2
+      else
+      write(8,641) gen(1:len_trim(gen))
+  641 format(1x,'random number generator ',a,' in mobcal.in is not ',
+     ?'ranlux or philox')
       close(8)
       stop 1
       endif
@@ -237,9 +260,10 @@ c
 c
 c     Define parameters for random number generator
 c
-c     i5 selects the generator XRAND draws from; 1 is RANLUX, the
-c     only one (the RAND branch was dead code). i2, i3, and i4 are seed
-c     integers. i3 and i4 (which are used to start RANLUX in a particular
+c     i5 selects the generator XRAND draws from, set above from the
+c     seed record: 1 is RANLUX, 2 is Philox4x32-10 (mobcal_rng.inc),
+c     and i2 is the seed of either. For RANLUX i3 and i4 (which are
+c     used to start RANLUX in a particular
 c     place) are usually set to zero. i1 contain the "luxury level" - how
 c     good the random number generator is. Values of 0 to 4 can be used
 c     and the default value in RANLUX is 3. At this level "any 
@@ -249,11 +273,16 @@ c
       i1=3
       i3=0
       i4=0
-      i5=1
+      if(i5.eq.1) then
       write(8,619) 
   619 format(/1x,'using RANLUX',/)
+      else
+      write(8,604) i2
+  604 format(/1x,'using Philox4x32-10 with seed integer =',i8,/)
+      endif
 c     initialize the random number generator
-      call rluxgo(i1,i2,i3,i4)
+      if(i5.eq.1) call rluxgo(i1,i2,i3,i4)
+      if(i5.eq.2) call rnginit(i2)
       hold=xrand()
 c
 c     Define parameters for POTENT
@@ -372,8 +401,10 @@ c
   608 format(1x,'using no charge - only LJ interactions')
       write(8,616) t
   616 format(1x,'temperature =',1pe11.4)
-      write(8,620) i2 
+      if(i5.eq.1) write(8,620) i2
   620 format(1x,'using RANLUX with seed integer =',i8)
+      if(i5.eq.2) write(8,617) i2
+  617 format(1x,'using Philox4x32-10 with seed integer =',i8)
 c
       if(icoord.gt.1) goto 9997
       write(8,636) asympp(1)
@@ -1760,18 +1791,23 @@ c
 c
 c     in a split calculation (fourth record of mobcal.in) this block of
 c     imp trajectories is integrated here only if it is this worker's;
-c     otherwise the random stream is drawn through it and its two sums
-c     are read from the file the worker that integrated it wrote
+c     otherwise the random stream is drawn through it (at Philox the
+c     draw count is moved past it, 4 draws per trajectory) and its two
+c     sums are read from the file the worker that integrated it wrote
 c
       kblk=(ig-1)*itn+ic
       ifbeg=ifailc
       write(fnblk,'(a,i3.3,a,i4.4,a)') 'block-',iic,'-',kblk,'.dat'
       if(iwtot.eq.0) goto 3990
       if(iwme.gt.0.and.mod(kblk-1,iwtot).eq.iwme-1) goto 3990
+      if(i5.eq.2) then
+      call rngskip(4*imp)
+      else
       do 3980 im=1,imp
       rnb=xrand()
       call rantate
  3980 continue
+      endif
       temp1=0.d0
       temp2=0.d0
       inquire(file=fnblk,exist=lblk)
@@ -1786,12 +1822,13 @@ c
       goto 3995
       endif
       open(16,file=fnblk,form='unformatted',status='old')
-      read(16) jset,jc,jg,jseed,temp1,temp2,ifblk
+      read(16) jset,jc,jg,jseed,jgen,temp1,temp2,ifblk
       close(16)
-      if(jset.ne.iic.or.jc.ne.ic.or.jg.ne.ig.or.jseed.ne.i2) then
-      write(8,692) fnblk,jset,jc,jg,jseed
+      if(jset.ne.iic.or.jc.ne.ic.or.jg.ne.ig.or.jseed.ne.i2.or.
+     ?jgen.ne.i5) then
+      write(8,692) fnblk,jset,jc,jg,jseed,jgen
   692 format(/1x,'file ',a,' is not this block: set',i4,' cycle',i3,
-     ?' point',i3,' seed',i10)
+     ?' point',i3,' seed',i10,' generator',i2)
       close(8)
       stop 1
       endif
@@ -1834,7 +1871,7 @@ c
  4000 continue
       if(iwtot.gt.0) then
       open(16,file=fnblk,form='unformatted')
-      write(16) iic,ic,ig,i2,temp1,temp2,ifailc-ifbeg
+      write(16) iic,ic,ig,i2,i5,temp1,temp2,ifailc-ifbeg
       close(16)
       icomp=icomp+1
       endif
@@ -2194,18 +2231,22 @@ c
       dimension rvec(10)
       common/xrandom/i1,i2,i3,i4,i5,i6
 c
-c     XRAND is a random number generator that uses RANLUX (i5=1;
-c     the 2012 code's other branch, the standard RAND subroutine of
-c     FORTRAN 77, was dead and is removed). i1 contains the luxury
-c     level (1-4, 4 is the highest, 3 is default in RANLUX). i2, i3,
-c     and i4 are seed integers. i3 and i4 will normally be zero.
+c     XRAND is a random number generator that uses RANLUX if i5=1
+c     and Philox4x32-10 (mobcal_rng.inc) if i5=2; i2 is the seed of
+c     either. For RANLUX i1 contains the luxury
+c     level (1-4, 4 is the highest, 3 is default in RANLUX) and i3
+c     and i4 are further seed integers, normally zero.
 c     RANLUX was downloaded from http://kumo.swcp.
 c     com/fortran/random2.f90. 
 c 
       i6=i6+1
-c
+c 
+      if(i5.eq.2) then
+      xrand=phiuni()
+      else
       call ranlux(rvec,1)
       xrand=rvec(1)
+      endif
       return
 c
       end
@@ -2670,3 +2711,4 @@ c
 c     ***************************************************************
 c
       include 'mobcal_ljread.inc'
+      include 'mobcal_rng.inc'

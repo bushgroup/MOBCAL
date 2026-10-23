@@ -8,7 +8,12 @@ and reads nothing else, so this file and the working directory are the whole int
 driver writes one per run.
 
 The seed reaches RANLUX through ``rluxgo``, which takes it as a positive default integer; the
-2012 references were produced at 5013489, the seed the shipped ``mobcal.in`` carries.
+2012 references were produced at 5013489, the seed the shipped ``mobcal.in`` carries. The seed
+may be followed on its record by a word naming the generator, ``ranlux`` or ``philox``: the
+2012 RANLUX, or Philox4x32-10, whose draws are addressed by index so that a split run seeks
+to its blocks instead of drawing through the others. No word is ``ranlux``, and the program
+refuses any other word before it calculates anything. The generator word is written only when
+it is not the default, so a default ``InFile`` is the 2012 run file byte for byte.
 
 The fourth record makes the run worker ``w`` of ``W``: it integrates the trajectory blocks
 with ``(k - 1) mod W == w - 1``, draws the random stream through the others, and writes each
@@ -24,6 +29,8 @@ from pathlib import Path
 NAME = "mobcal.in"
 FIELD_WIDTH = 30
 MAX_SEED = 2**31 - 1
+GENERATORS = ("ranlux", "philox")  # the words the program accepts on the seed record
+DEFAULT_GENERATOR = "ranlux"  # what no word means: the 2012 generator
 
 
 class InFileError(ValueError):
@@ -44,12 +51,15 @@ class InFile:
     output_name: str
     seed: int
     split: tuple[int, int] | None = None  # (W, w): worker w of W; w == 0 is the combining run
+    generator: str = DEFAULT_GENERATOR  # the word on the seed record: ranlux or philox
 
     def __post_init__(self) -> None:
         check_name(self.input_name, "input file name")
         check_name(self.output_name, "output file name")
         if not isinstance(self.seed, int) or not 1 <= self.seed <= MAX_SEED:
             raise InFileError(f"seed {self.seed!r}: a positive integer up to {MAX_SEED}")
+        if self.generator not in GENERATORS:
+            raise InFileError(f"generator {self.generator!r}: one of {' or '.join(GENERATORS)}")
         if self.split is not None:
             try:
                 total, me = self.split
@@ -61,7 +71,8 @@ class InFile:
                 raise InFileError(f"split {self.split!r}: (W, w) with W >= 1 and 0 <= w <= W")
 
     def text(self) -> str:
-        text = f"{self.input_name}\n{self.output_name}\n{self.seed}\n"
+        word = "" if self.generator == DEFAULT_GENERATOR else f" {self.generator}"
+        text = f"{self.input_name}\n{self.output_name}\n{self.seed}{word}\n"
         if self.split is not None:
             text += f"{self.split[0]} {self.split[1]}\n"
         return text
@@ -78,10 +89,12 @@ class InFile:
         lines = text.splitlines()
         if len(lines) < 3:
             raise InFileError(f"{len(lines)} lines; the program reads three")
+        words = lines[2].split()
         try:
-            seed = int(lines[2].split()[0])
+            seed = int(words[0])
         except (IndexError, ValueError):
             raise InFileError(f"seed line {lines[2]!r} is not an integer") from None
+        generator = words[1] if len(words) > 1 else DEFAULT_GENERATOR  # as the program reads it
         split = None
         rest = [s for s in lines[3:] if s.strip()]
         if rest:
@@ -91,7 +104,7 @@ class InFile:
                 raise InFileError(f"split record {rest[0]!r} is not two integers") from None
             split = (total, me)
         return cls(lines[0][:FIELD_WIDTH].rstrip(" "), lines[1][:FIELD_WIDTH].rstrip(" "), seed,
-                   split)
+                   split, generator)
 
     @classmethod
     def read(cls, path: Path) -> InFile:

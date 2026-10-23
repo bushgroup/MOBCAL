@@ -7,11 +7,13 @@ cycle-major, but the shares are dealt by this index so that a worker's blocks mi
 points: a block's cost rises steeply at low velocity, and dealing in stream order pinned each
 worker to fixed points whenever W divided the 40. A worker
 writes ``block-<set>-<k>.dat`` for each block it integrated, as one Fortran 77 unformatted
-sequential record: the set, the cycle, the point and the seed as default integers (the reader in
-the program checks all four before it accepts the block), the block's two sums ``temp1`` and
-``temp2`` as the REAL*8 they were accumulated in, and the number of energy-conservation failures
-among its trajectories. gfortran frames the record with a 4-byte length before and after, so
-the file is 44 bytes, little-endian on every platform the package runs on.
+sequential record: the set, the cycle, the point, the seed and the generator (1 RANLUX, 2
+Philox4x32-10) as default integers (the reader in the program checks all five before it
+accepts the block: a block drawn from the other generator's stream is not this block), the
+block's two sums ``temp1`` and ``temp2`` as the REAL*8 they were accumulated in, and the number
+of energy-conservation failures among its trajectories. gfortran frames the record with a
+4-byte length before and after, so the file is 48 bytes, little-endian on every platform the
+package runs on.
 
 The driver reads these for progress and never does arithmetic on them: the combination of the
 blocks is done by the program itself, so that it is the serial calculation's own statements that
@@ -24,12 +26,16 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 
+from mobcal.io.infile import DEFAULT_GENERATOR, GENERATORS
+
 CYCLES = 10  # itn
 POINTS = 40  # inp
 BLOCKS_PER_SET = CYCLES * POINTS
 
-_RECORD = struct.Struct("<i4i2di i")  # length, set/cycle/point/seed, temp1/temp2, failures, length
+# length, set/cycle/point/seed/generator, temp1/temp2, failures, length
+_RECORD = struct.Struct("<i5i2di i")
 PAYLOAD = _RECORD.size - 8
+GENERATOR_CODE = {name: i + 1 for i, name in enumerate(GENERATORS)}  # i5 in the program
 
 
 class BlockError(ValueError):
@@ -60,6 +66,11 @@ class Block:
     temp1: float
     temp2: float
     failures: int
+    generator: str = DEFAULT_GENERATOR
+
+    def __post_init__(self) -> None:
+        if self.generator not in GENERATOR_CODE:
+            raise BlockError(f"generator {self.generator!r}: one of {' or '.join(GENERATORS)}")
 
     @property
     def k(self) -> int:
@@ -78,7 +89,8 @@ class Block:
         """Write the record as the program would (for the stand-in binary and for tests)."""
         path = Path(directory) / self.name
         path.write_bytes(_RECORD.pack(PAYLOAD, self.coordinate_set, self.cycle, self.point,
-                                      self.seed, self.temp1, self.temp2, self.failures, PAYLOAD))
+                                      self.seed, GENERATOR_CODE[self.generator], self.temp1,
+                                      self.temp2, self.failures, PAYLOAD))
         return path
 
     @classmethod
@@ -86,7 +98,10 @@ class Block:
         data = Path(path).read_bytes()
         if len(data) != _RECORD.size:
             raise BlockError(f"{path}: {len(data)} bytes, not {_RECORD.size}")
-        head, s, c, p, seed, t1, t2, nf, tail = _RECORD.unpack(data)
+        head, s, c, p, seed, gen, t1, t2, nf, tail = _RECORD.unpack(data)
         if head != PAYLOAD or tail != PAYLOAD:
             raise BlockError(f"{path}: record markers {head}, {tail}; expected {PAYLOAD}")
-        return cls(s, c, p, seed, t1, t2, nf)
+        names = {code: name for name, code in GENERATOR_CODE.items()}
+        if gen not in names:
+            raise BlockError(f"{path}: generator code {gen}; expected one of {sorted(names)}")
+        return cls(s, c, p, seed, t1, t2, nf, names[gen])

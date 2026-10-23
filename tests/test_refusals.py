@@ -44,21 +44,29 @@ def _chain(sets: int, atoms: int) -> str:
     return "\n".join(["chain", str(sets), str(atoms), "ang", "calc", "1.0000", *rows]) + "\n"
 
 
-# (input, fourth mobcal.in record or None, the output's last non-blank line, stripped)
+# (input, the records of mobcal.in after the two names, the output's last non-blank line)
 REFUSALS = {
     # The array bounds: 100 coordinate sets (the main program's dimension tmc(100)) and 1,000
     # atoms (parameter len). At both bounds the input is accepted and runs on to the bromine,
     # which is atom 1000 and prints as such under format 602's i4.
-    "sets over": (_chain(101, 2), None, "number of coordinate sets exceeds the limit of 100"),
-    "atoms over": (_chain(1, 1001), None, "number of atoms exceeds the limit of 1000"),
-    "both at bound": (_chain(100, 1000), None, "type not defined for atom number1000"),
-    "units": (_HBR.format(**{**_OK, "unit": "nm"}), None,
+    "sets over": (_chain(101, 2), ["1"], "number of coordinate sets exceeds the limit of 100"),
+    "atoms over": (_chain(1, 1001), ["1"], "number of atoms exceeds the limit of 1000"),
+    "both at bound": (_chain(100, 1000), ["1"], "type not defined for atom number1000"),
+    "units": (_HBR.format(**{**_OK, "unit": "nm"}), ["1"],
               "units not specified"),
-    "charge": (_HBR.format(**{**_OK, "charge": "some"}), None,
+    "charge": (_HBR.format(**{**_OK, "charge": "some"}), ["1"],
                "charge distribution not specified"),
-    "element": (_HBR.format(**_OK), None, "type not defined for atom number   1"),
-    "split record": (_HBR.format(**_OK), "2 3",
+    "element": (_HBR.format(**_OK), ["1"], "type not defined for atom number   1"),
+    "split record": (_HBR.format(**_OK), ["1", "2 3"],
                      "bad split record in mobcal.in:       2       3"),
+    # The generator word on the seed record: ranlux or philox, nothing else, and it is refused
+    # before the element table or the input is read.
+    "generator word": (_HBR.format(**_OK), ["1 mersenne"],
+                       "random number generator mersenne in mobcal.in is not ranlux or philox"),
+    "generator case": (_HBR.format(**_OK), ["1 Philox"],
+                       "random number generator Philox in mobcal.in is not ranlux or philox"),
+    "generator long": (_HBR.format(**_OK), ["1 philox4x32-10"],
+                       "random number generator philox4x in mobcal.in is not ranlux or philox"),
 }
 
 
@@ -118,20 +126,23 @@ def test_the_normal_end_is_the_only_bare_stop(gas):
     assert {code for j, code in stops.items() if j != i} == {"1"}
 
 
-def test_every_stop_of_the_table_reader_exits_1():
-    lines = _statements(fortran.INCLUDE)
-    stops = [m.group(1).strip() for s in lines if (m := _STOP.search(s[6:]))]
-    assert stops and set(stops) == {"1"}
+def test_every_stop_of_the_includes_exits_1():
+    stops = {}
+    for inc in fortran.INCLUDES:
+        lines = _statements(inc)
+        stops[inc] = [m.group(1).strip() for s in lines if (m := _STOP.search(s[6:]))]
+    assert stops["mobcal_ljread.inc"] and set(stops["mobcal_ljread.inc"]) == {"1"}
+    assert stops["mobcal_rng.inc"] == []  # the generator refuses nothing
 
 
 @pytest.mark.parametrize("case", REFUSALS)
 def test_a_refusal_exits_1(pool, tmp_path, case):
-    text, split, last = REFUSALS[case]
+    text, records, last = REFUSALS[case]
     for gas, binary in pool.binaries.items():
         d = tmp_path / gas
         d.mkdir()
         (d / "in.mfj").write_text(text, encoding="latin-1", newline="\n")
-        run = ["in.mfj", "out.txt", "1"] + ([split] if split else [])
+        run = ["in.mfj", "out.txt", *records]
         (d / "mobcal.in").write_text("\n".join(run) + "\n", encoding="latin-1", newline="\n")
         parameters.shipped(gas).render(d)
         proc = subprocess.run([str(binary)], cwd=d, capture_output=True, timeout=60,
@@ -139,6 +150,8 @@ def test_a_refusal_exits_1(pool, tmp_path, case):
         out = OutFile.read(d / "out.txt")
         assert proc.returncode == 1, (gas, proc.returncode, out.last_line)
         assert out.last_line == last and not out.ok, (gas, out.lines[-3:])
+        if case.startswith("generator"):
+            assert out.lines == [" " + last]  # before the table and the input are read
 
 
 @pytest.mark.parametrize("case", TABLE_REFUSALS)

@@ -2,9 +2,10 @@
 
 Run as ``python fake_mobcal.py GAS`` in a directory holding ``mobcal.in``, exactly as the driver
 runs the real binary: it reads the records, opens the input file named there, and writes the
-output file named there. Like the program once it reads its element table from the run
-directory, it refuses, exit 1, when ``parameters.tab`` is missing or rendered for the other
-gas. What it writes is chosen by the input file's first line, its label:
+output file named there. Like the program, it refuses, exit 1, a generator word on the seed
+record that is not ``ranlux`` or ``philox``, and it refuses when ``parameters.tab`` is missing
+or rendered for the other gas; at ``philox`` it prints the program's Philox line in place of
+the RANLUX ones. What it writes is chosen by the input file's first line, its label:
 
     ok           a complete output ending in a SUMMARY block; the cross sections are a function
                  of the seed, so a result can be traced to its job (``TM = 50 + seed % 7``,
@@ -39,10 +40,16 @@ from mobcal.io.block import BLOCKS_PER_SET, Block, block_name, owned
 def main() -> int:
     gas = sys.argv[1] if len(sys.argv) > 1 else "he"
     records = Path("mobcal.in").read_text(encoding="latin-1").splitlines()
-    inp, out, seed = records[0].strip(), records[1].strip(), int(records[2])
+    inp, out = records[0].strip(), records[1].strip()
+    seed_record = records[2].split()
+    seed = int(seed_record[0])
+    generator = seed_record[1] if len(seed_record) > 1 else "ranlux"
     split = tuple(int(x) for x in records[3].split()[:2]) if len(records) > 3 else None
     table = Path("parameters.tab")
     head = table.read_text(encoding="ascii").split()[:3] if table.is_file() else []
+    if generator not in ("ranlux", "philox"):
+        return write(out, [f" random number generator {generator} in mobcal.in is not ranlux or "
+                           "philox"], 1)
     if head != ["MOBCAL-LJ", "1", {"he": "He", "n2": "N2"}[gas]]:
         return write(out, [" no parameters.tab for this gas in the run directory"], 1)
     label = Path(inp).read_text(encoding="latin-1").splitlines()[0].strip()
@@ -64,8 +71,13 @@ def main() -> int:
     if mode == "refuse":
         lines.append(" type not defined for atom number   1")
         return write(out, lines, 1)
-    lines += [" mass of ion = 1.0417E+02", " RANLUX INITIALIZED BY RLUXGO FROM SEEDS"
-              f" {seed} 0 0", f" using RANLUX with seed integer ={seed:8d}"]
+    if generator == "ranlux":
+        banner = [" RANLUX INITIALIZED BY RLUXGO FROM SEEDS" f" {seed} 0 0"]
+        seed_line = f" using RANLUX with seed integer ={seed:8d}"
+    else:
+        banner = []
+        seed_line = f" using Philox4x32-10 with seed integer ={seed:8d}"
+    lines += [" mass of ion = 1.0417E+02", *banner, seed_line]
     if mode == "crash":
         return write(out, lines, 3)
 
@@ -80,7 +92,7 @@ def main() -> int:
                             kk for kk in range(1, BLOCKS_PER_SET + 1) if owned(kk, total, me)):
                         continue
                     Block(s, *Block.cycle_point(k), seed,
-                          (seed % 1000 + s + k) / 1e3, 0.5, 0).write(Path("."))
+                          (seed % 1000 + s + k) / 1e3, 0.5, 0, generator).write(Path("."))
                     done += 1
                 elif Path(block_name(s, k)).is_file():
                     read_blocks += 1
@@ -98,7 +110,7 @@ def main() -> int:
     pa, ehs = tm + 5.5, tm + 8
     lines += ["", "", "", " SUMMARY", "", " program version = junkn.f",
               f" input file name = {inp:<30}", f" input file label = {label:<30}",
-              " temperature = 3.0100E+02", f" using RANLUX with seed integer ={seed:8d}"]
+              " temperature = 3.0100E+02", seed_line]
     if mode == "ok":
         if gas == "he":
             lines += ["", " mobility calculation by MOBIL4 (HS scattering)",

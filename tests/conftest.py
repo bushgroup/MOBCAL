@@ -2,8 +2,9 @@
 runs' wall times, printed at the end of the session.
 
 The pool builds each gas the session's tests ask for, then runs every real choline calculation
-they need in one ``run_many`` batch: the serial run per gas for the regression gate, and the
-split runs in helium for the exactness tests, each on its own processes. The one-cycle nitrogen
+they need in one ``run_many`` batch: the serial run per gas for the regression gate, the
+split runs in helium for the exactness tests, and the helium runs under Philox, serial and
+split, for the generator's own exactness tests, each on its own processes. The one-cycle nitrogen
 check's worker, for which ``mobcal.run`` has no mode (a split job runs all W workers and the
 combining run), is started directly before the batch and waited for after it. Everything that
 needs gfortran waits for the longest of them, not for their sum. Without gfortran the pool
@@ -71,6 +72,13 @@ def selected_splits(session) -> list[int]:
     return sorted(_params(session, "W"))
 
 
+def selected_philox(session) -> list[int]:
+    """The Philox choline runs the collected tests ask for, by worker count (0 is serial), the
+    serial run included whenever any is asked for since each split is compared with it."""
+    wanted = _params(session, "WP")
+    return sorted(wanted | {0}) if wanted else []
+
+
 def selected_cycles(session) -> list[str]:
     """The gases whose one-cycle check a collected test asks for (the ``n2_cycle`` fixture)."""
     names = {n for item in session.items for n in getattr(item, "fixturenames", ())}
@@ -112,7 +120,8 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
     gases = selected_gases(request.session)
     splits = selected_splits(request.session)
     cycles = selected_cycles(request.session)
-    if splits and "he" not in gases:
+    philox = selected_philox(request.session)
+    if (splits or philox) and "he" not in gases:
         gases = ["he", *gases]
     built = [g for g in fortran.GASES if g in gases or g in cycles]
     binaries = {g: fortran.build(g, tmp_path_factory.mktemp(f"bin-{g}"), gfortran).binary
@@ -126,6 +135,9 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
             for g in gases]
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"split-{w}",
                  staged_name=refs["he"].input_name, split=w) for w in splits]
+    jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"philox-{w}",
+                 staged_name=refs["he"].input_name, split=w or None, generator="philox")
+             for w in philox]
     # Nitrogen's one cycle is the longest run of a default session, so it starts first.
     workers = [_Worker(binaries[g], g, refs[g], tmp_path_factory.mktemp(f"cycle-{g}"))
                for g in cycles]
@@ -135,7 +147,9 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
             run_times[r.job.label] = r.seconds
             log = (r.job.run_dir / LOG_NAME).read_text(errors="replace")[-2000:]
             assert r.ok, f"{r.job.label}: {r.message}\n{log}"
-            if r.job.split:
+            if r.job.generator == "philox":
+                p.philox[r.job.split or 0] = r
+            elif r.job.split:
                 p.splits[r.job.split] = r
             else:
                 p.runs[r.job.gas] = gate.GateRun(r.job.gas, refs[r.job.gas],

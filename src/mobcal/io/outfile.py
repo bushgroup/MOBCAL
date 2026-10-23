@@ -162,4 +162,15 @@ class OutFile:
     @property
     def seed(self) -> int | None:
         s = self.summary.get("using RANLUX with seed integer")
+        if s is None:
+            s = self.summary.get("using Philox4x32-10 with seed integer")
         return int(s) if s is not None else None
+
+    @property
+    def generator(self) -> str | None:
+        """``ranlux`` or ``philox``, from the SUMMARY's seed line; None without a SUMMARY."""
+        if "using RANLUX with seed integer" in self.summary:
+            return "ranlux"
+        if "using Philox4x32-10 with seed integer" in self.summary:
+            return "philox"
+        return None

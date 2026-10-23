@@ -9,8 +9,9 @@ output without the SUMMARY block that is the evidence the calculation completed,
 last line the file holds as its message (``type not defined for atom number``, ``units not
 specified``, ``masses do not add up``).
 
-A ``Job`` is one calculation: an input file, a gas and a seed, and the element table to use,
-the package's own for the gas unless the job names another. ``run_one`` checks the table
+A ``Job`` is one calculation: an input file, a gas and a seed, the element table to use, the
+package's own for the gas unless the job names another, and the random number generator,
+RANLUX as in 2012 unless the job says ``philox``. ``run_one`` checks the table
 (``mobcal.parameters``) and gives the job the directory ``<out_dir>/<name>/`` holding a copy of
 the input (under the name the output will echo), its ``mobcal.in``, the table rendered as
 ``parameters.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
@@ -23,7 +24,8 @@ list of jobs with a cap on how many are in flight, calls back as each lands, and
 A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
 it integrates its share of the 400 trajectory blocks per coordinate set, draws the random
-stream through the rest, and writes a file per block it integrated. When every worker has
+stream through the rest (or, at ``philox``, moves the draw count past them), and writes a file
+per block it integrated. When every worker has
 landed and every block it owed is on disk, the block files are copied into the run directory
 and the program runs there once more as the combining run (``W 0``): it integrates nothing,
 reads the blocks back, and makes the sums, the averages and the SUMMARY with its own
@@ -62,7 +64,7 @@ from pathlib import Path
 import mobcal
 from mobcal import fortran, parameters
 from mobcal.io.block import BLOCKS_PER_SET, expected_names
-from mobcal.io.infile import FIELD_WIDTH, InFile, InFileError
+from mobcal.io.infile import DEFAULT_GENERATOR, FIELD_WIDTH, GENERATORS, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
@@ -93,10 +95,13 @@ class Job:
     staged_name: str | None = None  # the input's name inside the run directory
     split: int | None = None  # W: run this one calculation across W processes
     parameters: Path | None = None  # the element table; None is the package's for the gas
+    generator: str = DEFAULT_GENERATOR  # the random number generator: ranlux (2012) or philox
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
             raise ValueError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
+        if self.generator not in GENERATORS:
+            raise ValueError(f"generator must be one of {GENERATORS}, not {self.generator!r}")
         if self.split is not None and not (isinstance(self.split, int)
                                            and 1 <= self.split <= BLOCKS_PER_SET):
             raise ValueError(f"split must be a worker count from 1 to {BLOCKS_PER_SET}, "
@@ -191,7 +196,7 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     for p in d.glob(BLOCK_GLOB):
         p.unlink()
     shutil.copyfile(job.input, d / job.staged)
-    InFile(job.staged, OUTPUT_NAME, job.seed, split).write(d)
+    InFile(job.staged, OUTPUT_NAME, job.seed, split, job.generator).write(d)
     pset.render(d)
 
 
@@ -253,7 +258,7 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     except ParameterError as e:
         return _failed(job, f"parameters refused: {e}")
     try:
-        InFile(job.staged, OUTPUT_NAME, job.seed)
+        InFile(job.staged, OUTPUT_NAME, job.seed, generator=job.generator)
     except InFileError as e:
         return _failed(job, str(e))
     try:
@@ -373,7 +378,7 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
         "binary": {"gas": j.gas, "path": str(exe), "command": list(command), "build": build},
         "input": {"path": str(j.input), "staged_name": j.staged, "sha256": _sha256(j.input),
                   "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
-        "mobcal_in": {"seed": j.seed, "split": j.split},
+        "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split},
         "parameters": r.parameters,
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(r.seconds, 2),

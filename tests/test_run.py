@@ -249,7 +249,7 @@ def test_a_split_run_renders_into_every_directory(tmp_path):
     for w in (1, 2, 3):
         assert (job.worker_dir(w) / parameters.RENDERED).read_bytes() == want
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
-    assert rec["mobcal_in"] == {"seed": 3, "split": 3}
+    assert rec["mobcal_in"] == {"seed": 3, "generator": "ranlux", "split": 3}
 
 
 def test_the_record_of_a_run(tmp_path):
@@ -263,7 +263,7 @@ def test_the_record_of_a_run(tmp_path):
     assert rec["input"] == {"path": str(inp), "staged_name": "ok.mfj",
                             "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
                             "atoms": 21, "coordinate_sets": 1}
-    assert rec["mobcal_in"] == {"seed": 5013489, "split": None}
+    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "ranlux", "split": None}
     assert rec["parameters"] == parameters.shipped("n2").record()
     assert rec["parameters"]["rendered"] == "parameters.tab"
     assert (rec["status"], rec["returncode"], rec["message"]) == ("ok", 0, "")
@@ -318,3 +318,20 @@ def test_the_summary_names_each_runs_table(tmp_path):
                                                                      shipped.sha256)
     assert runs[1]["parameters"] == "my helium"
     assert runs[1]["parameters_sha256"] == hashlib.sha256(mine.read_bytes()).hexdigest()
+
+
+def test_a_job_under_philox(tmp_path):
+    inp = write_input(tmp_path / "ok.mfj", "ok")
+    job = Job(inp, "he", 5013489, tmp_path / "runs", generator="philox")
+    r = run_one(job, launcher)
+    assert r.ok, r.message
+    d = job.run_dir
+    assert (d / "mobcal.in").read_bytes() == b"ok.mfj\nmobcal.out\n5013489 philox\n"
+    assert InFile.read(d / "mobcal.in") == InFile("ok.mfj", "mobcal.out", 5013489,
+                                                  generator="philox")
+    out = OutFile.read(r.output)
+    assert out.seed == 5013489 and out.generator == "philox"
+    rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
+    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
+    with pytest.raises(ValueError, match="generator must be one of"):
+        Job(inp, "he", 1, tmp_path, generator="rand")

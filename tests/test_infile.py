@@ -1,15 +1,38 @@
-"""mobcal.io.infile: the three records, the a30 limit on the two names, the seed, the split."""
+"""mobcal.io.infile: the three records, the a30 limit on the two names, the seed, the generator
+word, the split."""
 
 import pytest
 
 from mobcal import fortran
-from mobcal.io.infile import MAX_SEED, InFile, InFileError
+from mobcal.io.infile import GENERATORS, MAX_SEED, InFile, InFileError
 
 
 def test_the_shipped_run_file():
     i = InFile.read(fortran.FORTRAN_DIR / "mobcal.in")
     assert i == InFile("Choline.mfj", "choline.out", 5013489)
-    assert i.split is None
+    assert i.split is None and i.generator == "ranlux"
+
+
+def test_the_generator_word(tmp_path):
+    assert GENERATORS == ("ranlux", "philox")
+    i = InFile("Choline_pop.mfj", "mobcal.out", 5013489, generator="philox")
+    p = i.write(tmp_path)
+    assert p.read_bytes() == b"Choline_pop.mfj\nmobcal.out\n5013489 philox\n"
+    assert InFile.read(p) == i
+    # ranlux is the default and is never written, so the default run file is the 2012 one.
+    assert InFile("a", "b", 1, generator="ranlux").text() == InFile("a", "b", 1).text()
+    assert InFile.parse("a\nb\n7 ranlux\n").generator == "ranlux"
+    assert InFile("a", "b", 7, (3, 1), "philox").text() == "a\nb\n7 philox\n3 1\n"
+    assert InFile.parse("a\nb\n7 philox\n3 1\n") == InFile("a", "b", 7, (3, 1), "philox")
+
+
+@pytest.mark.parametrize("word", ["RANLUX", "Philox", "rand", "philox4x32-10", ""])
+def test_generator_words_the_program_would_refuse(word):
+    with pytest.raises(InFileError, match="generator"):
+        InFile("x.mfj", "x.out", 1, generator=word)
+    if word:
+        with pytest.raises(InFileError, match="generator"):
+            InFile.parse(f"x.mfj\nx.out\n1 {word}\n")
 
 
 def test_write_and_read_back(tmp_path):
@@ -58,9 +81,11 @@ def test_seeds_outside_a_default_integer(seed):
         InFile("x.mfj", "x.out", seed)
 
 
-def test_parse_takes_the_first_thirty_characters_and_the_first_token():
-    i = InFile.parse("a" * 35 + "\nout.out   \n 42 trailing\n")
-    assert i == InFile("a" * 30, "out.out", 42)
+def test_parse_takes_the_first_thirty_characters_and_the_seed_record_as_the_program_does():
+    i = InFile.parse("a" * 35 + "\nout.out   \n 42 philox trailing\n")
+    assert i == InFile("a" * 30, "out.out", 42, generator="philox")
+    with pytest.raises(InFileError, match="generator 'trailing'"):
+        InFile.parse("a\nb\n 42 trailing\n")
     with pytest.raises(InFileError, match="three"):
         InFile.parse("a\nb\n")
     with pytest.raises(InFileError, match="not an integer"):

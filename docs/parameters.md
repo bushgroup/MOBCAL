@@ -174,8 +174,9 @@ table is never mistaken for one from the shipped one.
 When a run ends, whether it finished or failed, the package writes `record.json` into its
 directory: the package version; the program, its path, and the record `mobcal build` wrote when
 it compiled it (compiler, flags, source hash); the input file, the name it was copied to, its
-SHA-256, its atom count and its number of coordinate sets; the seed and, for a split run, the
-number of processes; the parameter table, its path, name, format and SHA-256, whether it is the
+SHA-256, its atom count and its number of coordinate sets; the seed, the random number generator
+and, for a split run, the number of processes; the parameter table, its path, name, format and
+SHA-256, whether it is the
 shipped one, and the name of the rendered table; the start time, the wall time, the exit status,
 the verdict and its message; the cross sections and the values for each coordinate set; and the
 names of the output and console files. The program's output file is unchanged by any of this, so

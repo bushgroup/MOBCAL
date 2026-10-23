@@ -31,8 +31,8 @@ def test_recorded_binaries_verify(built):
     assert fortran.verify_binaries(built) == []
     rec = fortran.read_manifest(built)["binaries"][fortran.binary_name("he")]
     assert rec["source_sha256"] == fortran.SHA256["mobcal_He.f"]
-    assert rec["include"] == "mobcal_ljread.inc"
-    assert rec["include_sha256"] == fortran.SHA256["mobcal_ljread.inc"]
+    assert rec["includes"] == {inc: fortran.SHA256[inc] for inc in fortran.INCLUDES}
+    assert set(rec["includes"]) == {"mobcal_ljread.inc", "mobcal_rng.inc"}
     assert rec["flags"] == fortran.flags()
     assert rec["compiler"] == ""  # this gfortran would not say
 
@@ -59,10 +59,13 @@ def test_a_binary_from_other_sources_is_caught(built):
         f"{fortran.binary_name('he')}: built from a mobcal_He.f that is not the pinned file"]
 
 
-def test_a_binary_from_another_include_is_caught(built):
-    _edit(built, "n2", include_sha256="0" * 64)
+@pytest.mark.parametrize("include", fortran.INCLUDES)
+def test_a_binary_from_another_include_is_caught(built, include):
+    includes = {inc: fortran.SHA256[inc] for inc in fortran.INCLUDES}
+    includes[include] = "0" * 64
+    _edit(built, "n2", includes=includes)
     assert fortran.verify_binaries(built) == [
-        f"{fortran.binary_name('n2')}: built from a mobcal_ljread.inc that is not the pinned file"]
+        f"{fortran.binary_name('n2')}: built from a {include} that is not the pinned file"]
 
 
 def test_a_binary_without_fno_automatic_is_caught(built):
