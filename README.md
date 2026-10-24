@@ -252,7 +252,9 @@ Any research that uses this code or the included Lennard-Jones parameters should
    mobility for choline and other ammonium cations in N2. *Anal. Chem.* 2008, 80, 1928-1936.
 
 The 2012 release is also kept, exactly as published, at
-[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012).
+[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012), and the Jarrold group's 2000
+helium release, from which the 2012 helium program was made, as distributed at
+[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000).
 
 ## License
 

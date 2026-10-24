@@ -9,6 +9,19 @@ temperature and the sampling counts from a file, and corrections to defects that
 number the 2012 program computed unchanged. The seventh to tenth files are the element-table
 reader, that generator, the declaration of the atom arrays and the settings reader, which both
 sources include.
+
+The helium source descends from the Jarrold group's 2000 release, kept as distributed at
+[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The 2012 `mobcal_He.f` is
+that release's `mobcal.f` with 13 changed regions and nothing else: the run file's name, the
+temperature (301 K from 298 K), `imp` (1,000 trajectories per velocity point per cycle from
+25), the Lennard-Jones well depths and radii of hydrogen, carbon, nitrogen and oxygen in both
+coordinate readers (each 2012 pair is the 2000 pair times one factor per element, 0.95, 0.99,
+1.10 and 0.80, on well depth and radius alike), and a row for fluorine. The nitrogen source has
+no 2000 ancestor. Since the table, the temperature and the sampling counts became files the
+programs read (Changes, below), the shipped helium program reproduces the 2000 release's
+reference output on its own example, given that release's table as a parameter file and
+`--temperature 298 --imp 25` ([docs/settings.md](../docs/settings.md)).
+
 `mobcal.fortran.SHA256` pins each file as it is committed, and `tools/check_public.py` and the
 test suite compare. They are not edited casually: a change to any of them is a decision
 recorded elsewhere, lands with new pins and a new row below in the same commit, and counts its

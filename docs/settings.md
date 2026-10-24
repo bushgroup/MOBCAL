@@ -127,6 +127,20 @@ through it with no settings file and through the shipped program with those sett
 and requires the two outputs to be byte-identical; nitrogen is held the same way at 350 K,
 `imp = 10`, `itn = 5` and `inp = 20`.
 
+## The 2000 reference
+
+The settings reach back past 2012. The Jarrold group's 2000 helium release, kept as distributed
+at [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), ran at 298 K with
+`imp = 25` and shipped an example, a sodiated alanine decamer over 50 coordinate sets, with its
+reference output at seed 5013486. The shipped helium program, given a parameter file holding
+that release's element table (the eight rows of its `mobcal.f`, written in the format of
+[parameters.md](parameters.md)) and run with `--temperature 298 --imp 25 --rng ranlux` at that
+seed, prints that reference output line for line (gfortran 16.2.0, Windows, 2026-10-24),
+apart from the three lines whose format changed after 2012: the `mass of ion` exponent letter,
+the width of the atom count, and the q1st column. The same holds split 40 ways. Reproducing a
+number calculated with the 2000 release is therefore a table and two settings, not a
+different program.
+
 ## The record
 
 `record.json` in each run directory and the per-run entries of `summary.json` carry a
