@@ -10,24 +10,28 @@ last line the file holds as its message (``type not defined for atom number``, `
 specified``, ``masses do not add up``).
 
 A ``Job`` is one calculation: an input file, a gas and a seed, the element table to use, the
-package's own for the gas unless the job names another, and the random number generator,
+package's own for the gas unless the job names another, the random number generator,
 Philox4x32-10 unless the job says ``ranlux``, the 2012 generator, which is what reproduces a
-2012 number. The run directory's name carries ``-ranlux`` when the job does, so the same seed
-under both generators can share an output directory. ``run_one`` checks the table
-(``mobcal.parameters``) and gives the job the directory ``<out_dir>/<name>/`` holding a copy of
-the input (under the name the output will echo), its ``mobcal.in``, the table rendered as
-``parameters.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
+2012 number, and the run settings (``mobcal.settings``: the temperature and the five sampling
+counts), the 2012 values unless the job says otherwise. The run directory's name carries
+``-ranlux`` when the job does, and each setting that differs from 2012 (``-t298-imp25``), so
+the same input and seed under other generators or settings never share a directory.
+``run_one`` checks the table (``mobcal.parameters``) and gives the job the directory
+``<out_dir>/<name>/`` holding a copy of the input (under the name the output will echo), its
+``mobcal.in``, the table rendered as ``parameters.tab``, the settings rendered as
+``settings.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
 complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
 account of itself: the package, the binary and its build, the input and its hash, the seed, the
-parameter set and its hash, the times, the verdict and the cross sections. ``run_many`` runs a
-list of jobs with a cap on how many are in flight, calls back as each lands, and returns a
-``Summary`` that writes ``summary.csv`` and ``summary.json`` beside the run directories.
+parameter set and its hash, the settings and where they came from, the times, the verdict and
+the cross sections. ``run_many`` runs a list of jobs with a cap on how many are in flight,
+calls back as each lands, and returns a ``Summary`` that writes ``summary.csv`` and
+``summary.json`` beside the run directories.
 
 A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
-it integrates its share of the 400 trajectory blocks per coordinate set, draws the random
-stream through the rest (or, at ``philox``, moves the draw count past them), and writes a file
-per block it integrated. When every worker has
+it integrates its share of the ``itn * inp`` trajectory blocks per coordinate set (400 at the
+2012 settings), draws the random stream through the rest (or, at ``philox``, moves the draw
+count past them), and writes a file per block it integrated. When every worker has
 landed and every block it owed is on disk, the block files are copied into the run directory
 and the program runs there once more as the combining run (``W 0``): it integrates nothing,
 reads the blocks back, and makes the sums, the averages and the SUMMARY with its own
@@ -65,12 +69,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran, parameters
-from mobcal.io.block import BLOCKS_PER_SET, expected_names
+from mobcal import fortran, parameters, settings
+from mobcal.io.block import expected_names
 from mobcal.io.infile import FIELD_WIDTH, GENERATORS, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
+from mobcal.settings import Settings
 
 OUTPUT_NAME = "mobcal.out"
 LOG_NAME = "stdout.log"
@@ -78,8 +83,8 @@ RECORD_JSON = "record.json"
 FALLBACK_STAGED_NAME = "input.mfj"  # for an input whose name would not fit the a30 field
 SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
-CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", "status", "PA", "EHS", "TM", "sets",
-               "seconds", "output", "message")
+CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", *settings.NAMES, "status", "PA", "EHS",
+               "TM", "sets", "seconds", "output", "message")
 BLOCK_GLOB = "block-*.dat"
 POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
 # The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
@@ -103,15 +108,20 @@ class Job:
     split: int | None = None  # W: run this one calculation across W processes
     parameters: Path | None = None  # the element table; None is the package's for the gas
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
+    settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
             raise ValueError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
         if self.generator not in GENERATORS:
             raise ValueError(f"generator must be one of {GENERATORS}, not {self.generator!r}")
+        if not isinstance(self.settings, Settings):
+            raise ValueError(f"settings must be a mobcal.settings.Settings, not "
+                             f"{self.settings!r}")
+        blocks = self.settings.blocks_per_set
         if self.split is not None and not (isinstance(self.split, int)
-                                           and 1 <= self.split <= BLOCKS_PER_SET):
-            raise ValueError(f"split must be a worker count from 1 to {BLOCKS_PER_SET}, "
+                                           and 1 <= self.split <= blocks):
+            raise ValueError(f"split must be a worker count from 1 to {blocks} (itn * inp), "
                              f"not {self.split!r}")
         object.__setattr__(self, "input", Path(self.input))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
@@ -123,7 +133,7 @@ class Job:
         if self.name:
             return self.name
         rng = "" if self.generator == DEFAULT_RNG else f"-{self.generator}"
-        return f"{self.input.stem}-{self.gas}-{self.seed}{rng}"
+        return f"{self.input.stem}-{self.gas}-{self.seed}{rng}{self.settings.suffix()}"
 
     @property
     def run_dir(self) -> Path:
@@ -163,7 +173,8 @@ class Result:
     def record(self) -> dict:
         j = self.job
         return {"name": j.label, "input": str(j.input), "gas": j.gas, "seed": j.seed,
-                "rng": j.generator, "split": j.split, "status": self.status,
+                "rng": j.generator, "split": j.split, "settings": j.settings.record(),
+                "status": self.status,
                 "message": self.message, "returncode": self.returncode,
                 "seconds": round(self.seconds, 2), "output": str(self.output or ""),
                 "cross_sections": self.cross_sections,
@@ -173,7 +184,10 @@ class Result:
     def row(self) -> dict[str, object]:
         cs = self.cross_sections
         return {"name": self.job.label, "input": str(self.job.input), "gas": self.job.gas,
-                "seed": self.job.seed, "rng": self.job.generator, "status": self.status,
+                "seed": self.job.seed, "rng": self.job.generator,
+                **{k: (f"{v:g}" if k == "temperature" else v)
+                   for k, v in self.job.settings.values().items()},
+                "status": self.status,
                 "PA": cs.get("PA", ""), "EHS": cs.get("EHS", ""), "TM": cs.get("TM", ""),
                 "sets": len(self.conformers) if self.ok else "",
                 "seconds": round(self.seconds, 1), "output": str(self.output or ""),
@@ -199,8 +213,8 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
 
 def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet) -> None:
     """Make ``d`` ready for one start of the program: the input copied in under its staged name,
-    ``mobcal.in`` written, the element table rendered, and any output, record or block file of
-    an earlier run removed, so that nothing stale is ever read as this run's."""
+    ``mobcal.in`` written, the element table and the settings rendered, and any output, record
+    or block file of an earlier run removed, so that nothing stale is ever read as this run's."""
     d.mkdir(parents=True, exist_ok=True)
     (d / OUTPUT_NAME).unlink(missing_ok=True)
     (d / RECORD_JSON).unlink(missing_ok=True)
@@ -209,6 +223,7 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     shutil.copyfile(job.input, d / job.staged)
     InFile(job.staged, OUTPUT_NAME, job.seed, split, job.generator).write(d)
     pset.render(d)
+    job.settings.render(d)
 
 
 def _start(command: Sequence[str], d: Path,
@@ -306,7 +321,9 @@ def _run_serial(job: Job, command: list[str], pset: ParameterSet,
 def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: ParameterSet,
                running: set[subprocess.Popen] | None, blocks: BlocksProgress | None) -> Result:
     total, d = job.split, job.run_dir
-    expected = {w: expected_names(coordinate_sets, total, w) for w in range(1, total + 1)}
+    blocks_per_set = job.settings.blocks_per_set
+    expected = {w: expected_names(coordinate_sets, total, w, blocks_per_set)
+                for w in range(1, total + 1)}
     n_expected = sum(len(v) for v in expected.values())
     _prepare(job, d, (total, 0), pset)
     for w in expected:
@@ -391,6 +408,7 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
                   "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
         "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split},
         "parameters": r.parameters,
+        "settings": j.settings.record(),
         "started": started.isoformat(timespec="seconds"),
         "seconds": round(r.seconds, 2),
         "returncode": r.returncode,

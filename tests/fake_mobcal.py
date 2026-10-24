@@ -5,7 +5,9 @@ runs the real binary: it reads the records, opens the input file named there, an
 output file named there. Like the program, it refuses, exit 1, a generator word on the seed
 record that is not ``ranlux`` or ``philox``, and it refuses when ``parameters.tab`` is missing
 or rendered for the other gas; at ``philox`` it prints the program's Philox line in place of
-the RANLUX ones. What it writes is chosen by the input file's first line, its label:
+the RANLUX ones; it reads ``settings.tab`` when there is one (the 2012 values otherwise), deals
+``itn * inp`` blocks per set and writes the settings into each block file, and prints the
+temperature in its SUMMARY. What it writes is chosen by the input file's first line, its label:
 
     ok           a complete output ending in a SUMMARY block; the cross sections are a function
                  of the seed and the generator, so a result can be traced to its job
@@ -35,7 +37,8 @@ import sys
 import time
 from pathlib import Path
 
-from mobcal.io.block import BLOCKS_PER_SET, Block, block_name, owned
+from mobcal.io.block import Block, block_name, owned
+from mobcal.settings import DEFAULTS, RENDERED, SettingsError, read_rendered
 
 
 def main() -> int:
@@ -51,6 +54,15 @@ def main() -> int:
     if generator not in ("ranlux", "philox"):
         return write(out, [f" random number generator {generator} in mobcal.in is not ranlux or "
                            "philox"], 1)
+    # The settings, as the program reads them: the 2012 values without the file.
+    settings = DEFAULTS
+    if Path(RENDERED).is_file():
+        try:
+            settings = read_rendered(Path(RENDERED))
+        except SettingsError as e:
+            return write(out, [f" {RENDERED} cannot be read as a MOBCAL-SETTINGS 1 file ({e})"],
+                         1)
+    blocks_per_set = settings.blocks_per_set
     if head != ["MOBCAL-LJ", "1", {"he": "He", "n2": "N2"}[gas]]:
         return write(out, [" no parameters.tab for this gas in the run directory"], 1)
     label = Path(inp).read_text(encoding="latin-1").splitlines()[0].strip()
@@ -87,13 +99,14 @@ def main() -> int:
         total, me = split
         done = read_blocks = empty = 0
         for s in range(1, sets + 1):
-            for k in range(1, BLOCKS_PER_SET + 1):
+            for k in range(1, blocks_per_set + 1):
                 if owned(k, total, me):
                     if lazy and me == total and k == max(
-                            kk for kk in range(1, BLOCKS_PER_SET + 1) if owned(kk, total, me)):
+                            kk for kk in range(1, blocks_per_set + 1) if owned(kk, total, me)):
                         continue
-                    Block(s, *Block.cycle_point(k), seed,
-                          (seed % 1000 + s + k) / 1e3, 0.5, 0, generator).write(Path("."))
+                    Block(s, *Block.cycle_point(k, settings.itn), seed,
+                          (seed % 1000 + s + k) / 1e3, 0.5, 0, generator,
+                          settings).write(Path("."))
                     done += 1
                 elif Path(block_name(s, k)).is_file():
                     read_blocks += 1
@@ -102,8 +115,8 @@ def main() -> int:
                     return write(out, lines, 1)
                 else:
                     empty += 1
-        lines += ["", f" blocks of imp trajectories: integrated{done:4d}, read from files"
-                      f"{read_blocks:4d}, empty{empty:4d} (worker{me:3d} of{total:3d})"]
+        lines += ["", f" blocks of imp trajectories: integrated{done:5d}, read from files"
+                      f"{read_blocks:5d}, empty{empty:5d} (worker{me:3d} of{total:3d})"]
 
     tm = 50 + seed % 7 + (0.5 if generator == "philox" else 0)
     if split is not None and split[1] > 0:
@@ -111,7 +124,7 @@ def main() -> int:
     pa, ehs = tm + 5.5, tm + 8
     lines += ["", "", "", " SUMMARY", "", " program version = junkn.f",
               f" input file name = {inp:<30}", f" input file label = {label:<30}",
-              " temperature = 3.0100E+02", seed_line]
+              f" temperature = {settings.temperature:.4E}", seed_line]
     if mode == "ok":
         if gas == "he":
             lines += ["", " mobility calculation by MOBIL4 (HS scattering)",

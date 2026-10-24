@@ -177,7 +177,9 @@ it compiled it (compiler, flags, source hash); the input file, the name it was c
 SHA-256, its atom count and its number of coordinate sets; the seed, the random number generator
 and, for a split run, the number of processes; the parameter table, its path, name, format and
 SHA-256, whether it is the
-shipped one, and the name of the rendered table; the start time, the wall time, the exit status,
+shipped one, and the name of the rendered table; the run settings, the temperature and the five
+sampling counts, with where they came from ([settings.md](settings.md)); the start time, the
+wall time, the exit status,
 the verdict and its message; the cross sections and the values for each coordinate set; and the
 names of the output and console files. The program's output file is unchanged by any of this, so
 it still compares byte for byte with the 2012 references. `summary.json` names each run's table

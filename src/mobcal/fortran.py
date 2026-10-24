@@ -7,10 +7,11 @@ to any of them is a decision taken in the lab record, lands with new pins in the
 and counts its diff in the commit message. The 2012 numbers are untouched: no change alters a
 value the program computes, and the regression gate reproduces both 2012 outputs byte for byte.
 Both sources include ``mobcal_ljread.inc``, the reader of the element table that ``mobcal.run``
-renders into every run directory as ``parameters.tab``, and ``mobcal_rng.inc``, the
-counter-based generator the seed record of ``mobcal.in`` can select, and ``mobcal_arrays.inc``,
-the atom bound ``len`` with the four common blocks it dimensions; all three are pinned and
-recorded like them.
+renders into every run directory as ``parameters.tab``, ``mobcal_rng.inc``, the
+counter-based generator the seed record of ``mobcal.in`` can select, ``mobcal_arrays.inc``,
+the atom bound ``len`` with the four common blocks it dimensions, and ``mobcal_settings.inc``,
+the reader of the run settings (the temperature and the five sampling counts) that the driver
+renders as ``settings.tab``; all four are pinned and recorded like them.
 
 The build recipe is also stated here and nowhere else. ``-fno-automatic`` is mandatory: the code
 relies on local variables keeping their values between calls, which g77 gave it by default. An
@@ -57,19 +58,20 @@ FORTRAN_DIR = ROOT / "fortran"
 
 GASES = ("he", "n2")
 SOURCE = {"he": "mobcal_He.f", "n2": "mobcal_N2.f"}
-# Included by both sources: the element-table reader, the Philox4x32-10 generator, and the atom
-# bound with the four common blocks it dimensions.
-INCLUDES = ("mobcal_ljread.inc", "mobcal_rng.inc", "mobcal_arrays.inc")
+# Included by both sources: the element-table reader, the Philox4x32-10 generator, the atom
+# bound with the four common blocks it dimensions, and the run-settings reader.
+INCLUDES = ("mobcal_ljread.inc", "mobcal_rng.inc", "mobcal_arrays.inc", "mobcal_settings.inc")
 
 # The 2012 files, as committed at bushgroup/MOBCAL-2012 tag v1.0 (commit 4f3be72) and copied
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the changes fortran/README.md lists under Changes, and the includes they share.
 SHA256 = {
-    "mobcal_He.f": "601463cf8a0888bf12788c7bfaa8614981d6fb3d945a2c0f331fddb2f0be0839",
-    "mobcal_N2.f": "82ec5c6518876c0c6357bbe80fa7f06964d32242350e41d260aef2dde1911b9e",
+    "mobcal_He.f": "6d135ef361ddfc138ec694da0f5acae543b3778838df107d8c1028406dbc0ce0",
+    "mobcal_N2.f": "f8b569c35cac786ca6a87ccf8140f8e24cabb1cf53023544bfe1224d0fa26e0d",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
     "mobcal_rng.inc": "16ac0098bfb55d79e3a23c9377fbae25596a3f3a3a2af813eb64793f7d69c9fe",
     "mobcal_arrays.inc": "6cfa5f8378315b1193dd154c9228f2b891165ee2437bef27f87833c2a9c6878a",
+    "mobcal_settings.inc": "bbf0cc80941b277e31b4bd0e6d5108a0c260c56d38804365d5e16f4fc928f3bd",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",
     "mobcal.in": "5b7804c2fe64b28b1466f9d5df473014d8b623d44efb5674ca3ad78203bc3ecb",
     "sample-output/Choline_He.out":

@@ -31,8 +31,10 @@ every run directory, and the programs read them from there
 programs' own reader and holds it to the 2012 number to the last bit. The changes to the Fortran
 so far are listed with their line counts in [fortran/README.md](fortran/README.md). Two add the
 statements that let one calculation run as several processes, one replaces the element
-tables in the source with the reading of that file, and one adds the second random number
-generator ([docs/random-numbers.md](docs/random-numbers.md)). The others correct defects in how the
+tables in the source with the reading of that file, one adds the second random number
+generator ([docs/random-numbers.md](docs/random-numbers.md)), and one makes the temperature and
+the five sampling counts run settings read from a file
+([docs/settings.md](docs/settings.md)). The others correct defects in how the
 program reports: a refused input now exits with status 1, an input larger than the arrays is
 refused instead of overrunning them, two output formats print what they were meant to, and the
 shipped run file names a neutral output. None of them changes a number the program computes for
@@ -55,8 +57,9 @@ to check an installation with `mobcal self-check`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
 - `docs/`: the installation guide, the element-table format
-  ([`docs/parameters.md`](docs/parameters.md)) and the two random number generators
-  ([`docs/random-numbers.md`](docs/random-numbers.md)).
+  ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
+  ([`docs/random-numbers.md`](docs/random-numbers.md)) and the run settings
+  ([`docs/settings.md`](docs/settings.md)).
 
 ## Building the Fortran
 
@@ -104,9 +107,11 @@ under the generator `--rng` names (Philox4x32-10 by default, or `ranlux`), runs 
 `--workers` at a time (by default, as many as the machine has processors), and prints each
 result as it lands. Each run gets a directory of its own under `--out`, named for the input, the
 gas and the seed, with `-ranlux` appended under RANLUX, and holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
-`parameters.tab`, the output it wrote as `mobcal.out`, whatever it printed to the console as
-`stdout.log`, and `record.json`, which records the program and its build, the input and its
-hash, the seed and the generator, the element table and its hash, the times and the result. The directory is a
+`parameters.tab`, the run settings rendered as `settings.tab`, the output it wrote as
+`mobcal.out`, whatever it printed to the console as `stdout.log`, and `record.json`, which
+records the program and its build, the input and its hash, the seed and the generator, the
+element table and its hash, the settings and where they came from, the times and the result.
+The directory is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
 run directories, one row per run with its seed and generator, its status, its cross sections
@@ -124,6 +129,21 @@ reports the 2012 choline cross sections in helium to every printed digit, wherea
 Philox, reports cross sections from a different random number stream, which differ in their
 last digits as a run at another seed would. [`docs/random-numbers.md`](docs/random-numbers.md)
 describes the two generators and why the default is the newer one.
+
+The temperature and the five sampling counts that the 2012 programs compiled in (301 K; 1,000
+trajectories per block, 10 cycles and 40 velocity points in the trajectory method; 250,000
+trajectories and 30 reflections in the hard-sphere pass) are run settings:
+
+```
+uv run mobcal run choline.mfj --temperature 298 --imp 25
+uv run mobcal run choline.mfj --settings mine.toml
+```
+
+A run that sets nothing uses the 2012 values and prints the 2012 output. The package renders
+the settings into each run directory as `settings.tab`, the programs read the file when it is
+there, and an output at other settings equals what a program with those constants compiled in
+prints. [`docs/settings.md`](docs/settings.md) describes the file, the options, the bounds and
+the record.
 
 A run that did not finish is reported as failed, never as a number. The program exits with
 status 1 when it refuses its input (the 2012 program exited with status 0 either way), and the
@@ -146,12 +166,15 @@ runs the choline calculation in nitrogen as eight processes and reports the seri
 exactly: the same cross section, standard deviation and failure count to every printed digit,
 because the random number stream is partitioned rather than re-drawn and the sums are made by
 the serial program's own statements. The trajectory method integrates 400 blocks of 1,000
-trajectories per coordinate set, one per cycle and velocity point, and each of the eight
+trajectories per coordinate set at the 2012 settings, one per cycle and velocity point (the
+block count is the number of cycles times the number of velocity points, so other settings
+give other counts), and each of the eight
 processes integrates every eighth block in velocity-major order, so that its share mixes the
 slow collisions with the fast, reaches each of its own blocks with the random number stream in
 the state the serial run would have had, by moving the draw count past the other blocks under
-Philox or by drawing through them under RANLUX, and writes a 48-byte file per block it
-integrated. When all eight
+Philox or by drawing through them under RANLUX, and writes a 76-byte file per block it
+integrated, which carries the seed, the generator and the settings along with the block's
+sums. When all eight
 have landed, the program runs once more in the run directory as the combining run, which
 integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY
 with the same statements the serial run uses. That output is the run's output, read as any

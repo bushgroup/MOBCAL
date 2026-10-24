@@ -95,7 +95,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
-      common/split/iwtot,iwme
+      common/split/iwtot,iwme,inum,inor
 c
 c     ***************************************************************
 c
@@ -156,6 +156,12 @@ c
       close(8)
       stop 1
       endif
+c
+c     the run settings: the temperature and the five sampling counts,
+c     the 2012 values unless the file settings.tab the driver renders
+c     into the working directory says otherwise (mobcal_settings.inc)
+c
+      call setread(t,imp,itn,inp,inum,inor)
 c
 c     print switches ip=1  print scattering angles
 c                    it=1  print trajectory
@@ -246,9 +252,8 @@ c
       write(8,602) mconst
   602 format(1x,'mobility constant =',1pe11.4)
 c
-c     Temperature
+c     Temperature (t, 301 K in 2012, from SETREAD above)
 c
-      t=301.d0
       write(8,603) t
   603 format(1x,'temperature =',1pe11.4)
 c
@@ -289,20 +294,15 @@ c
 c
 c     Define parameters for MOBIL2
 c
-c     Number of complete cycles for average mobility calculation in 
-c     MOBIL2. Default value is 10.
+c     Number of complete cycles for average mobility calculation in
+c     MOBIL2. Default value is 10 (itn, from SETREAD above).
 c
-      itn=10
-c
-c     Number of points in velocity integration in MOBIL2. Default 
-c     value is 20.
-c
-      inp=40    
+c     Number of points in velocity integration in MOBIL2. Default
+c     value is 20; 40 in 2012 (inp, from SETREAD above).
 c
 c     Number of points in Monte Carlo integrations of impact parameter
-c     and orientation in MOBIL2. Default value is 500.
-c
-      imp=1000
+c     and orientation in MOBIL2. Default value is 500; 1000 in 2012
+c     (imp, from SETREAD above).
 c
 c     Minimum value of (1-cosX). This quantity determines the maximum
 c     impact parameter at each velocity. Default value is 0.0005.
@@ -335,10 +335,8 @@ c     Define parameters for MOBIL4
 c
 c     inum is the number of Monte Carlo trajectories employed and inor
 c     is the maximum number of successive reflections followed. Default
-c     values inum=600000 and inor=30
-c
-      inum=250000
-      inor=30
+c     values inum=600000 and inor=30; 250000 and 30 in 2012 (from
+c     SETREAD above)
 c
 c     Define parameters for TRAJONE
 c
@@ -1474,7 +1472,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
-      common/split/iwtot,iwme
+      common/split/iwtot,iwme,inum,inor
 c
       if(im2.eq.0) write(8,631)
   631 format(/1x,'mobility calculation by MOBIL2 (trajectory method)',/)
@@ -1728,7 +1726,7 @@ c     sums are read from the file the worker that integrated it wrote
 c
       kblk=(ig-1)*itn+ic
       ifbeg=ifailc
-      write(fnblk,'(a,i3.3,a,i4.4,a)') 'block-',iic,'-',kblk,'.dat'
+      write(fnblk,'(a,i3.3,a,i5.5,a)') 'block-',iic,'-',kblk,'.dat'
       if(iwtot.eq.0) goto 3990
       if(iwme.gt.0.and.mod(kblk-1,iwtot).eq.iwme-1) goto 3990
       if(i5.eq.2) then
@@ -1753,13 +1751,25 @@ c
       goto 3995
       endif
       open(16,file=fnblk,form='unformatted',status='old')
-      read(16) jset,jc,jg,jseed,jgen,temp1,temp2,ifblk
+      read(16,iostat=ios) jset,jc,jg,jseed,jgen,jimp,jitn,jinp,jinum,
+     ?jinor,tblk,temp1,temp2,ifblk
       close(16)
+      if(ios.ne.0) then
+      write(8,694) fnblk
+  694 format(/1x,'file ',a,' cannot be read as a block file')
+      close(8)
+      stop 1
+      endif
+c     the block must have been integrated under this run's seed,
+c     generator and settings
       if(jset.ne.iic.or.jc.ne.ic.or.jg.ne.ig.or.jseed.ne.i2.or.
-     ?jgen.ne.i5) then
-      write(8,692) fnblk,jset,jc,jg,jseed,jgen
+     ?jgen.ne.i5.or.jimp.ne.imp.or.jitn.ne.itn.or.jinp.ne.inp.or.
+     ?jinum.ne.inum.or.jinor.ne.inor.or.tblk.ne.t) then
+      write(8,692) fnblk,jset,jc,jg,jseed,jgen,jimp,jitn,jinp,jinum,
+     ?jinor,tblk
   692 format(/1x,'file ',a,' is not this block: set',i4,' cycle',i3,
-     ?' point',i3,' seed',i10,' generator',i2)
+     ?' point',i3,' seed',i10,' generator',i2,' imp',i7,' itn',i4,
+     ?' inp',i4,' inum',i8,' inor',i4,' t',1pe11.4)
       close(8)
       stop 1
       endif
@@ -1802,7 +1812,8 @@ c
  4000 continue
       if(iwtot.gt.0) then
       open(16,file=fnblk,form='unformatted')
-      write(16) iic,ic,ig,i2,i5,temp1,temp2,ifailc-ifbeg
+      write(16) iic,ic,ig,i2,i5,imp,itn,inp,inum,inor,t,temp1,temp2,
+     ?ifailc-ifbeg
       close(16)
       icomp=icomp+1
       endif
@@ -1825,8 +1836,8 @@ c
   620 format(/1x,'OMEGA(1,1)*=',1pe11.4,/)
  4040 continue
       if(iwtot.gt.0) write(8,690) icomp,iread,iempt,iwme,iwtot
-  690 format(/1x,'blocks of imp trajectories: integrated',i4,
-     ?', read from files',i4,', empty',i4,' (worker',i3,' of',i3,')')
+  690 format(/1x,'blocks of imp trajectories: integrated',i5,
+     ?', read from files',i5,', empty',i5,' (worker',i3,' of',i3,')')
 c
 c     calculate running averages
 c
@@ -2625,3 +2636,4 @@ c     ***************************************************************
 c
       include 'mobcal_ljread.inc'
       include 'mobcal_rng.inc'
+      include 'mobcal_settings.inc'

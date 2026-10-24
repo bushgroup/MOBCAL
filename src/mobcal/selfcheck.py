@@ -5,8 +5,9 @@ back on, and run the same way from a source checkout. Each stage prints one time
 failure names the stage that failed:
 
     version     the package version, and whether this is an installed copy or a checkout
-    parameters  the two element tables (``mobcal.parameters``) are the files pinned by their
-                SHA-256, and each loads and passes the checks a run puts it through
+    parameters  the two element tables (``mobcal.parameters``) and the 2012 settings file
+                (``mobcal.settings``) are the files pinned by their SHA-256, and each loads
+                and passes the checks a run puts it through
     binaries   both binaries are in ``fortran.binary_dir()``, are the files recorded in its
                 ``build.json`` when they were built, were built from the pinned sources (by their
                 SHA-256 pins) and with ``-fno-automatic``
@@ -33,7 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran, parameters
+from mobcal import fortran, parameters, settings
 from mobcal.io.outfile import OutFile
 from mobcal.run import Job, run_one
 
@@ -86,12 +87,18 @@ def _parameters() -> tuple[bool, str, list[str]]:
     problems = parameters.verify(d)
     if problems:
         return False, f"element tables in {d}", problems
+    problems = settings.verify(settings.SETTINGS_DIR)
+    if problems:
+        return False, f"settings file in {settings.SETTINGS_DIR}", problems
     detail = []
     for gas in fortran.GASES:
         ps = parameters.shipped(gas)
         detail.append(f"{ps.path.name}: {ps.name}, {len(ps.elements)} elements, "
                       f"sha256 {ps.sha256[:12]}")
-    return True, f"{', '.join(parameters.FILES.values())} in {d}, as pinned", detail
+    st = settings.shipped()
+    detail.append(f"{settings.FILE}: the 2012 settings, sha256 {st.source.sha256[:12]}")
+    return True, (f"{', '.join(parameters.FILES.values())} in {d} and {settings.FILE} in "
+                  f"{settings.SETTINGS_DIR}, as pinned"), detail
 
 
 def _binaries() -> tuple[bool, str, list[str]]:

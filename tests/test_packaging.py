@@ -33,7 +33,7 @@ def test_recorded_binaries_verify(built):
     assert rec["source_sha256"] == fortran.SHA256["mobcal_He.f"]
     assert rec["includes"] == {inc: fortran.SHA256[inc] for inc in fortran.INCLUDES}
     assert set(rec["includes"]) == {"mobcal_ljread.inc", "mobcal_rng.inc",
-                                    "mobcal_arrays.inc"}
+                                    "mobcal_arrays.inc", "mobcal_settings.inc"}
     assert rec["flags"] == fortran.flags()
     assert rec["compiler"] == ""  # this gfortran would not say
 

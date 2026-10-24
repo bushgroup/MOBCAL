@@ -143,8 +143,10 @@ def test_run_many_keeps_job_order_reports_progress_and_writes_the_summary(tmp_pa
 
     csv_path, json_path = s.write(tmp_path / "runs")
     rows = csv_path.read_text(encoding="utf-8").splitlines()
-    assert rows[0] == "name,input,gas,seed,rng,status,PA,EHS,TM,sets,seconds,output,message"
-    assert rows[1].startswith("in0-he-10,") and ",10,philox,ok,59.0,61.5,53.5,1," in rows[1]
+    assert rows[0] == ("name,input,gas,seed,rng,temperature,imp,itn,inp,inum,inor,status,PA,EHS,"
+                       "TM,sets,seconds,output,message")
+    assert rows[1].startswith("in0-he-10,")
+    assert ",10,philox,301,1000,10,40,250000,30,ok,59.0,61.5,53.5,1," in rows[1]
     assert rows[2].startswith("in1-he-11,") and ",failed,,,,," in rows[2]
     assert rows[2].endswith(",exit 1: type not defined for atom number      1")
     doc = json.loads(json_path.read_text(encoding="utf-8"))
@@ -268,6 +270,12 @@ def test_the_record_of_a_run(tmp_path):
     assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
     assert rec["parameters"] == parameters.shipped("n2").record()
     assert rec["parameters"]["rendered"] == "parameters.tab"
+    assert rec["settings"] == {"temperature": 301.0, "imp": 1000, "itn": 10, "inp": 40,
+                               "inum": 250000, "inor": 30, "default": True,
+                               "source": {"path": None, "sha256": None, "overrides": {}},
+                               "rendered": "settings.tab"}
+    assert (job.run_dir / "settings.tab").read_bytes() == \
+        b"MOBCAL-SETTINGS 1\n3.0100000000000000d+02 1000 10 40 250000 30\n"
     assert (rec["status"], rec["returncode"], rec["message"]) == ("ok", 0, "")
     assert rec["cross_sections"] == r.cross_sections == {"TM": 50 + 5013489 % 7 + 0.5}
     assert rec["conformers"] == r.conformers
@@ -367,6 +375,8 @@ def test_one_seed_under_both_generators_shares_an_output_directory(tmp_path):
     assert rec["mobcal_in"]["generator"] == "ranlux"
     csv_path, _ = s.write(tmp_path / "runs")
     rows = csv_path.read_text(encoding="utf-8").splitlines()
-    assert rows[1].startswith("ok-he-5013489,") and ",5013489,philox,ok," in rows[1]
-    assert rows[2].startswith("ok-he-5013489-ranlux,") and ",5013489,ranlux,ok," in rows[2]
+    assert rows[1].startswith("ok-he-5013489,")
+    assert ",5013489,philox,301,1000,10,40,250000,30,ok," in rows[1]
+    assert rows[2].startswith("ok-he-5013489-ranlux,")
+    assert ",5013489,ranlux,301,1000,10,40,250000,30,ok," in rows[2]
     assert str(ranlux).startswith("ok-he-5013489-ranlux  ok  ")

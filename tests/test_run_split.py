@@ -33,7 +33,7 @@ def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
     assert (d / "ok.mfj").read_bytes() == inp.read_bytes()
     assert len(list(d.glob("block-*.dat"))) == BLOCKS_PER_SET
     combined = OutFile.read(r.output)
-    assert any(x.startswith(" blocks of imp trajectories: integrated   0, read from files 400,")
+    assert any(x.startswith(" blocks of imp trajectories: integrated    0, read from files  400,")
                for x in combined.lines)
     for w in (1, 2, 3):
         wd = job.worker_dir(w)

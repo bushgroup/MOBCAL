@@ -5,7 +5,9 @@
     mobcal build [--gas he|n2] [--out DIR]
     mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--rng philox|ranlux]
                [--workers N] [--split W] [--parameters PATH] [--out DIR]
-    mobcal render-parameters he|n2 [DIR] [--parameters PATH]
+               [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
+               [--inor N]
+    mobcal render-parameters he|n2 [DIR] [--parameters PATH] [--settings PATH]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
@@ -15,9 +17,13 @@ random number generator: Philox4x32-10 by default, or ``ranlux``, the 2012 gener
 with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
 default is not the run file's). With
 ``--parameters PATH`` every run uses that element table instead of the package's own, checked
-the same way and recorded the same way. Its exit status is 1 if any run failed.
-``render-parameters`` writes ``parameters.tab`` into a directory, as the driver does into each
-run directory, for running the program there by hand. ``self-check`` is ``mobcal.selfcheck``.
+the same way and recorded the same way. ``--settings PATH`` names a settings file (the
+temperature and the five sampling counts, ``mobcal.settings``) and the six single-value
+options override it value by value; without them every run uses the 2012 values. Its exit
+status is 1 if any run failed.
+``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
+driver does into each run directory, for running the program there by hand. ``self-check`` is
+``mobcal.selfcheck``.
 ``build`` needs a source checkout; an installed copy carries binaries built in CI. The window's
 ``gui`` arrives with its task. This module imports no Qt.
 """
@@ -30,8 +36,7 @@ import os
 import sys
 from pathlib import Path
 
-from mobcal import ROOT, __version__, fortran, parameters
-from mobcal.io.block import BLOCKS_PER_SET
+from mobcal import ROOT, __version__, fortran, parameters, settings
 from mobcal.io.infile import GENERATORS
 from mobcal.run import DEFAULT_RNG, Job, Result, run_many
 
@@ -100,14 +105,37 @@ def parser() -> argparse.ArgumentParser:
                         "package's own for the gas")
     r.add_argument("--out", type=Path, default=DEFAULT_OUT,
                    help=f"where the run directories and the summary go (default {DEFAULT_OUT}/)")
+    s = r.add_argument_group(
+        "run settings", "the temperature and the five sampling counts the 2012 programs "
+        "compiled in; without these every run uses the 2012 values (temperature 301 K, imp "
+        "1000, itn 10, inp 40, inum 250000, inor 30)")
+    s.add_argument("--settings", type=Path, default=None, metavar="PATH",
+                   help="a settings file (TOML) for every run; a key it leaves out keeps the "
+                        "2012 value")
+    s.add_argument("--temperature", type=float, default=None, metavar="T",
+                   help="buffer gas temperature in kelvin")
+    s.add_argument("--imp", type=int, default=None, metavar="N",
+                   help="trajectories per block of the trajectory method")
+    s.add_argument("--itn", type=int, default=None, metavar="N",
+                   help="cycles of the trajectory method")
+    s.add_argument("--inp", type=int, default=None, metavar="N",
+                   help="velocity points of the trajectory method")
+    s.add_argument("--inum", type=int, default=None, metavar="N",
+                   help="trajectories of the projection and hard-sphere pass (helium)")
+    s.add_argument("--inor", type=int, default=None, metavar="N",
+                   help="reflections followed per hard-sphere trajectory (helium)")
 
     p = sub.add_parser("render-parameters",
-                       help="write the element table the program reads into a directory")
+                       help="write the element table and the settings the program reads into "
+                            "a directory")
     p.add_argument("gas", choices=fortran.GASES)
     p.add_argument("dir", type=Path, nargs="?", default=Path("."), metavar="DIR",
-                   help="where to write parameters.tab (default: the current directory)")
+                   help="where to write parameters.tab and settings.tab (default: the current "
+                        "directory)")
     p.add_argument("--parameters", type=Path, default=None, metavar="PATH",
                    help="render this TOML file instead of the package's own for the gas")
+    p.add_argument("--settings", type=Path, default=None, metavar="PATH",
+                   help="render this settings file instead of the 2012 values")
     return ap
 
 
@@ -151,12 +179,16 @@ def main(argv: list[str] | None = None) -> int:
         try:
             ps = parameters.load(args.parameters or parameters.default_path(args.gas),
                                  gas=args.gas)
+            st = settings.resolve(args.settings)
             args.dir.mkdir(parents=True, exist_ok=True)
             out = ps.render(args.dir)
-        except (parameters.ParameterError, OSError) as e:
+            out_s = st.render(args.dir)
+        except (parameters.ParameterError, settings.SettingsError, OSError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
         print(f"wrote {out}: {ps.name}, {len(ps.elements)} elements, from {ps.path}")
+        print(f"wrote {out_s}: " + ("the 2012 settings" if st.is_default else
+                                    " ".join(f"{k}={v:g}" for k, v in st.values().items())))
         return 0
 
     return 1
@@ -185,22 +217,31 @@ def _run(args: argparse.Namespace) -> int:
         except FileNotFoundError as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
+    try:
+        st = settings.resolve(args.settings, **{k: getattr(args, k) for k in settings.NAMES})
+    except settings.SettingsError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     split = args.split
-    if split is not None and not 1 <= split <= BLOCKS_PER_SET:
-        print(f"error: --split takes a worker count from 1 to {BLOCKS_PER_SET}", file=sys.stderr)
+    if split is not None and not 1 <= split <= st.blocks_per_set:
+        print(f"error: --split takes a worker count from 1 to {st.blocks_per_set} "
+              f"(itn {st.itn} * inp {st.inp} blocks per coordinate set)", file=sys.stderr)
         return 2
     try:
         jobs = [Job(p, gas, seed, args.out, split=split, parameters=args.parameters,
-                    generator=args.rng)
+                    generator=args.rng, settings=st)
                 for p in inputs for gas in gases for seed in args.seeds]
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
     cpus = os.cpu_count() or 1
     workers = max(1, min(args.workers or (cpus // split if split else cpus), len(jobs)))
+    changed = " ".join(f"{k}={v:g}" for k, v in st.values().items()
+                       if v != getattr(settings.DEFAULTS, k))
     print(f"{len(jobs)} run{'s' if len(jobs) != 1 else ''} on {workers} worker"
           f"{'s' if workers != 1 else ''}" + (f", each across {split} processes" if split else "")
           + f", generator {args.rng}"
+          + (f", settings {changed}" if changed else ", the 2012 settings")
           + f", binaries from {fortran.binary_dir()}, output under {args.out}/"
           + (f", element table {args.parameters}" if args.parameters else ""), flush=True)
 

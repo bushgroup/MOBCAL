@@ -115,6 +115,7 @@ def test_a_block_from_the_other_generator_is_refused(pool, tmp_path, written, co
     out = OutFile.read(d / "out.txt")
     assert proc.returncode == 1, (proc.returncode, out.last_line)
     code = {"ranlux": 1, "philox": 2}[written]
-    assert out.last_line == ("file block-001-0001.dat   is not this block: set   1 cycle  1 "
-                             f"point  1 seed   5013489 generator {code}")
+    assert out.last_line == ("file block-001-00001.dat  is not this block: set   1 cycle  1 "
+                             f"point  1 seed   5013489 generator {code} imp   1000 itn  10 "
+                             "inp  40 inum  250000 inor  30 t 3.0100E+02")
     assert not out.ok

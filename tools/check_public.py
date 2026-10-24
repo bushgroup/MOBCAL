@@ -7,9 +7,11 @@ never as FAIL.
 What it covers today: the package imports, the three version declarations agree (pyproject.toml,
 mobcal.__version__, packaging/mobcal.iss), the files under fortran/ are the pinned files
 (the 2012 release plus the counted changes fortran/README.md lists), the two element tables
-under src/mobcal/parameters/ are the pinned files and load and render, the lower layers stay free
-of Qt, nothing shipped cites the development record by a path only a lab checkout resolves, the
-atom bound fortran/mobcal_arrays.inc declares is the one mobcal.io.mfj.MAX_ATOMS mirrors, and,
+under src/mobcal/parameters/ are the pinned files and load and render, the settings file under
+src/mobcal/settings/ is the pinned file and holds the 2012 values, the bounds and defaults
+fortran/mobcal_settings.inc declares are the ones mobcal.settings mirrors, the lower layers stay
+free of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
+the atom bound fortran/mobcal_arrays.inc declares is the one mobcal.io.mfj.MAX_ATOMS mirrors, and,
 when gfortran is present, both sources compile with the recorded flags, the binaries
 exist, the compiler issued no warnings, and `mobcal self-check` passes against them. Tasks add
 sections as they land code.
@@ -113,6 +115,29 @@ def main() -> int:
             check_true(f"{gas}: {ps.name!r} loads and renders, {len(ps.elements)} elements, "
                        "no '/' or ',' in the rendered table",
                        not set("/,") & set(text) and text.startswith(parameters.MAGIC))
+
+    section("the run settings")
+    from mobcal import settings
+    problems = settings.verify()
+    for p in problems:
+        print("     " + p)
+    check_true(f"{settings.FILE} present, byte-identical to its pin, and the 2012 values",
+               not problems)
+    with open(fortran.FORTRAN_DIR / "mobcal_settings.inc", encoding="ascii") as f:
+        inc = f.read()
+    declared = {m[1]: int(m[2]) for m in re.finditer(r"parameter \((mx\w+)=(\d+)\)", inc)}
+    mirrored = {"imp": "mximp", "itn": "mxitn", "inp": "mxinp", "inum": "mxinum",
+                "inor": "mxinor"}
+    check_true(f"mobcal_settings.inc declares the bounds {declared}, and mobcal.settings.BOUNDS "
+               f"mirrors them",
+               all(settings.BOUNDS[k] == (1, declared.get(v)) for k, v in mirrored.items())
+               and settings.MAX_POINTS == declared.get("mxtot"))
+    defaults = dict(re.findall(r"^      (t|imp|itn|inp|inum|inor)=(\S+)$", inc, re.M))
+    check_true(f"mobcal_settings.inc's defaults {defaults} are mobcal.settings.DEFAULTS",
+               defaults == {"t": "301.d0", "imp": "1000", "itn": "10", "inp": "40",
+                            "inum": "250000", "inor": "30"}
+               and settings.DEFAULTS.values() == {"temperature": 301.0, "imp": 1000, "itn": 10,
+                                                  "inp": 40, "inum": 250000, "inor": 30})
 
     section("layers")
     lower = []

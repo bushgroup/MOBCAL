@@ -1,0 +1,22 @@
+# The run settings of MOBCAL 2012: the temperature and the five sampling counts that were
+# compiled into the 2012 programs. A run without a settings file uses these values, and so does
+# one that names this file. Every key but format may be left out of a settings file, in which
+# case it takes the value here.
+#
+#   temperature  K; the buffer gas temperature of the mobility, t in the source
+#   imp          trajectories per block in the trajectory method (MOBIL2), one block per cycle
+#                and velocity point
+#   itn          cycles in the trajectory method: the number of independent estimates the
+#                standard deviation is taken over
+#   inp          velocity points of the trajectory method's integration over relative velocity
+#   inum         trajectories of the projection approximation and exact hard-sphere pass
+#                (MOBIL4, helium only)
+#   inor         reflections followed per hard-sphere trajectory (MOBIL4, helium only)
+
+format = 1
+temperature = 301
+imp = 1000
+itn = 10
+inp = 40
+inum = 250000
+inor = 30

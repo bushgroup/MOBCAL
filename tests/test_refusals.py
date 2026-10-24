@@ -132,6 +132,7 @@ def test_every_stop_of_the_includes_exits_1():
         lines = _statements(inc)
         stops[inc] = [m.group(1).strip() for s in lines if (m := _STOP.search(s[6:]))]
     assert stops["mobcal_ljread.inc"] and set(stops["mobcal_ljread.inc"]) == {"1"}
+    assert stops["mobcal_settings.inc"] and set(stops["mobcal_settings.inc"]) == {"1"}
     assert stops["mobcal_rng.inc"] == []  # the generator refuses nothing
 
 

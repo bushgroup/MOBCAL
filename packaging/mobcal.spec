@@ -22,9 +22,12 @@ a = Analysis(
     [os.path.join(SPECPATH, "entrypoint.py")],
     pathex=[os.path.join(ROOT, "src")],
     binaries=[],
-    # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks.
+    # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks, and
+    # the 2012 settings file beside mobcal/settings/__init__.
     datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
-            os.path.join("mobcal", "parameters"))],
+            os.path.join("mobcal", "parameters")),
+           (os.path.join(ROOT, "src", "mobcal", "settings", "*.toml"),
+            os.path.join("mobcal", "settings"))],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -39,9 +42,11 @@ if not any(name == "mobcal.selfcheck" for name, *_ in a.pure):
                        "cli.py's import of it.")
 
 _tables = {os.path.basename(dest) for dest, *_ in a.datas if dest.endswith(".toml")}
-if _tables != {"mobcal_He.toml", "mobcal_N2.toml"}:
-    raise RuntimeError(f"Refusing to build: the element tables in the bundle are {_tables}, "
-                       "not mobcal_He.toml and mobcal_N2.toml; no run could start without them.")
+if _tables != {"mobcal_He.toml", "mobcal_N2.toml", "mobcal_2012.toml"}:
+    raise RuntimeError(f"Refusing to build: the data files in the bundle are {_tables}, not "
+                       "mobcal_He.toml, mobcal_N2.toml and mobcal_2012.toml; no run could "
+                       "start without the tables, and the settings file is what the window "
+                       "reads.")
 
 # --- Provenance guard (Windows) -------------------------------------------------------------
 # PyInstaller resolves a collected binary's DLL dependencies through the binary's own directory,

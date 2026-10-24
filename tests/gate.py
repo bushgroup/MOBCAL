@@ -97,11 +97,26 @@ def deterministic(lines: list[str], patterns: list[re.Pattern[str]]) -> list[str
     return [x for x, d in zip(lines, drop, strict=True) if not d]
 
 
-def provenance(integrated: int, read: int, empty: int, me: int, total: int) -> str:
+def provenance(integrated: int, read: int, empty: int, me: int, total: int,
+               width: int = 5) -> str:
     """The line a split run's worker (``me`` >= 1) or combining run (0) prints after the cycle
-    loop, once per coordinate set."""
-    return (f" blocks of imp trajectories: integrated{integrated:4d}, read from files{read:4d},"
-            f" empty{empty:4d} (worker{me:3d} of{total:3d})")
+    loop, once per coordinate set. The counts print ``i5`` since the block count became a
+    setting (up to 10,000 blocks per set); ``width=4`` is the line as the all-elements fixtures
+    captured it."""
+    return (f" blocks of imp trajectories: integrated{integrated:{width}d}, read from files"
+            f"{read:{width}d}, empty{empty:{width}d} (worker{me:3d} of{total:3d})")
+
+
+_PROVENANCE_COUNTS = re.compile(r"^ blocks of imp trajectories: integrated *(\d+), read from "
+                                r"files *(\d+), empty *(\d+) \(worker *(\d+) of *(\d+)\)$")
+
+
+def _provenance_derives(old: str, new: str) -> bool:
+    a, b = _PROVENANCE_COUNTS.match(old), _PROVENANCE_COUNTS.match(new)
+    if not (a and b) or a.groups() != b.groups():
+        return False
+    n = [int(x) for x in a.groups()]
+    return old == provenance(*n, width=4) and new == provenance(*n)
 
 
 ATOMS = re.compile(r"^ number of atoms =\s*(\d+)$")
@@ -147,11 +162,13 @@ def _q1st_derives(old: str, new: str) -> bool:
 
 def underived(old: list[str], new: list[str]) -> list[tuple[str, str]]:
     """The lines of an output in the 2012 print format and of the current programs' output of
-    the same run that differ other than by the two changes of print format made since.
+    the same run that differ other than by the changes of print format made since.
 
-    The changes: the atom count printed ``i7`` where 2012 printed ``i4``, and the q1st column
+    The changes: the atom count printed ``i7`` where 2012 printed ``i4``; the q1st column
     divided by ``itn`` where 2012 divided by ``inp``, so ``Q1ST_FACTOR`` times larger, within
-    ``q1st_bound``. Empty means the two are the same run printed two ways.
+    ``q1st_bound``; and, on the split runs' own ``blocks of imp trajectories`` line, which no
+    2012 output has, the three counts printed ``i5`` where they were printed ``i4``. Empty
+    means the two are the same run printed two ways.
     """
     assert len(new) == len(old), (len(old), len(new))
     rows = q1st_rows(old)
@@ -165,6 +182,8 @@ def underived(old: list[str], new: list[str]) -> list[tuple[str, str]]:
                 b == f" number of atoms ={int(m.group(1)):7d}":
             continue
         if i in rows and _q1st_derives(a, b):
+            continue
+        if _provenance_derives(a, b):
             continue
         out.append((a, b))
     return out
