@@ -1517,9 +1517,12 @@ c
       iu3=0
       iu2=0
       hold=fx(ihold)/rmax
+c     The off-axis tolerance is 1.0d-10 of rmax, as the fx test is, and
+c     never tighter than the 2012 code's absolute 1.0d-20 m.
+      tolxy=dmax1(1.0d-20,1.0d-10*rmax)
       if(hold.lt.0.9999999999d0.or.hold.gt.1.0000000001d0.or.
-     ?fy(ihold).gt.1.0d-20.or.fz(ihold).gt.1.0d-20.or.
-     ?fy(ihold).lt.-1.0d-20.or.fz(ihold).lt.-1.0d-20) then 
+     ?fy(ihold).gt.tolxy.or.fz(ihold).gt.tolxy.or.
+     ?fy(ihold).lt.-tolxy.or.fz(ihold).lt.-tolxy) then
       write(8,601)
   601 format(/1x,'Problem orientating along x axis',/)
       do 1001 iatom=1,inatom

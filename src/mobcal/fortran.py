@@ -65,8 +65,8 @@ INCLUDES = ("mobcal_ljread.inc", "mobcal_rng.inc", "mobcal_arrays.inc")
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the changes fortran/README.md lists under Changes, and the includes they share.
 SHA256 = {
-    "mobcal_He.f": "21c2e957ce4dda6077f4ec6b7088ee32e692e273a9c4a877adc121a6601c8a67",
-    "mobcal_N2.f": "41deed0efb32d667a9ae24395f198f88e1c7793a7f2844cce1c89997c13df163",
+    "mobcal_He.f": "601463cf8a0888bf12788c7bfaa8614981d6fb3d945a2c0f331fddb2f0be0839",
+    "mobcal_N2.f": "82ec5c6518876c0c6357bbe80fa7f06964d32242350e41d260aef2dde1911b9e",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
     "mobcal_rng.inc": "16ac0098bfb55d79e3a23c9377fbae25596a3f3a3a2af813eb64793f7d69c9fe",
     "mobcal_arrays.inc": "6cfa5f8378315b1193dd154c9228f2b891165ee2437bef27f87833c2a9c6878a",
