@@ -6,7 +6,7 @@
 block and the first atom was overwritten in the PA/EHS pass. ``fortran/mobcal_arrays.inc`` now
 dimensions the three ``len+1``.
 
-The observable: an ion at the bound whose first atom is an outlier along +x, and the same atoms
+The observable: an ion at the bound whose first atom is an outlier, its farthest, and the same atoms
 with the outlier last. They are one ion, so with atom 1 intact the two print the same lines from
 MOBIL4's header to MOBIL2's ``t*`` (PA, EHS, the reflection orders, the orientation, the
 potential scans); with atom 1 overwritten a different atom is lost in each and the PA cross
@@ -53,7 +53,7 @@ def _compile(gfortran: str, src: Path, out: Path) -> Path:
 
 def _pair(d: Path, n: int) -> dict[str, Path]:
     core = synthetic.globule(n - 1)
-    outlier = (max(abs(x) for x, _, _ in core) + 8.0, 0.0, 0.0)
+    outlier = synthetic.outlier(core)
     return {"first": synthetic.write(d / "first.mfj", [outlier, *core], "outlier first"),
             "last": synthetic.write(d / "last.mfj", [*core, outlier], "outlier last")}
 

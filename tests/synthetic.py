@@ -43,6 +43,20 @@ def globule(n: int, seed: int = 19) -> list[tuple[float, float, float]]:
              SPACING * k + rng.uniform(-jitter, jitter)) for i, j, k in sites[:n]]
 
 
+OUTLIER_DIRECTION = (0.6, 0.48, 0.64)
+"""A unit vector off every axis. An outlier on +x puts the farthest atom where MOBIL2's x-axis
+orientation needs a rotation of almost nothing, which the binary computes to ~1e-11 rad; at a
+100 Å radius that is past the check's absolute 1e-20 m and the program refuses the ion
+(``Problem orientating along x axis``), a 2012 property unrelated to what an outlier is for."""
+
+
+def outlier(core: list[tuple[float, float, float]], gap: float = 8.0) -> tuple[float, ...]:
+    """A point ``gap`` Å beyond the farthest atom of ``core``, along ``OUTLIER_DIRECTION``, so
+    that it is the farthest atom of the ion it joins."""
+    r = max(math.sqrt(x * x + y * y + z * z) for x, y, z in core) + gap
+    return tuple(r * c for c in OUTLIER_DIRECTION)
+
+
 def mfj_text(atoms: list[tuple[float, float, float]], label: str) -> str:
     """One coordinate set, Å, ``equal`` charges, carbon throughout."""
     q = 1.0 / len(atoms)
@@ -82,6 +96,7 @@ def run_until(binary: Path, d: Path, mfj: Path, until: str, gas: str = "he",
     InFile(mfj.name, "out.txt", seed, None, generator).write(d)
     parameters.shipped(gas).render(d)
     out = d / "out.txt"
+    out.unlink(missing_ok=True)  # an earlier run's output would be read as this one's
     env = dict(os.environ, GFORTRAN_UNBUFFERED_ALL="y")
     t0 = time.perf_counter()
     with open(d / "stdout.log", "wb") as log:
