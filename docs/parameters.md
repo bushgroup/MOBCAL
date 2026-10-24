@@ -8,10 +8,13 @@ routines that read coordinates. This repository keeps each gas's table as one da
 `src/mobcal/parameters/mobcal_He.toml` and `src/mobcal/parameters/mobcal_N2.toml`, and the
 package renders a short table from it into the directory of every run. No number has changed:
 every value in the two files is the literal the 2012 source spells, character for character, and
-the test suite holds each file to the source row for row.
+the test suite holds each file to the source row for row. These two tables are the default for
+every run. Beside them the package ships a second helium table, the eight rows of the Jarrold
+group's 2000 release, from which the 2012 helium program was made, as a named alternate that a
+run uses only when asked to.
 
-This page describes the file format (format 1), the table the package renders from it, and how a
-run names its table and records which one it used.
+This page describes the file format (format 1), the table the package renders from it, the 2000
+helium set, and how a run names its table and records which one it used.
 
 ## Why every number is a string
 
@@ -153,21 +156,69 @@ table that is not of this format, is for the other gas, declares a kind other th
 bytes, has more than 100 rows or cannot be read to its end, a program stops with status 1 and
 says which, on the screen and as the only line of its output file. The set's name and hash are
 printed to the screen; the output file gains no line, so it still compares byte for byte with
-the 2012 references. The test suite reads every row of both shipped tables back through the
+the 2012 references. The test suite reads every row of both 2012 tables back through the
 programs' own reader and holds each number to the one the 2012 source computed, to the last
 bit.
 
-## Choosing a table for a run
+## The 2000 helium set
 
-By default a run uses the shipped table for its gas. To name another, pass `--parameters`:
+The 2012 helium program descends from the Jarrold group's 2000 release of MOBCAL (Mesleh et al.,
+*J. Phys. Chem.* 1996, 100, 16082; Shvartsburg and Jarrold, *Chem. Phys. Lett.* 1996, 261, 86),
+kept as distributed at [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). To make
+numbers calculated with that release reproducible with this package, its helium table ships as
+`src/mobcal/parameters/mobcal_He_2000.toml`, a set named `2000` (its `name` is `MOBCAL 2000
+helium`). The file holds eight rows, hydrogen, carbon, nitrogen, oxygen, sodium, silicon, sulfur
+and iron, and every token in it is the literal of the `if(imass(iatom).eq.NN)` chain in the
+`fcoord` routine of that release's `mobcal.f` (tag `v1.0`, lines 581 to 662), character for
+character; the chain in `ncoord` is identical. The file is pinned by its SHA-256 as the 2012
+tables are, and `mobcal self-check` verifies it.
+
+The 2000 and 2012 tables differ in eight numbers. The well depths and radii of hydrogen,
+carbon, nitrogen and oxygen in the 2012 table are the 2000 values multiplied by one factor per
+element, 0.95, 0.99, 1.10 and 0.80, the same factor for both columns, whereas the masses, the
+hard-sphere radii and the sodium, silicon, sulfur and iron rows are the same literals in both.
+In the 2000 table nitrogen and oxygen carry carbon's well depth and radius, as the release's
+comments say. The test suite holds the file to its source without a network connection: a
+record of the eight rows, taken from the release with its SHA-256 recorded, gives each row's
+literals as spelled and the 64-bit values a program holding the chain's statements computed
+(gfortran 16.2.0, Windows, 2026-10-24). Every token of the file must equal its literal, and
+every row of the rendered table, read back through the program's own reader, must equal its
+value to the last bit.
+
+The 2000 set is a table and nothing more. The release has no fluorine row, so neither has the
+set, and an ion with a fluorine atom is refused with it: the program stops with status 1 and
+writes `type not defined for atom number N`, as the 2000 program did. This is correct, and the
+set is not patched with a fluorine row from 2012. The set is for helium only; the nitrogen
+program has no 2000 table. The release also ran at 298 K with `imp = 25`, where the 2012 values
+are 301 K and `imp = 1000`, and those two numbers are run settings, not part of the table
+([settings.md](settings.md)). Reproducing a number calculated with the 2000 release therefore
+takes the set and two settings:
 
 ```
+uv run mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
+```
+
+With the release's own example and seed, that run prints the release's reference output line for
+line, apart from the three print changes [settings.md](settings.md) lists.
+
+## Choosing a table for a run
+
+By default a run uses the 2012 table for its gas. To use a shipped set by name, or a table of
+your own by path, pass `--parameters`:
+
+```
+uv run mobcal run ion.mfj --parameters 2000
 uv run mobcal run choline.mfj --gas n2 --parameters my_nitrogen.toml
 ```
 
-The file is checked the same way as the shipped ones, and a file for the other gas is refused.
-The run's record names the table it used, by path, name and hash, so that a result from another
-table is never mistaken for one from the shipped one.
+The shipped sets are `2012`, for both gases and the default, and `2000`, for helium. A set's name
+stands for each gas's set of that name, so `--gas both --parameters 2000` is refused, because
+nitrogen has no `2000` set. Anything that is not a set's name is read as a path; a file of your
+own called `2000` is named with its directory, as `./2000`. A file is checked the same way as the
+shipped ones, and a file for the other gas is refused. `mobcal render-parameters` takes the same
+names and paths. The run's record names the table it used, by path, name and hash, and says
+whether it is one of the shipped files, so that a result from another table is never mistaken
+for one from the default.
 
 ## The record of a run
 

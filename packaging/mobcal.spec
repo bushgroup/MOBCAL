@@ -11,7 +11,8 @@
 #
 # A console executable: until the window exists, the command line is the program. The package
 # has no third-party runtime dependencies, so there is nothing to exclude and no hook to write.
-# Its one data file set is the two element tables, which the self-check verifies by SHA-256.
+# Its data files are the element tables (each gas's default set and the named alternates) and
+# the settings file, which the self-check verifies by SHA-256.
 
 import os
 import sys
@@ -42,10 +43,11 @@ if not any(name == "mobcal.selfcheck" for name, *_ in a.pure):
                        "cli.py's import of it.")
 
 _tables = {os.path.basename(dest) for dest, *_ in a.datas if dest.endswith(".toml")}
-if _tables != {"mobcal_He.toml", "mobcal_N2.toml", "mobcal_2012.toml"}:
+_want = {"mobcal_He.toml", "mobcal_He_2000.toml", "mobcal_N2.toml", "mobcal_2012.toml"}
+if _tables != _want:
     raise RuntimeError(f"Refusing to build: the data files in the bundle are {_tables}, not "
-                       "mobcal_He.toml, mobcal_N2.toml and mobcal_2012.toml; no run could "
-                       "start without the tables, and the settings file is what the window "
+                       f"{_want}; no run could start without the tables, a named set "
+                       "missing would be refused, and the settings file is what the window "
                        "reads.")
 
 # --- Provenance guard (Windows) -------------------------------------------------------------

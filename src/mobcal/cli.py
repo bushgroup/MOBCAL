@@ -4,10 +4,10 @@
     mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
     mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--rng philox|ranlux]
-               [--workers N] [--split W] [--parameters PATH] [--out DIR]
+               [--workers N] [--split W] [--parameters PATH|NAME] [--out DIR]
                [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
                [--inor N]
-    mobcal render-parameters he|n2 [DIR] [--parameters PATH] [--settings PATH]
+    mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
@@ -17,7 +17,9 @@ random number generator: Philox4x32-10 by default, or ``ranlux``, the 2012 gener
 with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
 default is not the run file's). With
 ``--parameters PATH`` every run uses that element table instead of the package's own, checked
-the same way and recorded the same way. ``--settings PATH`` names a settings file (the
+the same way and recorded the same way; ``--parameters NAME`` picks a shipped set by name
+(``2000``, the Jarrold group's 2000 helium table; ``2012``, the default for each gas,
+``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the
 temperature and the five sampling counts, ``mobcal.settings``) and the six single-value
 options override it value by value; without them every run uses the 2012 values. Its exit
 status is 1 if any run failed.
@@ -53,6 +55,13 @@ def _seeds(text: str) -> list[int]:
     if not seeds:
         raise argparse.ArgumentTypeError("no seeds given")
     return seeds
+
+
+def _set_names() -> str:
+    """The shipped sets, for the help: ``2012 (He, N2), 2000 (He)``."""
+    sets = parameters.SETS
+    return ", ".join(f"{n} ({', '.join(parameters.GAS[g] for g in sets if n in sets[g])})"
+                     for n in parameters.names())
 
 
 def expand_inputs(patterns: list[str]) -> list[Path]:
@@ -100,9 +109,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--split", type=int, default=None, metavar="W",
                    help="run each calculation across W processes, with the serial result "
                         "exactly (default: one process per calculation)")
-    r.add_argument("--parameters", type=Path, default=None, metavar="PATH",
-                   help="the element table (a TOML file) for every run, instead of the "
-                        "package's own for the gas")
+    r.add_argument("--parameters", default=None, metavar="PATH|NAME",
+                   help="the element table for every run: a TOML file, or a shipped set by "
+                        f"name ({_set_names()}); default {parameters.DEFAULT}")
     r.add_argument("--out", type=Path, default=DEFAULT_OUT,
                    help=f"where the run directories and the summary go (default {DEFAULT_OUT}/)")
     s = r.add_argument_group(
@@ -132,8 +141,9 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("dir", type=Path, nargs="?", default=Path("."), metavar="DIR",
                    help="where to write parameters.tab and settings.tab (default: the current "
                         "directory)")
-    p.add_argument("--parameters", type=Path, default=None, metavar="PATH",
-                   help="render this TOML file instead of the package's own for the gas")
+    p.add_argument("--parameters", default=None, metavar="PATH|NAME",
+                   help="render this TOML file, or this shipped set by name "
+                        f"({_set_names()}), instead of the gas's default set")
     p.add_argument("--settings", type=Path, default=None, metavar="PATH",
                    help="render this settings file instead of the 2012 values")
     return ap
@@ -177,8 +187,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "render-parameters":
         try:
-            ps = parameters.load(args.parameters or parameters.default_path(args.gas),
-                                 gas=args.gas)
+            ps = parameters.load(parameters.path_for(args.parameters, args.gas), gas=args.gas)
             st = settings.resolve(args.settings)
             args.dir.mkdir(parents=True, exist_ok=True)
             out = ps.render(args.dir)
@@ -201,7 +210,13 @@ def _run(args: argparse.Namespace) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 2
     gases = list(fortran.GASES) if args.gas == "both" else [args.gas]
-    if args.parameters is not None:
+    # A shipped set's name stands for each gas's set of that name; a path, for one gas's table.
+    try:
+        tables = {gas: parameters.path_for(args.parameters, gas) for gas in gases}
+    except parameters.ParameterError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    if args.parameters is not None and args.parameters not in parameters.names():
         try:
             ps = parameters.load(args.parameters)
         except parameters.ParameterError as e:
@@ -228,7 +243,8 @@ def _run(args: argparse.Namespace) -> int:
               f"(itn {st.itn} * inp {st.inp} blocks per coordinate set)", file=sys.stderr)
         return 2
     try:
-        jobs = [Job(p, gas, seed, args.out, split=split, parameters=args.parameters,
+        jobs = [Job(p, gas, seed, args.out, split=split,
+                    parameters=tables[gas] if args.parameters is not None else None,
                     generator=args.rng, settings=st)
                 for p in inputs for gas in gases for seed in args.seeds]
     except ValueError as e:

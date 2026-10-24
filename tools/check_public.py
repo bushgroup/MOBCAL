@@ -6,8 +6,9 @@ never as FAIL.
 
 What it covers today: the package imports, the three version declarations agree (pyproject.toml,
 mobcal.__version__, packaging/mobcal.iss), the files under fortran/ are the pinned files
-(the 2012 release plus the counted changes fortran/README.md lists), the two element tables
-under src/mobcal/parameters/ are the pinned files and load and render, the settings file under
+(the 2012 release plus the counted changes fortran/README.md lists), every element table
+under src/mobcal/parameters/ (each gas's default set and the named alternates) is its pinned
+file and loads and renders, the settings file under
 src/mobcal/settings/ is the pinned file and holds the 2012 values, the bounds and defaults
 fortran/mobcal_settings.inc declares are the ones mobcal.settings mirrors, the lower layers stay
 free of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
@@ -103,17 +104,21 @@ def main() -> int:
     problems = parameters.verify()
     for p in problems:
         print("     " + p)
-    check_true("both TOML files present and byte-identical to their pins", not problems)
+    sets = [(gas, name) for gas in fortran.GASES for name in parameters.names(gas)]
+    check_true(f"all {len(parameters.SHA256)} TOML files present and byte-identical to their "
+               "pins, one per shipped set",
+               not problems and sorted(parameters.SHA256) == sorted(
+                   parameters.SETS[g][n] for g, n in sets))
     with tempfile.TemporaryDirectory() as td:
-        for gas in fortran.GASES:
+        for gas, name in sets:
             try:
-                ps = parameters.shipped(gas)
+                ps = parameters.shipped(gas, name)
                 text = ps.render(td).read_text(encoding="ascii")
             except parameters.ParameterError as e:
-                check_true(f"{gas}: the shipped table loads ({e})", False)
+                check_true(f"{gas} {name}: the shipped table loads ({e})", False)
                 continue
-            check_true(f"{gas}: {ps.name!r} loads and renders, {len(ps.elements)} elements, "
-                       "no '/' or ',' in the rendered table",
+            check_true(f"{gas} {name}: {ps.name!r} loads and renders, {len(ps.elements)} "
+                       "elements, no '/' or ',' in the rendered table",
                        not set("/,") & set(text) and text.startswith(parameters.MAGIC))
 
     section("the run settings")

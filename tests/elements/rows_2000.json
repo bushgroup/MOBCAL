@@ -1,0 +1,357 @@
+{
+ "captured": {
+  "date": "2026-10-24",
+  "compiler": "GNU Fortran (Rev3, Built by MSYS2 project) 16.2.0",
+  "flags": [
+   "-O3",
+   "-fno-automatic",
+   "-std=legacy",
+   "-static"
+  ],
+  "platform": "Windows-11-10.0.26300-SP0",
+  "source": {
+   "repository": "https://github.com/bushgroup/MOBCAL-2000",
+   "tag": "v1.0",
+   "file": "mobcal.f",
+   "sha256": "9ea34c3ac7da3ef425a08f4e46da73885a96f6ceafa7fce2e10e4b08cbaac4fe",
+   "lines": {
+    "fcoord": [
+     581,
+     662
+    ],
+    "ncoord": [
+     2599,
+     2680
+    ]
+   }
+  }
+ },
+ "rows": {
+  "he": {
+   "fcoord": {
+    "1": {
+     "literals": {
+      "mass": "1.008d0",
+      "epsilon": "0.65d-03",
+      "sigma": "2.38d0",
+      "rhs": "2.2d0"
+     },
+     "bits": {
+      "mass": "3ff020c49ba5e354",
+      "epsilon": "3b5f798f720d56d3",
+      "sigma": "3df05af0b618af9c",
+      "rhs": "3dee3c8fd606ea4e"
+     },
+     "digits": {
+      "mass": "1.0080000000000000E+000",
+      "epsilon": "1.0414152644999999E-022",
+      "sigma": "2.3800000000000001E-010",
+      "rhs": "2.2000000000000002E-010"
+     }
+    },
+    "12": {
+     "literals": {
+      "mass": "12.01d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "4028051eb851eb85",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.2010000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "14": {
+     "literals": {
+      "mass": "14.01d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "402c051eb851eb85",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.4010000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "16": {
+     "literals": {
+      "mass": "16.00d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "4030000000000000",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.6000000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "23": {
+     "literals": {
+      "mass": "22.99d0",
+      "epsilon": "0.0278d-3",
+      "sigma": "3.97d0/1.12246d0",
+      "rhs": "2.853d0"
+     },
+     "bits": {
+      "mass": "4036fd70a3d70a3d",
+      "epsilon": "3b1589d9bb8934f5",
+      "sigma": "3df84e229b7a1f4b",
+      "rhs": "3df39b0cf943ab5c"
+     },
+     "digits": {
+      "mass": "2.2989999999999998E+001",
+      "epsilon": "4.4540529774000000E-024",
+      "sigma": "3.5368743652335055E-010",
+      "rhs": "2.8530000000000004E-010"
+     }
+    },
+    "28": {
+     "literals": {
+      "mass": "28.09d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "2.95d0"
+     },
+     "bits": {
+      "mass": "403c170a3d70a3d7",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df445b1e3dbe8ba"
+     },
+     "digits": {
+      "mass": "2.8090000000000000E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "2.9500000000000002E-010"
+     }
+    },
+    "32": {
+     "literals": {
+      "mass": "32.06d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "3.5d0"
+     },
+     "bits": {
+      "mass": "404007ae147ae148",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df80d43de9cc604"
+     },
+     "digits": {
+      "mass": "3.2060000000000002E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "3.5000000000000003E-010"
+     }
+    },
+    "56": {
+     "literals": {
+      "mass": "55.85d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "3.5d0"
+     },
+     "bits": {
+      "mass": "404beccccccccccd",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df80d43de9cc604"
+     },
+     "digits": {
+      "mass": "5.5850000000000001E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "3.5000000000000003E-010"
+     }
+    }
+   },
+   "ncoord": {
+    "1": {
+     "literals": {
+      "mass": "1.008d0",
+      "epsilon": "0.65d-03",
+      "sigma": "2.38d0",
+      "rhs": "2.2d0"
+     },
+     "bits": {
+      "mass": "3ff020c49ba5e354",
+      "epsilon": "3b5f798f720d56d3",
+      "sigma": "3df05af0b618af9c",
+      "rhs": "3dee3c8fd606ea4e"
+     },
+     "digits": {
+      "mass": "1.0080000000000000E+000",
+      "epsilon": "1.0414152644999999E-022",
+      "sigma": "2.3800000000000001E-010",
+      "rhs": "2.2000000000000002E-010"
+     }
+    },
+    "12": {
+     "literals": {
+      "mass": "12.01d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "4028051eb851eb85",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.2010000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "14": {
+     "literals": {
+      "mass": "14.01d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "402c051eb851eb85",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.4010000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "16": {
+     "literals": {
+      "mass": "16.00d0",
+      "epsilon": "1.34d-3",
+      "sigma": "3.043d0",
+      "rhs": "2.7d0"
+     },
+     "bits": {
+      "mass": "4030000000000000",
+      "epsilon": "3b7038be1d3e0365",
+      "sigma": "3df4e94d5dda13bb",
+      "rhs": "3df28de3e63e6cdf"
+     },
+     "digits": {
+      "mass": "1.6000000000000000E+001",
+      "epsilon": "2.1469176221999999E-022",
+      "sigma": "3.0430000000000002E-010",
+      "rhs": "2.7000000000000005E-010"
+     }
+    },
+    "23": {
+     "literals": {
+      "mass": "22.99d0",
+      "epsilon": "0.0278d-3",
+      "sigma": "3.97d0/1.12246d0",
+      "rhs": "2.853d0"
+     },
+     "bits": {
+      "mass": "4036fd70a3d70a3d",
+      "epsilon": "3b1589d9bb8934f5",
+      "sigma": "3df84e229b7a1f4b",
+      "rhs": "3df39b0cf943ab5c"
+     },
+     "digits": {
+      "mass": "2.2989999999999998E+001",
+      "epsilon": "4.4540529774000000E-024",
+      "sigma": "3.5368743652335055E-010",
+      "rhs": "2.8530000000000004E-010"
+     }
+    },
+    "28": {
+     "literals": {
+      "mass": "28.09d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "2.95d0"
+     },
+     "bits": {
+      "mass": "403c170a3d70a3d7",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df445b1e3dbe8ba"
+     },
+     "digits": {
+      "mass": "2.8090000000000000E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "2.9500000000000002E-010"
+     }
+    },
+    "32": {
+     "literals": {
+      "mass": "32.06d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "3.5d0"
+     },
+     "bits": {
+      "mass": "404007ae147ae148",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df80d43de9cc604"
+     },
+     "digits": {
+      "mass": "3.2060000000000002E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "3.5000000000000003E-010"
+     }
+    },
+    "56": {
+     "literals": {
+      "mass": "55.85d0",
+      "epsilon": "1.35d-3",
+      "sigma": "3.5d0",
+      "rhs": "3.5d0"
+     },
+     "bits": {
+      "mass": "404beccccccccccd",
+      "epsilon": "3b7057bbb64bd964",
+      "sigma": "3df80d43de9cc604",
+      "rhs": "3df80d43de9cc604"
+     },
+     "digits": {
+      "mass": "5.5850000000000001E+001",
+      "epsilon": "2.1629393955000000E-022",
+      "sigma": "3.5000000000000003E-010",
+      "rhs": "3.5000000000000003E-010"
+     }
+    }
+   }
+  }
+ }
+}

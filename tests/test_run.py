@@ -207,6 +207,17 @@ def test_every_run_directory_gets_the_rendered_table(tmp_path, gas):
     assert r.parameters == parameters.shipped(gas).record()
 
 
+def test_a_job_on_a_named_set_records_it_as_shipped(tmp_path):
+    # What `--parameters 2000` hands the driver: the shipped file's path.
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
+              parameters=parameters.path_for("2000", "he"))
+    r = run_one(job, launcher)
+    assert r.ok and r.parameters == parameters.shipped("he", "2000").record()
+    assert r.parameters["name"] == "MOBCAL 2000 helium" and r.parameters["shipped"]
+    rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["parameters"]["sha256"] == parameters.SHA256["mobcal_He_2000.toml"]
+
+
 def test_without_the_rendered_table_the_stand_in_refuses(tmp_path, monkeypatch):
     # The stand-in checks for the table as the program will; the driver is what supplies it.
     monkeypatch.setattr(parameters.ParameterSet, "render", lambda self, d: None)

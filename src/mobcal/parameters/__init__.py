@@ -1,10 +1,13 @@
-"""The element tables: one TOML file per gas, checked, pinned, and rendered into every run.
+"""The element tables: TOML files per gas, checked, pinned, and rendered into every run.
 
 Each program assigns every atom of the ion a mass, a Lennard-Jones well depth and radius and a
 hard-sphere radius by the atom's integer mass key. The 2012 source held those tables as chains
 of ``if(imass(iatom).eq.NN)`` blocks; here each gas's table is a TOML file beside this module,
-``mobcal_He.toml`` and ``mobcal_N2.toml``, and the source of truth for it. ``SHA256`` pins
-both as ``mobcal.fortran.SHA256`` pins the Fortran, and ``verify`` compares.
+``mobcal_He.toml`` and ``mobcal_N2.toml``, and the source of truth for it. Those are each gas's
+default set, named ``2012``. ``SETS`` adds the named alternates, so far one: ``2000`` for
+helium, the Jarrold group's 2000 table (``mobcal_He_2000.toml``, every token that release's
+literal). ``SHA256`` pins every shipped file as ``mobcal.fortran.SHA256`` pins the Fortran, and
+``verify`` compares. ``--parameters`` takes a set's name or a path (``path_for``).
 
 Every number in a file is a string holding the Fortran literal exactly as the 2012 source
 spells it, because the spelling is the precision: ``0.4020`` is a REAL(4) literal and
@@ -38,11 +41,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PARAMETERS_DIR = Path(__file__).resolve().parent
-FILES = {"he": "mobcal_He.toml", "n2": "mobcal_N2.toml"}
+# Per gas, the shipped sets by name, the default first. A run uses the default unless told
+# otherwise; the 2012 tables are the default for both gases.
+SETS = {
+    "he": {"2012": "mobcal_He.toml", "2000": "mobcal_He_2000.toml"},
+    "n2": {"2012": "mobcal_N2.toml"},
+}
+DEFAULT = "2012"
+FILES = {gas: sets[DEFAULT] for gas, sets in SETS.items()}  # each gas's default file
 
-# The two shipped tables as committed (LF line endings, see .gitattributes).
+# Every shipped table as committed (LF line endings, see .gitattributes).
 SHA256 = {
     "mobcal_He.toml": "6e19c7ce13dbff2035bac9c762226db61316e706b23f52f2336028af76da18f0",
+    "mobcal_He_2000.toml": "441382ffc0f618d2358131f74ed4898312c4d1b21524faf08fb9c3eeaedb9940",
     "mobcal_N2.toml": "06a2528ec169627d1c002c2d9561d7d8c434a459552b5642845ba69807443595",
 }
 
@@ -182,8 +193,13 @@ class ParameterSet:
 
     @property
     def shipped(self) -> bool:
-        """True when this is the package's own file for its gas, as pinned."""
-        return self.sha256 == SHA256.get(FILES[self.gas])
+        """True when this is one of the package's own files for its gas, as pinned."""
+        return self.set_name is not None
+
+    @property
+    def set_name(self) -> str | None:
+        """The shipped set this file is, by its pin (``2012``, ``2000``), else None."""
+        return next((n for n, f in SETS[self.gas].items() if self.sha256 == SHA256[f]), None)
 
     def lines(self) -> list[str]:
         """The rendered table, line by line."""
@@ -213,10 +229,39 @@ class ParameterSet:
 
 
 def default_path(gas: str) -> Path:
-    """The package's own table for a gas."""
+    """The package's own table for a gas, its default set."""
     if gas not in FILES:
         raise ValueError(f"gas must be one of {tuple(FILES)}, not {gas!r}")
     return PARAMETERS_DIR / FILES[gas]
+
+
+def names(gas: str | None = None) -> tuple[str, ...]:
+    """The shipped sets' names for a gas, the default first; without one, every gas's."""
+    if gas is None:
+        return tuple(dict.fromkeys(n for sets in SETS.values() for n in sets))
+    default_path(gas)  # the gas check
+    return tuple(SETS[gas])
+
+
+def shipped_path(gas: str, name: str | None = None) -> Path:
+    """The file of a shipped set for a gas, by name; the default set without one."""
+    if name is None:
+        return default_path(gas)
+    if name not in names(gas):
+        raise ParameterError(f"no shipped {GAS[gas]} set is named {name!r}; the shipped "
+                             f"{GAS[gas]} sets are {', '.join(names(gas))}")
+    return PARAMETERS_DIR / SETS[gas][name]
+
+
+def path_for(value: str | Path | None, gas: str) -> Path:
+    """What ``--parameters`` names for a gas: nothing, the default set; a shipped set's name,
+    that set's file; anything else, a path. A file called by a set's name is given with its
+    directory, ``./2000``."""
+    if value is None:
+        return default_path(gas)
+    if isinstance(value, str) and value in names():
+        return shipped_path(gas, value)
+    return Path(value)
 
 
 def load(path: Path | str, gas: str | None = None) -> ParameterSet:
@@ -305,9 +350,9 @@ def load(path: Path | str, gas: str | None = None) -> ParameterSet:
                         tuple(elements))
 
 
-def shipped(gas: str) -> ParameterSet:
-    """The package's own table for a gas, loaded and checked."""
-    return load(default_path(gas), gas=gas)
+def shipped(gas: str, name: str | None = None) -> ParameterSet:
+    """A shipped set for a gas, by name (the default without one), loaded and checked."""
+    return load(shipped_path(gas, name), gas=gas)
 
 
 def _sha256(path: Path) -> str:
@@ -315,8 +360,8 @@ def _sha256(path: Path) -> str:
 
 
 def verify(parameters_dir: Path = PARAMETERS_DIR) -> list[str]:
-    """One line per shipped table that is missing or differs from its pin. Empty means both
-    are the committed files."""
+    """One line per shipped table that is missing or differs from its pin. Empty means every
+    one is the committed file."""
     problems = []
     for name, want in SHA256.items():
         p = parameters_dir / name

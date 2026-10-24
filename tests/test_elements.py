@@ -22,6 +22,14 @@ two ways:
   Nitrogen with silicon differs in set 2 and nowhere else, because the 2012 ``ncoord`` gave
   silicon iron's well depth and radius and the table gives ``fcoord``'s; those lines are the
   one difference the change was meant to make.
+
+The 2000 helium set, ``mobcal_He_2000.toml``, is held to its own source the same ways but
+offline: ``rows_2000.json`` records, for both chains of the Jarrold group's 2000 ``mobcal.f``
+(``bushgroup/MOBCAL-2000`` at ``v1.0``, its SHA-256 recorded), each row's four literals as
+spelled and the patterns a program holding the chain's statements computed. Every token of the
+file must be that literal, character for character; every row read back through ``ljprobe.f``
+must be that pattern, to the bit; and an ion with a fluorine atom, which the 2000 table has no
+row for, is refused through the real binary, as the 2000 program refused it.
 """
 
 from __future__ import annotations
@@ -44,6 +52,9 @@ from mobcal.io.outfile import OutFile
 FIXTURES = Path(__file__).resolve().parent / "elements"
 LJPROBE = Path(__file__).resolve().parent / "ljprobe.f"
 ROWS = json.loads((FIXTURES / "rows.json").read_text(encoding="utf-8"))["rows"]
+ROWS_2000 = json.loads((FIXTURES / "rows_2000.json").read_text(encoding="utf-8"))
+# mobcal.f of bushgroup/MOBCAL-2000 at v1.0, the file the 2000 rows were captured from.
+SOURCE_2000_SHA256 = "9ea34c3ac7da3ef425a08f4e46da73885a96f6ceafa7fce2e10e4b08cbaac4fe"
 
 # The lines of the captured nitrogen output that the silicon fix moves: set 2's trajectory
 # result, in its own block and in the SUMMARY (the average with it).
@@ -89,6 +100,35 @@ def test_the_captured_chains_differ_only_at_nitrogens_silicon_which_held_iron():
         assert n2["ncoord"]["28"]["bits"][col] == n2["fcoord"]["28"]["bits"][col]
 
 
+def test_the_2000_rows_are_from_the_released_source_and_both_chains_agree():
+    src = ROWS_2000["captured"]["source"]
+    assert (src["repository"], src["tag"], src["file"]) == (
+        "https://github.com/bushgroup/MOBCAL-2000", "v1.0", "mobcal.f")
+    assert src["sha256"] == SOURCE_2000_SHA256
+    he = ROWS_2000["rows"]["he"]
+    assert he["fcoord"] == he["ncoord"] and list(ROWS_2000["rows"]) == ["he"]
+
+
+def test_every_token_of_the_2000_file_is_the_2000_literal():
+    ps = parameters.shipped("he", "2000")
+    rows = ROWS_2000["rows"]["he"]["fcoord"]
+    assert [str(k) for k in ps.keys] == list(rows)  # the source's order is ascending key
+    for e in ps.elements:
+        assert {c: getattr(e, c) for c in parameters.COLUMNS} == rows[str(e.key)]["literals"]
+
+
+def test_the_2000_set_differs_from_2012_where_the_source_says():
+    # Each 2012 H, C, N, O pair is the 2000 pair times one factor per element; masses,
+    # hard-sphere radii and the Na, Si, S, Fe rows are the same literals; 2000 has no fluorine.
+    old = {e.key: e for e in parameters.shipped("he", "2000").elements}
+    new = {e.key: e for e in parameters.shipped("he").elements}
+    assert set(new) - set(old) == {19} and set(old) <= set(new)
+    for k in old:
+        assert (old[k].mass, old[k].rhs) == (new[k].mass, new[k].rhs)
+        moved = (old[k].epsilon, old[k].sigma) != (new[k].epsilon, new[k].sigma)
+        assert moved == (k in (1, 12, 14, 16)), k
+
+
 # --- every row at full precision, through the reader -----------------------------------------
 
 @pytest.fixture(scope="module")
@@ -128,6 +168,20 @@ def test_every_row_reads_back_bit_identical_to_the_compiled_chain(ljprobe, tmp_p
     assert got == want
 
 
+def test_every_2000_row_reads_back_bit_identical_to_the_2000_chain(ljprobe, tmp_path):
+    ps = parameters.shipped("he", "2000")
+    ps.render(tmp_path)
+    proc, lines = _probe(ljprobe, tmp_path, "he")
+    assert proc.returncode == 0, (proc.stdout, lines)
+    assert proc.stdout.split() == ["parameter", "set", "MOBCAL_2000_helium", ps.sha256]
+    got = {}
+    for line in lines:
+        key, found, *bits = line.split()
+        assert found == "1", line
+        got[key] = dict(zip(parameters.COLUMNS, [b.lower() for b in bits], strict=True))
+    assert got == {k: row["bits"] for k, row in ROWS_2000["rows"]["he"]["fcoord"].items()}
+
+
 def test_a_nitrogen_well_depth_is_the_single_precision_one(ljprobe, tmp_path):
     # Silicon's epsilon token is 0.4020, a REAL(4) literal. Read as REAL(8) it would be a
     # different number from the eighth digit on; the reader converts it by its declared kind.
@@ -156,10 +210,11 @@ def binaries(gfortran, tmp_path_factory) -> dict[str, Path]:
     return {g: fortran.build(g, d, gfortran).binary for g in fortran.GASES}
 
 
-def _run(binary: Path, d: Path, gas: str, text: str) -> tuple[subprocess.CompletedProcess, OutFile]:
+def _run(binary: Path, d: Path, gas: str, text: str,
+         name: str | None = None) -> tuple[subprocess.CompletedProcess, OutFile]:
     (d / probe.INPUT).write_text(text, encoding="ascii", newline="\n")
     (d / "mobcal.in").write_text(probe.run_file(), encoding="ascii", newline="\n")
-    parameters.shipped(gas).render(d)
+    parameters.shipped(gas, name).render(d)
     proc = subprocess.run([str(binary)], cwd=d, capture_output=True, text=True, timeout=600,
                           stdin=subprocess.DEVNULL)
     return proc, OutFile.read(d / probe.OUTPUT)
@@ -188,3 +243,21 @@ def test_nitrogen_with_silicon_differs_from_2012_in_set_2_only(binaries, tmp_pat
     assert out.conformers[0] == OutFile(_fixture("n2")).conformers[0]
     assert out.conformers[1]["TM"] != OutFile(_fixture("n2")).conformers[1]["TM"]
     assert re.fullmatch(r"\s+2\s+\d\.\d{4}E[+-]\d\d\s+\d\.\d{4}E[+-]\d\d", differing[3][1])
+
+
+def test_a_fluorinated_ion_is_refused_with_the_2000_set(binaries, tmp_path):
+    # The probe input of the 2012 helium table has fluorine (key 19) as its fifth atom; the
+    # 2000 table has no row for it, and the program stops there, as the 2000 program did.
+    text = probe.all_elements("he")
+    assert parameters.shipped("he").keys.index(19) == 4
+    proc, out = _run(binaries["he"], tmp_path, "he", text, "2000")
+    assert proc.returncode == 1 and not out.ok
+    assert out.last_line == "type not defined for atom number      5"
+
+
+def test_the_2000_set_runs_an_ion_of_its_own_elements(binaries, tmp_path):
+    proc, out = _run(binaries["he"], tmp_path, "he", probe.all_elements("he", (19,)), "2000")
+    assert proc.returncode == 0, out.last_line
+    assert out.ok and out.coordinate_sets == 2 and len(out.conformers) == 2
+    assert proc.stdout.split()[:4] == ["parameter", "set", "MOBCAL_2000_helium",
+                                       parameters.SHA256["mobcal_He_2000.toml"]]

@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from mobcal import cli, fortran, parameters
+from mobcal import ROOT, cli, fortran, parameters
 from mobcal.parameters import ParameterError
 
 # --- the files' literals and the rendered tokens --------------------------------------------
@@ -62,16 +62,55 @@ def test_the_rendered_expressions():
 
 # --- the files and their pins ---------------------------------------------------------------
 
-def test_both_shipped_files_are_pinned_and_verify():
-    assert set(parameters.SHA256) == set(parameters.FILES.values())
+def test_every_shipped_file_is_pinned_and_verifies():
+    files = [f for sets in parameters.SETS.values() for f in sets.values()]
+    assert sorted(parameters.SHA256) == sorted(files)  # one pin per set, no file twice
     assert parameters.verify() == []
     for gas in fortran.GASES:
         ps = parameters.shipped(gas)
         assert ps.shipped and ps.sha256 == parameters.SHA256[parameters.FILES[gas]]
+        assert ps.set_name == parameters.DEFAULT
+        for name in parameters.names(gas):
+            ps = parameters.shipped(gas, name)
+            assert ps.shipped and ps.set_name == name
+            assert ps.sha256 == parameters.SHA256[parameters.SETS[gas][name]]
+
+
+def test_the_sets_each_gas_ships():
+    # The 2012 tables are the default for both gases; helium has the 2000 table besides.
+    assert parameters.DEFAULT == "2012"
+    assert parameters.FILES == {"he": "mobcal_He.toml", "n2": "mobcal_N2.toml"}
+    assert parameters.names("he") == ("2012", "2000") and parameters.names("n2") == ("2012",)
+    assert parameters.names() == ("2012", "2000")
+    he_2000 = parameters.PARAMETERS_DIR / "mobcal_He_2000.toml"
+    assert parameters.shipped_path("he", "2000") == he_2000
+    assert parameters.shipped_path("n2") == parameters.default_path("n2")
+    with pytest.raises(ParameterError, match="no shipped N2 set is named '2000'; the shipped "
+                                             "N2 sets are 2012"):
+        parameters.shipped("n2", "2000")
+    with pytest.raises(ValueError, match="gas must be one of"):
+        parameters.names("ar")
+
+
+def test_path_for_takes_a_set_name_or_a_path(tmp_path):
+    assert parameters.path_for(None, "he") == parameters.default_path("he")
+    assert parameters.path_for("2012", "n2") == parameters.default_path("n2")
+    assert parameters.path_for("2000", "he").name == "mobcal_He_2000.toml"
+    assert parameters.path_for(str(tmp_path / "2000"), "he") == tmp_path / "2000"
+    assert parameters.path_for("mine.toml", "he") == Path("mine.toml")
+    with pytest.raises(ParameterError, match="no shipped N2 set"):
+        parameters.path_for("2000", "n2")
+
+
+def test_the_installer_bundles_every_shipped_file():
+    spec = (ROOT / "packaging" / "mobcal.spec").read_text(encoding="utf-8")
+    want = re.search(r"^_want = \{(.*)\}$", spec, re.M).group(1)
+    assert {s.strip().strip('"') for s in want.split(",")} == {*parameters.SHA256,
+                                                               "mobcal_2012.toml"}
 
 
 def test_verify_catches_a_changed_or_missing_file(tmp_path):
-    for name in parameters.FILES.values():
+    for name in parameters.SHA256:
         (tmp_path / name).write_bytes((parameters.PARAMETERS_DIR / name).read_bytes())
     assert parameters.verify(tmp_path) == []
     p = tmp_path / "mobcal_N2.toml"
@@ -234,6 +273,26 @@ def test_render_parameters_writes_what_the_driver_writes(tmp_path, capsys, gas):
     got = (tmp_path / "here" / "parameters.tab").read_bytes()
     assert got == parameters.shipped(gas).render(tmp_path).read_bytes()
     assert capsys.readouterr().out.startswith(f"wrote {tmp_path / 'here' / 'parameters.tab'}")
+
+
+def test_render_parameters_takes_a_set_by_name(tmp_path, capsys):
+    assert cli.main(["render-parameters", "he", str(tmp_path / "here"),
+                     "--parameters", "2000"]) == 0
+    got = (tmp_path / "here" / "parameters.tab").read_bytes()
+    assert got == parameters.shipped("he", "2000").render(tmp_path).read_bytes()
+    assert got.split()[:4] == [b"MOBCAL-LJ", b"1", b"He", b"MOBCAL_2000_helium"]
+    assert "MOBCAL 2000 helium, 8 elements" in capsys.readouterr().out
+    assert cli.main(["render-parameters", "n2", str(tmp_path / "n2"),
+                     "--parameters", "2000"]) == 2
+    assert "no shipped N2 set is named '2000'" in capsys.readouterr().err
+    assert not (tmp_path / "n2" / "parameters.tab").exists()
+
+
+def test_run_refuses_a_set_name_the_gas_does_not_ship(tmp_path, capsys):
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--gas", "both",
+                   "--parameters", "2000", "--out", str(tmp_path / "runs")])
+    assert rc == 2 and "no shipped N2 set is named '2000'" in capsys.readouterr().err
+    assert not (tmp_path / "runs").exists()
 
 
 def test_render_parameters_refuses_a_table_for_the_other_gas(tmp_path, capsys):

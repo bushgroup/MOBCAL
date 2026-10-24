@@ -92,12 +92,14 @@ def _parameters() -> tuple[bool, str, list[str]]:
         return False, f"settings file in {settings.SETTINGS_DIR}", problems
     detail = []
     for gas in fortran.GASES:
-        ps = parameters.shipped(gas)
-        detail.append(f"{ps.path.name}: {ps.name}, {len(ps.elements)} elements, "
-                      f"sha256 {ps.sha256[:12]}")
+        for name in parameters.names(gas):
+            ps = parameters.shipped(gas, name)
+            default = " (default)" if name == parameters.DEFAULT else ""
+            detail.append(f"{ps.path.name}: set {name}{default}, {ps.name}, "
+                          f"{len(ps.elements)} elements, sha256 {ps.sha256[:12]}")
     st = settings.shipped()
     detail.append(f"{settings.FILE}: the 2012 settings, sha256 {st.source.sha256[:12]}")
-    return True, (f"{', '.join(parameters.FILES.values())} in {d} and {settings.FILE} in "
+    return True, (f"{', '.join(parameters.SHA256)} in {d} and {settings.FILE} in "
                   f"{settings.SETTINGS_DIR}, as pinned"), detail
 
 

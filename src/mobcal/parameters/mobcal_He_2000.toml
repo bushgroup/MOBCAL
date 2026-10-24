@@ -1,0 +1,133 @@
+# The helium element table of the Jarrold group's 2000 MOBCAL release, shipped beside the 2012
+# table as a second, named helium set ("2000"; mobcal run --parameters 2000). The 2012 table,
+# mobcal_He.toml, stays the default. docs/parameters.md describes the format and the set;
+# mobcal.parameters reads, checks and renders it, and pins this file by its SHA-256.
+#
+# Source: mobcal.f of the 2000 release ("Version of 06/15/00"), kept as distributed at
+# https://github.com/bushgroup/MOBCAL-2000, tag v1.0: the if(imass(iatom).eq.NN) chain of its
+# fcoord routine, lines 581-662; ncoord's chain is identical. The method is
+# Mesleh, Hunter, Shvartsburg, Schatz and Jarrold, J. Phys. Chem. 1996, 100, 16082-16086, and
+# Shvartsburg and Jarrold, Chem. Phys. Lett. 1996, 261, 86.
+#
+# Every number is a string holding the Fortran literal exactly as the 2000 source spells it,
+# and tests/test_elements.py holds each one to that source, token for token and, read back
+# through the program, bit for bit. Do not tidy a literal (0.65d-03 into 0.65d-3, 16.00d0 into
+# 16.0d0). Against the 2012 table only the H, C, N and O well depths and radii differ: each 2012
+# pair is this pair times one factor per element (0.95, 0.99, 1.10, 0.80), the same on both
+# columns. Masses, hard-sphere radii and the Na, Si, S and Fe rows are the same literals.
+#
+# The release has no fluorine row, so neither has this file: an ion with a fluorine atom is
+# refused with this set, as the 2000 program refused it. The release ran at 298 K with imp = 25;
+# those are run settings (docs/settings.md), not part of the table.
+#
+# form = "pair": these are He-X pair parameters, used as they stand.
+#   epsilon  well depth, eV               eolj = epsilon * xe
+#   sigma    Lennard-Jones sigma, A       rolj = sigma * 1.0d-10
+#   rhs      hard-sphere radius, A        rhs  = rhs * 1.0d-10
+#   mass     atomic mass, the ion's mass and centre of mass
+# status: fitted | provisional. rhs_status: own | borrowed (a radius taken from another
+# element). provenance: one line on where the row comes from. As in the 2012 file, every row
+# is "fitted" and every radius "own".
+
+format = 1
+name = "MOBCAL 2000 helium"
+gas = "He"
+form = "pair"
+
+[kinds]
+mass = "double"
+epsilon = "double"
+sigma = "double"
+rhs = "double"
+
+[[element]]
+key = 1
+symbol = "H"
+mass = "1.008d0"
+epsilon = "0.65d-03"
+sigma = "2.38d0"
+rhs = "2.2d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "epsilon an average of ab initio values; sigma fitted to the mobilities of C6H6 and other ions (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord; Mesleh et al. 1996)"
+
+[[element]]
+key = 12
+symbol = "C"
+mass = "12.01d0"
+epsilon = "1.34d-3"
+sigma = "3.043d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to the mobility of C60 (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord; Mesleh et al. 1996; hard-sphere radius, Shvartsburg and Jarrold 1996)"
+
+[[element]]
+key = 14
+symbol = "N"
+mass = "14.01d0"
+epsilon = "1.34d-3"
+sigma = "3.043d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "commented 'same as carbon': carbon's epsilon, sigma and hard-sphere radius (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+
+[[element]]
+key = 16
+symbol = "O"
+mass = "16.00d0"
+epsilon = "1.34d-3"
+sigma = "3.043d0"
+rhs = "2.7d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "commented 'same as carbon': carbon's epsilon, sigma and hard-sphere radius (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+
+# Sodium, as in the 2012 file: the 2000 source carries the same comment and literals. Na+ from
+# fitting the potential derived by Viehland (Chem. Phys. 85 (1984) 291) for Na+ + He
+# interactions from mobility data; hard-sphere radius from fitting the 300 K Na+ low-field
+# mobility in He. sigma is r_min = 3.97 A over 1.12246, an approximation to 2**(1/6).
+[[element]]
+key = 23
+symbol = "Na"
+mass = "22.99d0"
+epsilon = "0.0278d-3"
+sigma = "3.97d0/1.12246d0"
+rhs = "2.853d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to Viehland's Na+/He potential; hard-sphere radius fitted to the 300 K Na+ mobility (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+
+[[element]]
+key = 28
+symbol = "Si"
+mass = "28.09d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "2.95d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "fitted to the mobilities of small silicon clusters (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+
+[[element]]
+key = 32
+symbol = "S"
+mass = "32.06d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "commented 'same as silicon' (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+
+[[element]]
+key = 56
+symbol = "Fe"
+mass = "55.85d0"
+epsilon = "1.35d-3"
+sigma = "3.5d0"
+rhs = "3.5d0"
+status = "fitted"
+rhs_status = "own"
+provenance = "commented 'same as silicon' (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"

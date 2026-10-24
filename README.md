@@ -53,7 +53,8 @@ to check an installation with `mobcal self-check`.
 - `fortran/`: the 2012 sources, the choline input, the run file and the two reference outputs.
   [`fortran/README.md`](fortran/README.md) lists every change since 2012, records the hashes,
   and says what the 2012 release said about compiling them. The reference outputs are unchanged.
-- `src/mobcal/`: the Python package, with the two element tables in `src/mobcal/parameters/`.
+- `src/mobcal/`: the Python package, with the two 2012 element tables and the 2000 helium table
+  in `src/mobcal/parameters/`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
 - `docs/`: the installation guide, the element-table format
