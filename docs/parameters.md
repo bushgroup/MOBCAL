@@ -199,7 +199,8 @@ uv run mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng r
 ```
 
 With the release's own example and seed, that run prints the release's reference output line for
-line, apart from the three print changes [settings.md](settings.md) lists.
+line, apart from three print changes. [mobcal-2000.md](mobcal-2000.md) gives the comparison and
+lists the changes.
 
 ## Choosing a table for a run
 

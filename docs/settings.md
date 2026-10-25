@@ -138,7 +138,7 @@ run with `--parameters 2000 --temperature 298 --imp 25 --rng ranlux` at that see
 apart from the three lines whose format changed after 2012: the `mass of ion` exponent letter,
 the width of the atom count, and the q1st column. The same holds split 40 ways. Reproducing a
 number calculated with the 2000 release is therefore a table and two settings, not a
-different program.
+different program; [mobcal-2000.md](mobcal-2000.md) gives the command and the comparison.
 
 ## The record
 

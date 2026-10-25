@@ -59,8 +59,9 @@ to check an installation with `mobcal self-check`.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
 - `docs/`: the installation guide, the element-table format
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
-  ([`docs/random-numbers.md`](docs/random-numbers.md)) and the run settings
-  ([`docs/settings.md`](docs/settings.md)).
+  ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
+  ([`docs/settings.md`](docs/settings.md)), and how to reproduce a calculation of the 2000
+  helium release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
 
 ## Building the Fortran
 
