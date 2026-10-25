@@ -38,8 +38,8 @@ the five sampling counts run settings read from a file
 program reports: a refused input now exits with status 1, an input larger than the arrays is
 refused instead of overrunning them, two output formats print what they were meant to, and the
 shipped run file names a neutral output. None of them changes a number the program computes for
-the 2012 choline input under the 2012 generator, and the regression test holds it to the 2012
-outputs byte for byte on every change. One copy error is corrected: the nitrogen program gave silicon iron's parameters
+the 2012 choline input under the 2012 generator, and the regression test holds every line of
+its output to the 2012 outputs on every change, byte for byte apart from the lines those two formats print. One copy error is corrected: the nitrogen program gave silicon iron's parameters
 from the second coordinate set of an input on.
 
 ## Installing
@@ -77,7 +77,8 @@ records in `mobcal.fortran`. One of those flags is not optional. The code keeps 
 variables across calls, which was the default of the g77 compiler it was written for, and
 gfortran must be told to do the same with `-fno-automatic`. Without that flag an optimized build
 runs to completion and loses every trajectory. With it, optimized gfortran builds reproduce the
-2012 reference outputs byte for byte on Windows, macOS and Linux.
+2012 reference outputs on Windows, macOS and Linux, byte for byte apart from two print changes
+made since ([Testing against the 2012 outputs](#testing-against-the-2012-outputs)).
 
 To see whether the current code builds, look at the [`ci` workflow](.github/workflows/ci.yml).
 Each change to the repository compiles both sources with these flags on all three platforms,
@@ -206,7 +207,12 @@ The split pays best on the long calculations, which is what it is for.
 To check that a build still computes the 2012 numbers, the test suite runs `Choline.mfj`
 through each binary under RANLUX at seed 5013489, the generator and seed the references were
 produced with, and compares
-the output with `fortran/sample-output/` in three tiers. The first compares every line that does
+the output with `tests/reference/` in three tiers. Those two files are what the current programs
+print for choline, and they differ from the 2012 originals in `fortran/sample-output/` in 41
+lines each, the width of the atom count and the q1st column, which now prints four times the
+2012 value (two print changes, [`fortran/README.md`](fortran/README.md)); a test holds them to
+the originals line by line, allowing those two changes and nothing else, so a build that passes
+against them reproduces every number of the 2012 outputs. The first tier compares every line that does
 not depend on the random number stream character for character. `tests/stochastic-lines.txt`
 lists the lines that do, so a line that is not listed has to match, and a line the 2012 code
 never wrote fails the test. The second compares the reported cross sections within 0.1 %: the
