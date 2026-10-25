@@ -60,8 +60,9 @@ to check an installation with `mobcal self-check`.
 - `docs/`: the installation guide, the element-table format
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
-  ([`docs/settings.md`](docs/settings.md)), and how to reproduce a calculation of the 2000
-  helium release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
+  ([`docs/settings.md`](docs/settings.md)), and how to reproduce a calculation of the 2012
+  release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
+  ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
 
 ## Building the Fortran
 
@@ -130,7 +131,9 @@ uv run mobcal run choline.mfj --rng ranlux
 reports the 2012 choline cross sections in helium to every printed digit, whereas the default,
 Philox, reports cross sections from a different random number stream, which differ in their
 last digits as a run at another seed would. [`docs/random-numbers.md`](docs/random-numbers.md)
-describes the two generators and why the default is the newer one.
+describes the two generators and why the default is the newer one, and
+[`docs/mobcal-2012.md`](docs/mobcal-2012.md) gives the commands for both gases and how their
+outputs compare with the 2012 references.
 
 The temperature and the five sampling counts that the 2012 programs compiled in (301 K; 1,000
 trajectories per block, 10 cycles and 40 velocity points in the trajectory method; 250,000
@@ -236,7 +239,9 @@ uv run pytest -m nitrogen
 ```
 
 Continuous integration runs the nitrogen comparison every Monday, and on a manual run of the
-`ci` workflow with its nitrogen option selected.
+`ci` workflow with its nitrogen option selected. To make the same comparison by hand, and for
+the lines in which the current outputs differ from the 2012 ones, see
+[`docs/mobcal-2012.md`](docs/mobcal-2012.md).
 
 ## Citation
 

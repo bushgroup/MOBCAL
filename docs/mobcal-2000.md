@@ -76,7 +76,8 @@ their diagnostics, and the SUMMARY are the 2000 lines: the averages over the 50 
 Å² by the projection approximation, 206.03 Å² by the exact hard-sphere method and 196.31 Å² by
 the trajectory method, as the reference prints them. This was measured with MSYS2 gfortran
 16.2.0 on Windows on 24 October 2026, serial and split 40 ways (below). The comparison is not
-part of the test suite, which holds the program to the 2012 outputs on every push.
+part of the test suite, which holds the program to the 2012 outputs on every push
+([mobcal-2012.md](mobcal-2012.md)).
 
 ## The differences in the output
 

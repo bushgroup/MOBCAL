@@ -78,4 +78,5 @@ trajectory method, the 2012 values to every printed digit. The same input under 
 cross sections that differ in their last digits, as a run at another seed would: the two
 generators produce different streams, so no line of the output that depends on the random
 numbers matches between them. The regression tests and `mobcal self-check --choline` run under
-RANLUX for this reason.
+RANLUX for this reason. [mobcal-2012.md](mobcal-2012.md) gives the command for each gas and
+compares the outputs with the 2012 references line by line.

@@ -90,6 +90,7 @@ should do nothing else. (Until format 604 was corrected, the `mass of ion` line 
 difference, a `D` exponent where g77 wrote `E`.) A build of the current sources also prints the
 atom count in a wider field and the q1st column four times larger than the 2012 outputs do
 (Changes, above), so it is compared with `tests/reference/`, not with these files directly.
+[docs/mobcal-2012.md](../docs/mobcal-2012.md) gives the commands and lists the differing lines.
 
 The references also echo the name of the input file they were run on, twice, and that name is
 `Choline_pop.mfj`. This repository ships the same coordinates as `Choline.mfj`, so a comparison
