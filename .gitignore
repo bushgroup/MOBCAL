@@ -18,3 +18,5 @@ build/
 !fortran/sample-output/*.out
 !tests/elements/*.out
 !tests/reference/*.out
+# The ORCA outputs mobcal import is tested on: fixtures, pinned in tests/data/qm/SHA256SUMS.
+!tests/data/qm/orca/*/*.out
