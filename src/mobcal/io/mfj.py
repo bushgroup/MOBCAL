@@ -36,6 +36,9 @@ file carries five columns on every line with charges that sum to the intended ne
 
 One divergence from the program: a list-directed read that finds too few values on a line
 continues onto the next, and this reader refuses instead. No shipped input relies on it.
+
+``Mfj.text`` and ``Mfj.write`` go the other way, for ``mobcal.io.structure``: one atom per line,
+every real as its shortest round-trip literal, so that the file parses back to the same object.
 """
 
 from __future__ import annotations
@@ -178,6 +181,47 @@ class Mfj:
         """The sum of the charge column of one set, or None where the column is absent."""
         charges = [a.charge for a in self.sets[index]]
         return None if any(c is None for c in charges) else sum(charges)  # type: ignore[arg-type]
+
+    def text(self) -> str:
+        """The file as the program reads it, LF, such that ``parse(text())`` equals this object.
+
+        Every real is written as Python's shortest round-trip literal (``repr``), which a
+        list-directed read takes, so no digit is lost or invented; the key is the integer. An
+        atom without a charge is written with four fields, so a ``calc`` file needs every
+        charge and the nitrogen program needs them in every mode (``has_charge_column``).
+        """
+        if len(self.label) > FIELD_WIDTH or "\n" in self.label or "\r" in self.label:
+            raise MfjError(f"label {self.label!r} is not one line of at most {FIELD_WIDTH} "
+                           "characters")
+        if self.label != self.label.rstrip(" "):
+            raise MfjError(f"label {self.label!r} ends in a blank, which an a30 read drops")
+        if self.units not in UNITS or self.charge_mode not in CHARGE_MODES:
+            raise MfjError(f"units {self.units!r} or charge mode {self.charge_mode!r} is not "
+                           "one the program reads")
+        if not 1 <= len(self.sets) <= MAX_SETS or any(len(s) != len(self.sets[0])
+                                                      for s in self.sets):
+            raise MfjError(f"{len(self.sets)} coordinate sets of unequal or no length")
+        if not 1 <= len(self.sets[0]) <= MAX_ATOMS:
+            raise MfjError(f"{len(self.sets[0])} atoms; the program holds 1 to {MAX_ATOMS}")
+        if self.charge_mode == "calc" and not self.has_charge_column:
+            raise MfjError("calc mode needs a charge on every atom")
+        lines = [self.label, str(len(self.sets)), str(len(self.sets[0])), self.units,
+                 self.charge_mode, repr(float(self.correct))]
+        for k, atoms in enumerate(self.sets):
+            if k:
+                lines.append(f"coordinate set {k + 1}")  # the line ncoord reads and discards
+            for a in atoms:
+                fields = [f"{a.x!r:>22}", f"{a.y!r:>22}", f"{a.z!r:>22}", f"{a.key:>4d}"]
+                if a.charge is not None:
+                    fields.append(f"{a.charge!r:>22}")
+                lines.append(" ".join(fields))
+        return "\n".join(lines) + "\n"
+
+    def write(self, path: Path | str) -> Path:
+        """Write ``text()`` to ``path`` (ASCII unless the label is not, LF) and return it."""
+        path = Path(path)
+        path.write_text(self.text(), encoding="latin-1", newline="\n")
+        return path
 
 
 def _atom(raw: str, lineno: int, mode: str) -> Atom:

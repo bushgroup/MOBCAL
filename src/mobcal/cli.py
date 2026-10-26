@@ -8,6 +8,8 @@
                [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
                [--inor N]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
+    mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
+                  [-o OUT.mfj] [--force]
 
 ``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
@@ -23,6 +25,11 @@ the same way and recorded the same way; ``--parameters NAME`` picks a shipped se
 temperature and the five sampling counts, ``mobcal.settings``) and the six single-value
 options override it value by value; without them every run uses the 2012 values. Its exit
 status is 1 if any run failed.
+``import`` writes a single-set ``.mfj`` from an ORCA output or an ``.xyz`` with the charges
+named by ``--charges`` (refused, listing what the file holds, until one is named), and its
+provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads and
+refuses. With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default
+the file must run in both.
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
 driver does into each run directory, for running the program there by hand. ``self-check`` is
 ``mobcal.selfcheck``.
@@ -146,6 +153,24 @@ def parser() -> argparse.ArgumentParser:
                         f"({_set_names()}), instead of the gas's default set")
     p.add_argument("--settings", type=Path, default=None, metavar="PATH",
                    help="render this settings file instead of the 2012 values")
+
+    m = sub.add_parser("import", help="write an .mfj from an ORCA output or an .xyz, with the "
+                                      "charges you name")
+    m.add_argument("source", type=Path, metavar="SOURCE", help="an ORCA output, or an .xyz")
+    m.add_argument("--charges", metavar="KEY",
+                   help="which charges: a block the file holds (mulliken, lowdin, chelpg, "
+                        "hirshfeld; column for an .xyz's fifth column), or uniform for Q/N on "
+                        "every atom; without it, the import lists what the file holds")
+    m.add_argument("--net-charge", type=int, default=None, metavar="Q",
+                   help="the ion's net charge; an .xyz needs it, and for an output it must "
+                        "agree with the charge the output was computed at")
+    m.add_argument("--gas", choices=(*fortran.GASES, "both"), default="both",
+                   help="whose element table the atoms must be in (default both)")
+    m.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
+                   help="the file to write (default SOURCE-STEM_KEY.mfj in the current "
+                        "directory); its record goes beside it as OUT.import.json")
+    m.add_argument("--force", action="store_true",
+                   help="replace OUT.mfj and its record if they exist")
     return ap
 
 
@@ -185,6 +210,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "run":
         return _run(args)
 
+    if args.cmd == "import":
+        return _import(args)
+
     if args.cmd == "render-parameters":
         try:
             ps = parameters.load(parameters.path_for(args.parameters, args.gas), gas=args.gas)
@@ -201,6 +229,28 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     return 1
+
+
+def _import(args: argparse.Namespace) -> int:
+    from mobcal.io import structure
+    gases = tuple(fortran.GASES) if args.gas == "both" else (args.gas,)
+    try:
+        s = structure.read(args.source)
+        imp = structure.convert(s, args.charges, args.net_charge, gases)
+        out = args.out or Path(f"{args.source.stem}_{args.charges}.mfj")
+        mfj, rec = structure.write(imp, out, overwrite=args.force)
+    except (structure.StructureError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    c = imp.record["charges"]
+    print(f"wrote {mfj}: {imp.mfj.atoms} atoms from {s.path.name}"
+          + (f" ({s.program} {s.version})" if s.version else "")
+          + f", {c['choice']} charges summing to {c['sum']:+.6f} (net charge "
+          f"{c['net_charge']:+d}), element keys of the "
+          f"{' and '.join(parameters.GAS[g] for g in gases)} table"
+          f"{'s' if len(gases) > 1 else ''}")
+    print(f"wrote {rec}")
+    return 0
 
 
 def _run(args: argparse.Namespace) -> int:

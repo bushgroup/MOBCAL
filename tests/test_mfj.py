@@ -102,3 +102,25 @@ def test_non_numeric_fields():
         Mfj.parse("x\n1\n1\nang\nnone\n1\n0 y 0 1\n")
     with pytest.raises(MfjError, match="line 6: correction factor is missing"):
         Mfj.parse("x\n1\n1\nang\nnone\n\n0 0 0 1\n")
+
+
+def test_text_reads_back_as_the_same_file(tmp_path):
+    for m in (Mfj.read(CHOLINE),
+              Mfj.parse("two\n2\n2\nau\nequal\n0.99\n" + ATOMS + "conformer 2\n" + ATOMS),
+              Mfj.parse("x\n1\n2\nang\nnone\n1\n 0 0 0 12\n 1 1 1 1\n"),
+              Mfj("  lead", "ang", "calc", 1.0, ((Atom(0.1 + 0.2, -1e-17, 1e300, 1, 1 / 3),),))):
+        assert Mfj.parse(m.text()) == m
+        assert Mfj.read(m.write(tmp_path / "x.mfj")) == m
+    assert b"\r" not in (tmp_path / "x.mfj").read_bytes()
+
+
+def test_text_refuses_what_the_program_would_not_read():
+    atom = Atom(0.0, 0.0, 0.0, 1, None)
+    with pytest.raises(MfjError, match="at most 30"):
+        Mfj("x" * 31, "ang", "none", 1.0, ((atom,),)).text()
+    with pytest.raises(MfjError, match="ends in a blank"):
+        Mfj("x ", "ang", "none", 1.0, ((atom,),)).text()
+    with pytest.raises(MfjError, match="calc mode needs a charge"):
+        Mfj("x", "ang", "calc", 1.0, ((atom,),)).text()
+    with pytest.raises(MfjError, match="unequal"):
+        Mfj("x", "ang", "none", 1.0, ((atom,), (atom, atom))).text()

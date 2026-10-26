@@ -11,11 +11,20 @@ One layout on every platform, PyInstaller's onedir folder plus two folders the b
 mobcal/
   mobcal(.exe)        the command, frozen with its own Python
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
-                      in mobcal/parameters/ and the 2012 settings file in mobcal/settings/
+                      in mobcal/parameters/ and the 2012 settings file in mobcal/settings/,
+                      and cclib with numpy, scipy and periodictable for `mobcal import`
   fortran/            mobcal_he(.exe), mobcal_n2(.exe), build.json
-  examples/           Choline.mfj, sample-output/Choline_He.out, sample-output/Choline_N2.out
+  examples/           Choline.mfj, sample-output/Choline_He.out, sample-output/Choline_N2.out,
+                      choline_sp.out (an ORCA 6.1.1 output, from tests/data/qm/)
   LICENSE
 ```
+
+cclib and what it brings are most of the folder: on Windows (2026-10-26, local binaries) it went
+from 23.6 MB to 124.3 MB, of which scipy is 67 MB and the OpenBLAS libraries that numpy and scipy
+each carry are 40 MB together, and the installer from 8.7 MB to 34.1 MB. Only `mobcal import`
+loads them. `mobcal.spec` leaves out pytest, pluggy and setuptools, which scipy's test helpers
+name: with setuptools in the bundle, PyInstaller adds a runtime hook that imports it on every
+start of the program.
 
 `mobcal.fortran.binary_dir()` and `examples_dir()` look in `fortran/` and `examples/` beside the
 executable when the program is frozen, so the frozen program and a source checkout run the same
@@ -63,7 +72,10 @@ uv run tools/build_bundle.py --archive
 `examples/` and `LICENSE`, and runs the built program's `self-check` with `PATH` cut to the
 operating system's own directories, so a program that works only because something on the
 build machine's `PATH` helps it fails here. The report is also written to
-`build/self-check.log`. It then times two starts of `mobcal version`.
+`build/self-check.log`. It then times two starts of `mobcal version`, and has the built program
+import `examples/choline_sp.out` with its CHELPG charges, which must write the file the source
+tree's import writes, so a bundle missing any part of cclib fails here and not on a user's
+first import.
 
 `build_exe.ps1` runs the same with `PATH` cut to the Windows directories and uv's for the whole
 build, then compiles the installer with Inno Setup 6's `ISCC.exe` into `dist\installer\`

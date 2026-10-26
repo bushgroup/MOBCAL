@@ -16,10 +16,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-# No runtime dependencies yet. The driver (lab record, task 05) decides whether
-# it needs anything beyond the standard library; the window (task 08) brings
-# PySide6, and only mobcal.app imports it.
-dependencies = []
+# cclib reads the quantum-chemistry outputs `mobcal import` takes, and only
+# mobcal.io.structure imports it, lazily, so `mobcal run` never loads it or the
+# numpy and scipy it brings. Pinned exactly: 1.8.1, the last stable release,
+# stops with an IndexError on every ORCA 6.1.1 output in tests/data/qm/, and
+# 1.9rc1 reads all six. The window (task 08) brings PySide6, and only
+# mobcal.app imports it.
+dependencies = ["cclib==1.9rc1"]
 
 [project.scripts]
 mobcal = "mobcal.cli:main"

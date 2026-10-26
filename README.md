@@ -60,7 +60,8 @@ to check an installation with `mobcal self-check`.
 - `docs/`: the installation guide, the element-table format
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
-  ([`docs/settings.md`](docs/settings.md)), and how to reproduce a calculation of the 2012
+  ([`docs/settings.md`](docs/settings.md)), writing an input from an ORCA output or an `.xyz`
+  file ([`docs/import.md`](docs/import.md)), and how to reproduce a calculation of the 2012
   release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
   ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
 
@@ -96,6 +97,14 @@ uv run pytest
 ```
 
 ## Running calculations
+
+An input file can be written by hand ([`fortran/Choline.mfj`](fortran/Choline.mfj) is the 2012
+example) or from an ORCA output or an `.xyz` file with the charges you name
+([`docs/import.md`](docs/import.md)):
+
+```
+uv run mobcal import choline_sp.out --charges chelpg -o choline.mfj
+```
 
 `mobcal run` runs the built binaries on one or more input files, one process per calculation
 and several at once:

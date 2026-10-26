@@ -9,11 +9,14 @@
    on Windows.
 2. Runs PyInstaller on ``packaging/mobcal.spec``, giving ``dist/mobcal/``.
 3. Copies the binaries and ``build.json`` to ``dist/mobcal/fortran/`` (executable, since an
-   artifact download loses the mode), ``Choline.mfj`` and the two 2012 outputs to
-   ``dist/mobcal/examples/``, and ``LICENSE``.
+   artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one ORCA
+   output of the choline cation (``tests/data/qm/``) to ``dist/mobcal/examples/``, and
+   ``LICENSE``.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
-   directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, and times two
-   ``mobcal version`` starts.
+   directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
+   ``mobcal version`` starts, and has the built program import the ORCA example's CHELPG
+   charges, which must give the file the source tree's import gives: cclib and everything
+   under it are in the bundle and work.
 5. With ``--archive`` (macOS and Linux), writes ``dist/mobcal-<version>-<os>-<arch>.tar.gz``,
    whose top folder is ``mobcal-<version>/``. Windows packages the folder with Inno Setup
    instead (``tools/build_exe.ps1``).
@@ -47,6 +50,10 @@ DIST = ROOT / "dist"
 BUNDLE = DIST / "mobcal"
 WORK = ROOT / "build" / "pyinstaller"
 SELF_CHECK_LOG = ROOT / "build" / "self-check.log"
+
+# The ORCA output the bundle carries as an example, and the charges the import check takes.
+ORCA_EXAMPLE = ROOT / "tests" / "data" / "qm" / "orca" / "choline_sp" / "choline_sp.out"
+ORCA_CHARGES = "chelpg"
 
 # MinGW's runtime, which a dynamically linked MSYS2 binary imports and a clean Windows lacks.
 _MINGW_DLL = re.compile(rb"(?i)(libgfortran|libgcc_s|libquadmath|libwinpthread)[\w.-]*\.dll")
@@ -120,6 +127,7 @@ def assemble(bin_dir: Path) -> None:
     (BUNDLE / "examples" / "sample-output").mkdir(parents=True)
     for rel in ("Choline.mfj", "sample-output/Choline_He.out", "sample-output/Choline_N2.out"):
         shutil.copy2(fortran.FORTRAN_DIR / rel, BUNDLE / "examples" / rel)
+    shutil.copy2(ORCA_EXAMPLE, BUNDLE / "examples" / ORCA_EXAMPLE.name)
     shutil.copy2(ROOT / "LICENSE", BUNDLE / "LICENSE")
 
 
@@ -152,6 +160,28 @@ def self_check() -> None:
         print(f"{label} start: mobcal version -> {out} in {time.perf_counter() - t0:.2f} s")
         if out != mobcal.__version__:
             raise SystemExit(f"the built program says {out!r}, the source {mobcal.__version__!r}")
+
+
+def import_check() -> None:
+    from mobcal.io import structure
+    exe = BUNDLE / ("mobcal.exe" if sys.platform == "win32" else "mobcal")
+    out = ROOT / "build" / "import-check" / "choline_sp.mfj"
+    shutil.rmtree(out.parent, ignore_errors=True)
+    out.parent.mkdir(parents=True)
+    t0 = time.perf_counter()
+    proc = subprocess.run([str(exe), "import", str(BUNDLE / "examples" / ORCA_EXAMPLE.name),
+                           "--charges", ORCA_CHARGES, "-o", str(out)], env=clean_env(),
+                          capture_output=True, text=True)
+    seconds = time.perf_counter() - t0
+    if proc.returncode != 0:
+        raise SystemExit(f"the built program's import failed (exit {proc.returncode}):\n"
+                         f"{proc.stdout}{proc.stderr}")
+    want = structure.convert(structure.read(ORCA_EXAMPLE), ORCA_CHARGES).mfj.text()
+    if out.read_text(encoding="latin-1") != want:
+        raise SystemExit(f"the built program's import wrote {out}, which differs from the "
+                         "source tree's")
+    print(f"import: {ORCA_EXAMPLE.name} --charges {ORCA_CHARGES} in {seconds:.2f} s, the "
+          "source tree's file")
 
 
 def archive_name() -> str:
@@ -190,6 +220,7 @@ def main() -> int:
     assemble(args.bin_dir.resolve())
     print(f"bundle: {BUNDLE}, {size(BUNDLE):.1f} MB")
     self_check()
+    import_check()
     if args.archive:
         out = archive()
         print(f"archive: {out}, {out.stat().st_size / 2**20:.1f} MB")

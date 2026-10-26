@@ -1,0 +1,4 @@
+! B3LYP/G 6-31++G(d,p) CHELPG Hirshfeld
+%pal nprocs 8 end
+%maxcore 3000
+* xyzfile 1 1 choline_2012.xyz

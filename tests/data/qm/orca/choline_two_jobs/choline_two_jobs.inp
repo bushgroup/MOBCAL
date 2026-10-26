@@ -1,0 +1,10 @@
+! B3LYP D3BJ def2-SVP Opt
+%pal nprocs 8 end
+%maxcore 3000
+* xyzfile 1 1 choline_2012.xyz
+
+$new_job
+! B3LYP D3BJ def2-TZVP CHELPG Hirshfeld
+%pal nprocs 8 end
+%maxcore 3000
+* xyzfile 1 1 choline_two_jobs.xyz

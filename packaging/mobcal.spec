@@ -9,13 +9,17 @@
 # executable and PyInstaller's _internal/; build_bundle.py adds fortran/ and examples/ beside it,
 # where mobcal.fortran.binary_dir() and examples_dir() look in a frozen program.
 #
-# A console executable: until the window exists, the command line is the program. The package
-# has no third-party runtime dependencies, so there is nothing to exclude and no hook to write.
-# Its data files are the element tables (each gas's default set and the named alternates) and
-# the settings file, which the self-check verifies by SHA-256.
+# A console executable: until the window exists, the command line is the program. The one
+# third-party runtime dependency is cclib, which `mobcal import` loads to read an ORCA output,
+# with numpy, scipy and periodictable under it; PyInstaller's own hooks cover numpy and scipy,
+# and periodictable's tables are collected here because no hook does. The package's data files
+# are the element tables (each gas's default set and the named alternates) and the settings
+# file, which the self-check verifies by SHA-256.
 
 import os
 import sys
+
+from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = os.path.dirname(SPECPATH)  # SPECPATH is injected by PyInstaller: packaging/
 
@@ -28,12 +32,16 @@ a = Analysis(
     datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
             os.path.join("mobcal", "parameters")),
            (os.path.join(ROOT, "src", "mobcal", "settings", "*.toml"),
-            os.path.join("mobcal", "settings"))],
+            os.path.join("mobcal", "settings"))] + collect_data_files("periodictable"),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "_tkinter"],
+    # scipy names pytest in its test helpers, which drags in pytest, pluggy and setuptools, and
+    # with setuptools a runtime hook that imports it on every start (0.3 s on Windows). Nothing
+    # mobcal runs reaches them; build_bundle.py's import check runs the path that loads scipy.
+    excludes=["tkinter", "_tkinter", "pytest", "_pytest", "pluggy", "setuptools",
+              "_distutils_hack", "pkg_resources"],
     noarchive=False,
 )
 
@@ -42,7 +50,17 @@ if not any(name == "mobcal.selfcheck" for name, *_ in a.pure):
                        "installed program could not check itself. The Analysis did not follow "
                        "cli.py's import of it.")
 
-_tables = {os.path.basename(dest) for dest, *_ in a.datas if dest.endswith(".toml")}
+_pure = {name for name, *_ in a.pure}
+_import = {"mobcal.io.structure", "cclib.io.ccio", "cclib.parser.orcaparser",
+           "cclib.parser.gaussianparser"}
+if not _import <= _pure:
+    raise RuntimeError(f"Refusing to build: {sorted(_import - _pure)} are not in the bundle, so "
+                       "`mobcal import` could not read an ORCA output or recognize a Gaussian "
+                       "one. The Analysis did not follow cli.py's import of mobcal.io.structure "
+                       "or its import of cclib.")
+
+_tables = {os.path.basename(dest) for dest, *_ in a.datas
+           if dest.endswith(".toml") and dest.startswith("mobcal")}
 _want = {"mobcal_He.toml", "mobcal_He_2000.toml", "mobcal_N2.toml", "mobcal_2012.toml"}
 if _tables != _want:
     raise RuntimeError(f"Refusing to build: the data files in the bundle are {_tables}, not "

@@ -12,7 +12,9 @@ file and loads and renders, the settings file under
 src/mobcal/settings/ is the pinned file and holds the 2012 values, the bounds and defaults
 fortran/mobcal_settings.inc declares are the ones mobcal.settings mirrors, the lower layers stay
 free of Qt, nothing shipped cites the development record by a path only a lab checkout resolves,
-the atom bound fortran/mobcal_arrays.inc declares is the one mobcal.io.mfj.MAX_ATOMS mirrors, and,
+the atom bound fortran/mobcal_arrays.inc declares is the one mobcal.io.mfj.MAX_ATOMS mirrors, the
+ORCA outputs under tests/data/qm/ are the files tests/data/qm/SHA256SUMS pins and one of them
+imports through cclib to an .mfj that reads back as written, and,
 when gfortran is present, both sources compile with the recorded flags, the binaries
 exist, the compiler issued no warnings, and `mobcal self-check` passes against them. Tasks add
 sections as they land code.
@@ -186,6 +188,27 @@ def main() -> int:
             for g in ("He", "N2")}
     check_true("both references hold a SUMMARY block with a TM cross section",
                all(o.ok and "TM" in o.cross_sections for o in refs.values()))
+
+    section("the import")
+    import hashlib
+    from pathlib import Path
+
+    from mobcal.io import structure
+    qm = Path(ROOT) / "tests" / "data" / "qm"
+    pins = dict(reversed(line.split("  ", 1)) for line in
+                (qm / "SHA256SUMS").read_text(encoding="ascii").splitlines())
+    bad = [n for n, h in pins.items() if not (qm / n).is_file()
+           or hashlib.sha256((qm / n).read_bytes()).hexdigest() != h]
+    check_true(f"{len(pins)} files under tests/data/qm/ are their pins" +
+               (f": {bad}" if bad else ""), not bad)
+    try:
+        imp = structure.convert(structure.read(qm / "orca" / "choline_sp" / "choline_sp.out"),
+                                "chelpg")
+        ok = Mfj.parse(imp.mfj.text()) == imp.mfj and imp.mfj.atoms == 21
+        why = imp.record["source"]["reader"]
+    except structure.StructureError as e:
+        ok, why = False, str(e)
+    check_true(f"choline_sp.out imports with its CHELPG charges and reads back ({why})", ok)
 
     section("build")
     gf = fortran.find_gfortran()

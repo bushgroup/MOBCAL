@@ -1,0 +1,4 @@
+! r2SCAN-3c Opt CHELPG
+%pal nprocs 8 end
+%maxcore 3000
+* xyzfile 1 1 choline_2012.xyz
