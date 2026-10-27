@@ -1,13 +1,12 @@
-"""The icon's colours in the window: the accent, the group-box titles and the toolbar's icons.
+"""The icon's colours in the window: the accent and the group-box titles.
 
 The palette is the icon's, and lives here: ``tools/make_icon.py`` imports it, so the two cannot
 drift. Each colour has a job set by its contrast (WCAG 2.x, against the native window and base
 colours of both schemes): ``BACK`` is text on a light window and ``LIGHT`` on a dark one; the
 accent carries text too (the style writes ``HighlightedText`` on it: a checked tool button, a
 dialog's default button), which ``HEAVY`` is too light for under white, so the light scheme's
-accent is ``HEAVY`` shaded toward ``BACK`` as an atom halfway back is in the icon; ``HEAVY``
-itself is the Run icon's, a graphic. The trajectory colours are never text. A test holds every
-choice to its threshold.
+accent is ``HEAVY`` shaded toward ``BACK`` as an atom halfway back is in the icon. The
+trajectory colours are not used. A test holds every choice to its threshold.
 
 Native styles honour a palette in part. Qt's ``windows11`` style takes check boxes, the progress
 bar's fill and a selected row's marker from ``Accent``, draws a selected row as a faint fill
@@ -17,16 +16,16 @@ Group-box titles come from a proxy of the native style: windows11 takes them fro
 hint ``SH_GroupBox_TextLabelColor``, Fusion and macOS from ``WindowText`` in the box's own style
 option, so the proxy sets both, and nothing inside the box changes colour. A style sheet on
 ``QGroupBox::title`` was not used: it hands the box to the style-sheet style, which moves its
-margins. Everything is set from ``QStyleHints.colorScheme()`` and again
-on ``colorSchemeChanged``.
+margins. Everything is set from ``QStyleHints.colorScheme()`` and again on
+``colorSchemeChanged``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPalette, QPen, QPixmap
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleOptionGroupBox
 
 # The icon's palette (tools/make_icon.py): the tile, the atoms (heavy, hydrogen, and the shade
@@ -49,14 +48,10 @@ class Scheme:
     accent: str  # Accent and Highlight: check boxes, the progress bar, a selected row's
     highlighted_text: str  # marker, a checked button, selected text; this written on it
     text: str  # coloured text: links and group-box titles
-    run: str  # the toolbar's icons, against the window colour
-    stop: str
 
 
-LIGHT_SCHEME = Scheme(accent=mix(HEAVY, BACK, 0.4), highlighted_text="#FFFFFF", text=BACK,
-                      run=HEAVY, stop=BACK)
-DARK_SCHEME = Scheme(accent=LIGHT, highlighted_text="#000000", text=LIGHT, run=LIGHT,
-                     stop=LONG_RANGE)
+LIGHT_SCHEME = Scheme(accent=mix(HEAVY, BACK, 0.4), highlighted_text="#FFFFFF", text=BACK)
+DARK_SCHEME = Scheme(accent=LIGHT, highlighted_text="#000000", text=LIGHT)
 
 
 def is_dark() -> bool:
@@ -106,34 +101,3 @@ def install(app: QApplication) -> None:
     QGuiApplication.styleHints().colorSchemeChanged.connect(
         lambda _: app.setPalette(palette(scheme())))
 
-
-SIZES = (16, 20, 24, 32, 40, 48, 64)
-
-
-def _icon(draw, colour: str) -> QIcon:
-    icon = QIcon()
-    for n in SIZES:
-        pm = QPixmap(n, n)
-        pm.fill(Qt.GlobalColor.transparent)
-        p = QPainter(pm)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.scale(n / 16, n / 16)
-        c = QColor(colour)
-        p.setPen(QPen(c, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                      Qt.PenJoinStyle.RoundJoin))
-        p.setBrush(c)
-        draw(p)
-        p.end()
-        icon.addPixmap(pm)
-    return icon
-
-
-def run_icon(s: Scheme) -> QIcon:
-    """A play triangle, corners rounded, on a 16-unit grid."""
-    return _icon(lambda p: p.drawPolygon([QPointF(4.5, 2.75), QPointF(13, 8),
-                                          QPointF(4.5, 13.25)]), s.run)
-
-
-def stop_icon(s: Scheme) -> QIcon:
-    """A stop square, corners rounded, the triangle's height."""
-    return _icon(lambda p: p.drawRoundedRect(QRectF(3.5, 3.5, 9, 9), 1.25, 1.25), s.stop)

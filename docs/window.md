@@ -71,8 +71,7 @@ another folder.
 
 ## Running, the queue and stopping
 
-Run and Stop are in the Batch menu and on the toolbar above the form. Ctrl+R or F5 runs (⌘R on
-macOS), and Shift+F5 stops. Run starts the batch. While a batch runs, Run adds the form's batch to the queue instead, and the
+Run and Stop are in the Batch menu. Ctrl+R or F5 runs (⌘R on macOS), and Shift+F5 stops. Run starts the batch. While a batch runs, Run adds the form's batch to the queue instead, and the
 queue starts its next batch when the running one ends. Queued batches can be reordered by
 dragging and removed. The queue is saved as it changes, and batches still queued when the window
 closes are offered back when it next opens.

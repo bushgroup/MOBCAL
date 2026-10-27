@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QLabel,
     QMessageBox,
     QStyle,
+    QToolBar,
     QVBoxLayout,
 )
 
@@ -233,22 +234,19 @@ def test_the_run_and_stop_actions_track_the_batch(window, qtbot, tmp_path):
     assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
 
 
-# --- the menus, the toolbar and the colours -------------------------------------------------
+# --- the menus and the colours -------------------------------------------------------------
 
-def test_the_menus_and_the_toolbar_hold_the_actions(window):
+def test_the_menus_hold_the_actions(window):
     w = window
     menus = {m.text(): m.menu().actions() for m in w.menuBar().actions()}
     assert list(menus) == ["&File", "&Batch", "&Help"]
     assert menus["&File"] == [w.exit_action] and menus["&Batch"] == [w.run_action, w.stop_action]
-    assert menus["&Help"][0] is w.about_action
-    roles = [a.menuRole() for a in (w.exit_action, w.about_action, menus["&Help"][1])]
-    assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole,
-                     QAction.MenuRole.AboutQtRole]
-    assert w.toolbar.actions() == [w.run_action, w.stop_action]
-    assert not w.toolbar.toggleViewAction().isVisible()
+    assert menus["&Help"] == [w.about_action]
+    roles = [a.menuRole() for a in (w.exit_action, w.about_action)]
+    assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole]
+    assert not w.findChildren(QToolBar)
     assert [s.toString() for s in w.run_action.shortcuts()] == ["Ctrl+R", "F5"]
     assert w.stop_action.shortcut().toString() == "Shift+F5"
-    assert not w.run_action.icon().isNull() and not w.stop_action.icon().isNull()
 
 
 def test_exit_while_running_asks_and_no_keeps_the_window(window, qtbot, tmp_path):
@@ -297,12 +295,11 @@ def test_the_schemes_colours_meet_their_contrast(dark):
     s = theme.DARK_SCHEME if dark else theme.LIGHT_SCHEME
     for bg in BACKGROUNDS[dark]:
         assert contrast(s.text, bg) >= 4.5, (s.text, bg)  # text: WCAG 1.4.3
-        for fill in (s.accent, s.run, s.stop):  # graphics: WCAG 1.4.11
-            assert contrast(fill, bg) >= 3.0, (fill, bg)
+        assert contrast(s.accent, bg) >= 3.0, (s.accent, bg)  # fills: WCAG 1.4.11
     assert contrast(s.highlighted_text, s.accent) >= 4.5  # a checked button's text
 
 
-def test_the_theme_follows_the_colour_scheme(window, monkeypatch):
+def test_the_theme_follows_the_colour_scheme(qtbot, monkeypatch):
     """Through the signal, with the scheme patched: the offscreen platform takes no scheme."""
     app = QApplication.instance()
     hints = QGuiApplication.styleHints()
@@ -319,9 +316,6 @@ def test_the_theme_follows_the_colour_scheme(window, monkeypatch):
             assert app.palette().color(QPalette.ColorRole.Link).name() == s.text.lower()
             hint = app.style().styleHint(QStyle.StyleHint.SH_GroupBox_TextLabelColor)
             assert QColor.fromRgba(hint & 0xFFFFFFFF).name() == s.text.lower()
-            for action, colour in ((window.run_action, s.run), (window.stop_action, s.stop)):
-                centre = action.icon().pixmap(32, 32).toImage().pixelColor(14, 16)
-                assert centre.name() == colour.lower()
     finally:
         app.setStyle(style)
         app.setPalette(palette)

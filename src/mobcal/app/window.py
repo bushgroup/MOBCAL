@@ -7,16 +7,15 @@ results folder, one per study, remembered. The method shown is the one the field
 *Custom (from …)* once a field moves off the method picked; the runs' records say the same.
 Under the form, the estimate for the batch as it stands.
 
-Above, a menu bar (File ▸ Exit, Batch ▸ Run and Stop, Help ▸ About) and a toolbar showing Run
-and Stop, each one ``QAction`` that owns its text and enabled state. Right, the queue, the
-progress and the results. Run starts the batch, or appends it to the queue while one is
-running; the queue is reorderable, starts its next batch when the running one ends, and is
-saved on every change and offered back at the next launch. Stop asks, then
-ends every process of the running batch. Progress is runs done of N, each running run's
-elapsed time (and blocks written, for a split run), against the estimate. Results are one row
-per ion and gas, TM headline, mean ± s.d. over seeds, with Copy, Save CSV, Show in folder,
-Open output and Copy methods text. Closing asks, then stops the running batch; the queue stays
-saved.
+Above, a menu bar: File ▸ Exit, Batch ▸ Run and Stop (each one ``QAction`` that owns its text
+and enabled state), Help ▸ About. Right, the queue, the progress and the results. Run starts
+the batch, or appends it to the queue while one is running; the queue is reorderable, starts
+its next batch when the running one ends, and is saved on every change and offered back at the
+next launch. Stop asks, then ends every process of the running batch. Progress is runs done
+of N, each running run's elapsed time (and blocks written, for a split run), against the
+estimate. Results are one row per ion and gas, TM headline, mean ± s.d. over seeds, with Copy,
+Save CSV, Show in folder, Open output and Copy methods text. Closing asks, then stops the
+running batch; the queue stays saved.
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -56,7 +54,6 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
-    QToolBar,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -65,7 +62,6 @@ from PySide6.QtWidgets import (
 import mobcal
 from mobcal import batch as batches
 from mobcal import estimate, methods, parameters, settings
-from mobcal.app import theme
 from mobcal.app.about import AboutDialog
 from mobcal.app.inputs import InputsPanel
 from mobcal.app.store import Store
@@ -160,7 +156,6 @@ class MainWindow(QMainWindow):
         else:
             self.resize(1280, 820)
 
-        QGuiApplication.styleHints().colorSchemeChanged.connect(self.draw_icons)
         self.inputs.changed.connect(self.update_estimate)
         self.tick = QTimer(self)
         self.tick.setInterval(1000)
@@ -168,12 +163,12 @@ class MainWindow(QMainWindow):
         self.apply_method(self.store.method if self.store.method in methods.METHODS
                           else methods.CURRENT)
 
-    # --- the menus and the toolbar ---------------------------------------------------------
+    # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
-        """Run and Stop as actions, in the Batch menu and the toolbar; File ▸ Exit, which closes
-        the window by the same path as its close button; Help ▸ About. The roles put Exit, About
-        and About Qt in the application menu on macOS."""
+        """Run and Stop as actions, in the Batch menu; File ▸ Exit, which closes the window by
+        the same path as its close button; Help ▸ About. The roles put Exit and About in the
+        application menu on macOS."""
         self.run_action = QAction("&Run", self)
         self.run_action.setShortcuts([QKeySequence("Ctrl+R"), QKeySequence("F5")])
         self.run_action.triggered.connect(self.run_clicked)
@@ -188,34 +183,13 @@ class MainWindow(QMainWindow):
         self.about_action = QAction("&About MOBCAL", self)
         self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
         self.about_action.triggered.connect(self.show_about)
-        about_qt = QAction("About &Qt", self)
-        about_qt.setMenuRole(QAction.MenuRole.AboutQtRole)
-        about_qt.triggered.connect(QApplication.aboutQt)
 
         bar = self.menuBar()
         bar.addMenu("&File").addAction(self.exit_action)
         batch = bar.addMenu("&Batch")
         batch.addAction(self.run_action)
         batch.addAction(self.stop_action)
-        help_ = bar.addMenu("&Help")
-        help_.addAction(self.about_action)
-        help_.addAction(about_qt)
-
-        self.toolbar = QToolBar("Batch")
-        self.toolbar.setObjectName("batch")
-        self.toolbar.setMovable(False)
-        self.toolbar.setFloatable(False)
-        self.toolbar.toggleViewAction().setVisible(False)  # no way to hide Run from sight
-        self.toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.toolbar.addAction(self.run_action)
-        self.toolbar.addAction(self.stop_action)
-        self.addToolBar(self.toolbar)
-        self.draw_icons()
-
-    def draw_icons(self, *_) -> None:
-        s = theme.scheme()
-        self.run_action.setIcon(theme.run_icon(s))
-        self.stop_action.setIcon(theme.stop_icon(s))
+        bar.addMenu("&Help").addAction(self.about_action)
 
     def show_about(self) -> AboutDialog:
         """Open the About box, window-modal, and return it."""
