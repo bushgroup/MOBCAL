@@ -76,7 +76,9 @@ g = _analysis("gui_entrypoint.py")
 # fontconfig, freetype, X11/xcb, xkbcommon, EGL/GL and D-Bus, which every desktop has. PyInstaller
 # would otherwise copy the build machine's, which ask for its glibc (2.43 on ubuntu-latest, and
 # `mobcal gui` stopped on Debian stable for it). Those stay the host's; libxcb-cursor is the
-# exception, shipped because a desktop may lack it. Every other system library the bundle still
+# exception, shipped because a desktop may lack it. The C++ runtime stays the host's too: the
+# build machine's libstdc++ asked for glibc 2.38 (Qt would not load on Ubuntu 22.04), and every
+# desktop has one Qt's wheels are built to use. Every other system library the bundle still
 # carries is printed, so a build log says what the Linux archive assumes.
 if sys.platform.startswith("linux"):
     import re
@@ -84,7 +86,8 @@ if sys.platform.startswith("linux"):
     _HOST = re.compile(r"^lib(glib-2|gobject-2|gio-2|gthread-2|gmodule-2|EGL|GL|GLX|GLdispatch|"
                        r"OpenGL|fontconfig|freetype|xkbcommon|X11|Xext|Xau|Xdmcp|Xrender|Xi\b|"
                        r"xcb(?!-cursor)|dbus-1|systemd|icu|png16|harfbuzz|graphite2|brotli|"
-                       r"expat|pcre2|gcrypt|gpg-error|lz4|cap\b|selinux|mount|blkid)")
+                       r"expat|pcre2|gcrypt|gpg-error|lz4|cap\b|selinux|mount|blkid|"
+                       r"stdc\+\+|gcc_s|atomic)")
     _SYSTEM = ("/lib/", "/lib64/", "/usr/lib/", "/usr/lib64/")
 
     # Qt plugins the window never loads, which bring the build machine's GTK 3 stack (the gtk3
