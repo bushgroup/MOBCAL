@@ -72,6 +72,31 @@ def _analysis(script):
 a = _analysis("entrypoint.py")
 g = _analysis("gui_entrypoint.py")
 
+# PySide6's wheels carry Qt itself, built for glibc 2.28, and take the desktop's own glib,
+# fontconfig, freetype, X11/xcb, xkbcommon, EGL/GL and D-Bus, which every desktop has. PyInstaller
+# would otherwise copy the build machine's, which ask for its glibc (2.43 on ubuntu-latest, and
+# `mobcal gui` stopped on Debian stable for it). Those stay the host's; libxcb-cursor is the
+# exception, shipped because a desktop may lack it. Every other system library the bundle still
+# carries is printed, so a build log says what the Linux archive assumes.
+if sys.platform.startswith("linux"):
+    import re
+
+    _HOST = re.compile(r"^lib(glib-2|gobject-2|gio-2|gthread-2|gmodule-2|EGL|GL|GLX|GLdispatch|"
+                       r"OpenGL|fontconfig|freetype|xkbcommon|X11|Xext|Xau|Xdmcp|Xrender|Xi\b|"
+                       r"xcb(?!-cursor)|dbus-1|systemd|icu|png16|harfbuzz|graphite2|brotli|"
+                       r"expat|pcre2|gcrypt|gpg-error|lz4|cap\b|selinux|mount|blkid)")
+    _SYSTEM = ("/lib/", "/lib64/", "/usr/lib/", "/usr/lib64/")
+
+    def _host_libs_out(toc):
+        return [e for e in toc
+                if not (e[1].startswith(_SYSTEM) and _HOST.match(os.path.basename(e[0])))]
+
+    a.binaries = _host_libs_out(a.binaries)
+    g.binaries = _host_libs_out(g.binaries)
+    for _dest in sorted({e[0] for e in list(a.binaries) + list(g.binaries)
+                         if e[1].startswith(_SYSTEM)}):
+        print(f"mobcal.spec: system library kept in the bundle: {_dest}")
+
 if not any(name == "mobcal.selfcheck" for name, *_ in a.pure):
     raise RuntimeError("Refusing to build: mobcal.selfcheck is not in the bundle, so the "
                        "installed program could not check itself. The Analysis did not follow "

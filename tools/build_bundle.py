@@ -138,7 +138,10 @@ def assemble(bin_dir: Path) -> None:
     shutil.copy2(ORCA_EXAMPLE, BUNDLE / "examples" / ORCA_EXAMPLE.name)
     shutil.copy2(ROOT / "LICENSE", BUNDLE / "LICENSE")
     if sys.platform == "darwin":
-        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(APP)], check=True)
+        # Not --deep: that would re-sign the Fortran binaries, changing the bytes build.json
+        # records. They are already signed (the arm64 linker signs ad hoc), as is everything
+        # PyInstaller wrote; only the bundle's seal needs renewing.
+        subprocess.run(["codesign", "--force", "--sign", "-", str(APP)], check=True)
         subprocess.run(["codesign", "--verify", "--deep", "--strict", str(APP)], check=True)
 
 
