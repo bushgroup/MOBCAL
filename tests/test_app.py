@@ -19,9 +19,16 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings, Qt  # noqa: E402
-from PySide6.QtGui import QAction, QColor, QGuiApplication, QPalette  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox, QStyle  # noqa: E402
+from PySide6.QtCore import QRect, QSettings, Qt  # noqa: E402
+from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPalette  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QGroupBox,
+    QLabel,
+    QMessageBox,
+    QStyle,
+    QVBoxLayout,
+)
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
@@ -266,6 +273,7 @@ def test_about_opens_and_closes(window):
     assert "CHE-2603156" in text and "68949-ND6" in text
     assert html.escape(methods.REFERENCES["campuzano2012"]) in text
     assert "GNU General Public License, version 3" in text and "PySide6 6." in text
+    assert d.body.height() >= d.body.heightForWidth(d.body.width())  # nothing cut off
     d.close()
     assert not d.isVisible()
 
@@ -317,6 +325,32 @@ def test_the_theme_follows_the_colour_scheme(window, monkeypatch):
     finally:
         app.setStyle(style)
         app.setPalette(palette)
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_group_titles_take_the_text_colour_and_nothing_inside_does(qtbot, monkeypatch, dark):
+    """Under Fusion, which takes the title from the box's WindowText as macOS does."""
+    monkeypatch.setattr(theme, "is_dark", lambda: dark)
+    s = theme.DARK_SCHEME if dark else theme.LIGHT_SCHEME
+    style = theme.Style("fusion")
+    box = QGroupBox("MMMMMM")
+    label = QLabel("MMMMMM", box)
+    QVBoxLayout(box).addWidget(label)
+    for w in (box, label):
+        w.setStyle(style)
+        w.setFont(QFont(w.font().family(), 28, QFont.Weight.Bold))
+    qtbot.addWidget(box)
+    box.resize(400, 200)
+    img = box.grab().toImage()
+    want = QColor(s.text)
+
+    def near(rect) -> int:
+        return sum(1 for x in range(rect.left(), rect.right()) for y in range(rect.top(),
+                   rect.bottom()) if max(abs(img.pixelColor(x, y).red() - want.red()),
+                                         abs(img.pixelColor(x, y).green() - want.green()),
+                                         abs(img.pixelColor(x, y).blue() - want.blue())) < 24)
+    title = QRect(0, 0, 400, label.geometry().top())
+    assert near(title) > 50 and near(label.geometry()) == 0
 
 
 def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path, monkeypatch):

@@ -13,7 +13,14 @@ import platform
 
 import PySide6
 from PySide6.QtCore import Qt, qVersion
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QVBoxLayout,
+)
 
 import mobcal
 from mobcal import fortran, methods
@@ -28,12 +35,11 @@ def programs() -> str:
     text."""
     d = fortran.binary_dir()
     problems = fortran.verify_binaries(d)
-    where = ('The helium and nitrogen programs are in <span style="white-space:nowrap">'
-             f"{html.escape(str(d))}</span>.")
+    where = f"The helium and nitrogen programs are in<br>{html.escape(str(d))}<br>"
     if not problems:
-        return (where + " They are the files recorded when they were built, from Fortran "
+        return (where + "They are the files recorded when they were built, from Fortran "
                 "sources that match their SHA-256 pins.")
-    return where + " They do not check: " + html.escape("; ".join(problems)) + "."
+    return where + "They do not check: " + html.escape("; ".join(problems)) + "."
 
 
 def text() -> str:
@@ -74,7 +80,7 @@ class AboutDialog(QDialog):
         self.body.setTextFormat(Qt.TextFormat.RichText)
         self.body.setOpenExternalLinks(True)
         self.body.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
-        self.body.setMinimumWidth(560)
+        self.body.setFixedWidth(560)
         row = QHBoxLayout()
         row.addWidget(icon)
         row.addSpacing(12)
@@ -84,3 +90,6 @@ class AboutDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.addLayout(row)
         lay.addWidget(buttons)
+        # Sized from the label's height for its width: a dialog sized from its size hint cuts
+        # wrapped rich text short where the fonts differ (seen on Linux).
+        lay.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)

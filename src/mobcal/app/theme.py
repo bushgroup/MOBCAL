@@ -13,9 +13,11 @@ Native styles honour a palette in part. Qt's ``windows11`` style takes check box
 bar's fill and a selected row's marker from ``Accent``, draws a selected row as a faint fill
 with its text unchanged, and uses ``Highlight`` for selected text in an edit; Fusion (Linux
 without a platform theme) honours every role; macOS draws most controls from the system accent.
-Group-box titles come through the style hint ``SH_GroupBox_TextLabelColor`` in a proxy of the
-native style, because a style sheet on ``QGroupBox::title`` hands the box to the style-sheet
-style, which moves its margins. Everything is set from ``QStyleHints.colorScheme()`` and again
+Group-box titles come from a proxy of the native style: windows11 takes them from the style
+hint ``SH_GroupBox_TextLabelColor``, Fusion and macOS from ``WindowText`` in the box's own style
+option, so the proxy sets both, and nothing inside the box changes colour. A style sheet on
+``QGroupBox::title`` was not used: it hands the box to the style-sheet style, which moves its
+margins. Everything is set from ``QStyleHints.colorScheme()`` and again
 on ``colorSchemeChanged``.
 """
 
@@ -25,7 +27,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPalette, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle
+from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleOptionGroupBox
 
 # The icon's palette (tools/make_icon.py): the tile, the atoms (heavy, hydrogen, and the shade
 # they fade to with depth), and the three trajectories.
@@ -86,6 +88,15 @@ class Style(QProxyStyle):
             rgba = QColor(scheme().text).rgba()
             return rgba - (1 << 32) if rgba >= 1 << 31 else rgba  # a QRgb in a C int
         return super().styleHint(hint, option, widget, data)
+
+    def drawComplexControl(self, control, option, painter, widget=None):  # noqa: N802
+        if control == QStyle.ComplexControl.CC_GroupBox:
+            option = QStyleOptionGroupBox(option)
+            pal = QPalette(option.palette)
+            for group in (QPalette.ColorGroup.Active, QPalette.ColorGroup.Inactive):
+                pal.setColor(group, QPalette.ColorRole.WindowText, QColor(scheme().text))
+            option.palette = pal
+        super().drawComplexControl(control, option, painter, widget)
 
 
 def install(app: QApplication) -> None:
