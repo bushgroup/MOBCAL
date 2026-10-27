@@ -47,7 +47,7 @@ def set_names() -> str:
                      for n in parameters.names())
 
 
-# What each method is, for the --method help (by key) and the Method tooltip (by title).
+# What each method is, for the --method help.
 _METHOD = {
     methods.CURRENT: "the 2012 element tables and settings under Philox4x32-10",
     "2012": "the 2012 release's calculation, the same under RANLUX",
@@ -73,10 +73,10 @@ SHARED = {
         cli="The methods are " + "; ".join(f"{k}, {v}" for k, v in _METHOD.items())
             + ". A table, generator or setting given beside it overrides it, and the run "
             "records custom.",
-        window="; ".join(f"{methods.TITLES[k]} is {v}" for k, v in _METHOD.items()) + ". A "
-               "field changed afterwards makes the method Custom."),
+        window="A field changed afterwards makes the method Custom."),
     "gas": Description(
-        "The buffer gas: helium, nitrogen, or both, which runs every ion in each."),
+        "The buffer gas, helium or nitrogen.",
+        cli="With both, every ion runs in each."),
     "parameters": Description(
         "The element table, which gives each atom of the ion its mass and its Lennard-Jones "
         "and hard-sphere parameters in the gas: a table the package ships, or a TOML file of "
@@ -97,19 +97,18 @@ SHARED = {
         "reproduces the 2012 outputs at the 2012 seed."),
     "imp": Description(
         "Trajectories per block of the trajectory method, one block for each velocity point "
-        "in each cycle: 1,000 in 2012 and 25 in 2000."),
+        "in each cycle."),
     "itn": Description(
         "Cycles of the trajectory method, each an independent estimate of the collision "
-        "integral, whose standard deviation the output reports: 10 in 2012."),
+        "integral, whose standard deviation the output reports."),
     "inp": Description(
-        "Velocity points of the trajectory method's integration over the relative velocity: "
-        "40 in 2012."),
+        "Velocity points of the trajectory method's integration over the relative "
+        "velocity."),
     "inum": Description(
         "Trajectories of the projection-approximation and exact hard-sphere pass, which the "
-        "helium program alone makes: 250,000 in 2012."),
+        "helium program alone makes."),
     "inor": Description(
-        "The most reflections followed per trajectory of the exact hard-sphere pass, in helium "
-        "alone: 30 in 2012."),
+        "The most reflections followed per trajectory of the exact hard-sphere pass."),
     "workers": Description(
         "How many runs are in flight at once.",
         window="Set here when the box above is unchecked."),
@@ -148,7 +147,7 @@ WINDOW = {
                 "processors.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "
                   "it.",
-    "add_files": "Adds .mfj files, or ORCA outputs and .xyz files to import. Files can also be "
+    "add_files": "Adds .mfj files or imports ORCA outputs and .xyz files. Files can also be "
                  "dropped on the list.",
     "remove_inputs": "Removes the selected inputs.",
     "choose_folder": "Chooses the results folder.",
@@ -156,7 +155,6 @@ WINDOW = {
     "queue": "Batches waiting to run, in the order they start; each starts when the one before "
              "it ends. Drag a batch to move it.",
     "remove_queued": "Removes the selected batches from the queue.",
-    "start_queue": "Starts the queue, as when batches saved at the last close are put back.",
     "progress": "Runs done of the batch.",
     "running": "Each running run and its time so far, and for a divided run, its blocks of "
                "trajectories written.",

@@ -1,9 +1,9 @@
 """Help ▸ About MOBCAL: what the program computes, what to cite, the licence, the funding, and the
-versions and programs this window is running.
+versions this window is running.
 
 The citations are ``mobcal.methods.REFERENCES``, the source the methods text cites from, never
-restated here. The programs' line is ``mobcal.fortran.verify_binaries``: the binaries are the
-files recorded when they were built, from the pinned sources.
+restated here. The programs are named only when ``mobcal.fortran.verify_binaries`` finds them
+not to be the files recorded when they were built; ``mobcal self-check`` says where they are.
 """
 
 from __future__ import annotations
@@ -31,15 +31,14 @@ RELEASES = "https://github.com/bushgroup/"
 
 
 def programs() -> str:
-    """Where the Fortran programs are, and whether they check against their pins, as rich
-    text."""
+    """Nothing when the Fortran programs check against their pins; otherwise a paragraph
+    saying where they are and what fails, as rich text."""
     d = fortran.binary_dir()
     problems = fortran.verify_binaries(d)
-    where = f"The helium and nitrogen programs are in<br>{html.escape(str(d))}<br>"
     if not problems:
-        return (where + "They are the files recorded when they were built, from Fortran "
-                "sources that match their SHA-256 pins.")
-    return where + "They do not check: " + html.escape("; ".join(problems)) + "."
+        return ""
+    return (f"<p>The helium and nitrogen programs in {html.escape(str(d))} do not check: "
+            + html.escape("; ".join(problems)) + ".</p>")
 
 
 def text() -> str:
@@ -65,7 +64,7 @@ def text() -> str:
         "<p>This work is supported by the US National Science Foundation (CHE-2603156) and "
         "the ACS Petroleum Research Fund (68949-ND6).</p>"
         f"<p>Python {e(platform.python_version())}, Qt {e(qVersion())}, PySide6 "
-        f"{e(PySide6.__version__)}.</p><p>{programs()}</p>")
+        f"{e(PySide6.__version__)}.</p>{programs()}")
 
 
 class AboutDialog(QDialog):

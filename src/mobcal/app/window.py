@@ -181,9 +181,11 @@ class MainWindow(QMainWindow):
     # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
-        """Run and Stop as actions, in the Batch menu; File ▸ Exit, which closes the window by
-        the same path as its close button; Help ▸ About. The roles put Exit and About in the
-        application menu on macOS."""
+        """Run, Stop and Resume queue as actions, in the Batch menu; File ▸ Exit, which closes
+        the window by the same path as its close button; Help ▸ About. The roles put Exit and
+        About in the application menu on macOS. Resume queue is enabled only while the queue
+        holds batches and nothing runs, which is a queue put back at launch: otherwise the queue
+        starts its next batch itself when one ends."""
         self.run_action = QAction("&Run", self)
         self.run_action.setShortcuts([QKeySequence("Ctrl+R"), QKeySequence("F5")])
         self.run_action.triggered.connect(self.run_clicked)
@@ -191,6 +193,9 @@ class MainWindow(QMainWindow):
         self.stop_action.setShortcut(QKeySequence("Shift+F5"))
         self.stop_action.setEnabled(False)
         self.stop_action.triggered.connect(self.stop_clicked)
+        self.resume_action = QAction("Res&ume queue", self)
+        self.resume_action.setEnabled(False)
+        self.resume_action.triggered.connect(self.resume_queue)
         self.exit_action = QAction("E&xit", self)
         self.exit_action.setShortcuts(QKeySequence.StandardKey.Quit)
         self.exit_action.setMenuRole(QAction.MenuRole.QuitRole)
@@ -204,7 +209,13 @@ class MainWindow(QMainWindow):
         batch = bar.addMenu("&Batch")
         batch.addAction(self.run_action)
         batch.addAction(self.stop_action)
+        batch.addSeparator()
+        batch.addAction(self.resume_action)
         bar.addMenu("&Help").addAction(self.about_action)
+
+    def resume_queue(self) -> None:
+        if self.worker is None and self.queue.count():
+            self.start(self._take_queued(0))
 
     def show_about(self) -> AboutDialog:
         """Open the About box, window-modal, and return it."""
@@ -552,7 +563,7 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, 0)
         self.results_table.setRowCount(0)
         self.stop_action.setEnabled(True)
-        self.start_queue_button.setEnabled(False)
+        self.resume_action.setEnabled(False)
         self.methods_button.setEnabled(False)
         self.run_action.setText("Add to &queue")
         self.tick.start()
@@ -604,7 +615,7 @@ class MainWindow(QMainWindow):
         if self.queue.count():
             self.start(self._take_queued(0))
         else:
-            self.start_queue_button.setEnabled(False)
+            self.resume_action.setEnabled(False)
         self.update_estimate()
 
     def stop_clicked(self) -> None:
@@ -654,14 +665,7 @@ class MainWindow(QMainWindow):
         remove = QPushButton("Remove")
         set_tip("remove_queued", remove)
         remove.clicked.connect(self._remove_queued)
-        self.start_queue_button = QPushButton("Start queue")
-        self.start_queue_button.setEnabled(False)
-        set_tip("start_queue", self.start_queue_button)
-        self.start_queue_button.clicked.connect(
-            lambda: self.worker is None and self.queue.count() and self.start(
-                self._take_queued(0)))
         row.addWidget(remove)
-        row.addWidget(self.start_queue_button)
         row.addStretch(1)
         lay.addWidget(self.queue)
         lay.addLayout(row)
@@ -679,7 +683,7 @@ class MainWindow(QMainWindow):
         item = QListWidgetItem(text)
         item.setData(Qt.ItemDataRole.UserRole, b)
         self.queue.addItem(item)
-        self.start_queue_button.setEnabled(self.worker is None)
+        self.resume_action.setEnabled(self.worker is None)
         self.save_queue()
 
     def _take_queued(self, row: int) -> Batch:
@@ -690,7 +694,7 @@ class MainWindow(QMainWindow):
     def _remove_queued(self) -> None:
         for item in self.queue.selectedItems():
             self.queue.takeItem(self.queue.row(item))
-        self.start_queue_button.setEnabled(self.worker is None and self.queue.count() > 0)
+        self.resume_action.setEnabled(self.worker is None and self.queue.count() > 0)
         self.save_queue()
 
     def save_queue(self, *_) -> None:

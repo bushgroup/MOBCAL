@@ -73,10 +73,10 @@ another folder.
 
 ## Running, the queue and stopping
 
-Run and Stop are in the Batch menu. Ctrl+R or F5 runs (⌘R on macOS), and Shift+F5 stops. Run starts the batch. While a batch runs, Run adds the form's batch to the queue instead, and the
+Run, Stop and Resume queue are in the Batch menu. Ctrl+R or F5 runs (⌘R on macOS), and Shift+F5 stops. Run starts the batch. While a batch runs, Run adds the form's batch to the queue instead, and the
 queue starts its next batch when the running one ends. Queued batches can be reordered by
 dragging and removed. The queue is saved as it changes, and batches still queued when the window
-closes are offered back when it next opens.
+closes are offered back when it next opens; Batch, Resume queue starts them.
 
 Progress shows the runs done of the batch, the time each running run has taken, and, for a
 divided run, how many of its blocks of trajectories are written, against the estimate. Stop asks,
@@ -99,6 +99,6 @@ any runs.
 ## About
 
 Help, About MOBCAL (in the MOBCAL menu on macOS) gives the version, the papers to cite, the
-licence and the funding, the Python, Qt and PySide6 versions, and where the helium and nitrogen
-programs are, with whether they are the files recorded when they were built from the pinned
-Fortran sources. `mobcal self-check` makes the same check of the programs and more.
+licence and the funding, and the Python, Qt and PySide6 versions. When the helium or nitrogen
+program is not the file recorded when it was built from the pinned Fortran sources, it also says
+where the programs are and what fails. `mobcal self-check` makes the same check and more.

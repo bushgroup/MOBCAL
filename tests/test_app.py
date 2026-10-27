@@ -196,11 +196,16 @@ def test_run_while_running_queues_and_the_queue_survives(window, qtbot, tmp_path
     # The second launch offers them back.
     w2 = MainWindow(w.store, launcher=launcher, cpus=8)
     qtbot.addWidget(w2)
+    assert not w2.resume_action.isEnabled()
     w2.offer_saved_queue()
     assert [b.title() for b in w2.queued()] == ["Current", "MOBCAL 2012"]
+    assert w2.resume_action.isEnabled() and not w.resume_action.isEnabled()
+    w2.resume_action.trigger()  # the first queued batch starts, the second waits
+    assert w2.worker is not None and w2.queue.count() == 1 and not w2.resume_action.isEnabled()
     w2.queue.clear()
     w2.save_queue()
     wait_idle(qtbot, w, 60_000)
+    wait_idle(qtbot, w2, 60_000)
     assert batches.load(w.store.queue_path) == ([], [])
 
 
@@ -248,9 +253,11 @@ def test_the_run_and_stop_actions_track_the_batch(window, qtbot, tmp_path):
 
 def test_the_menus_hold_the_actions(window):
     w = window
-    menus = {m.text(): m.menu().actions() for m in w.menuBar().actions()}
+    menus = {m.text(): [a for a in m.menu().actions() if not a.isSeparator()]
+             for m in w.menuBar().actions()}
     assert list(menus) == ["&File", "&Batch", "&Help"]
-    assert menus["&File"] == [w.exit_action] and menus["&Batch"] == [w.run_action, w.stop_action]
+    assert menus["&File"] == [w.exit_action]
+    assert menus["&Batch"] == [w.run_action, w.stop_action, w.resume_action]
     assert menus["&Help"] == [w.about_action]
     roles = [a.menuRole() for a in (w.exit_action, w.about_action)]
     assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole]

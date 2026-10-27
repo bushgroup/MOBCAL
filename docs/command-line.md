@@ -57,7 +57,7 @@ usage: mobcal run [-h] [--gas {he,n2,both}] [--seeds N[,N...]]
 ```
 
 - `INPUT`: The ions to run, one calculation for each input, gas and seed. Paths to .mfj files, or globs.
-- `--gas {he,n2,both}`: The buffer gas: helium, nitrogen, or both, which runs every ion in each. Default: he.
+- `--gas {he,n2,both}`: The buffer gas, helium or nitrogen. With both, every ion runs in each. Default: he.
 - `--seeds N[,N...]`: One run of each ion in each gas for every seed; the 2012 seed is 5013489. A list of integers separated by commas. Default: 5013489.
 - `--method {current,2012,2000}`: A preset of the element table, the random number generator and the six run settings. The methods are current, the 2012 element tables and settings under Philox4x32-10; 2012, the 2012 release's calculation, the same under RANLUX; 2000, the 2000 helium release's, its table at 298 K and 25 trajectories per block under RANLUX, for helium only. A table, generator or setting given beside it overrides it, and the run records custom. Default: current.
 - `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under current.
@@ -73,11 +73,11 @@ The temperature and the five sampling counts the 2012 programs compiled in. With
 
 - `--settings PATH`: A settings file (TOML) for every run, which replaces the method's settings; a key it leaves out keeps the 2012 value.
 - `--temperature T`: The buffer gas temperature in kelvin, 301 K in 2012 and 298 K in 2000. It sets the trajectory method's velocity grid and the conversion of each cross section to a mobility.
-- `--imp N`: Trajectories per block of the trajectory method, one block for each velocity point in each cycle: 1,000 in 2012 and 25 in 2000.
-- `--itn N`: Cycles of the trajectory method, each an independent estimate of the collision integral, whose standard deviation the output reports: 10 in 2012.
-- `--inp N`: Velocity points of the trajectory method's integration over the relative velocity: 40 in 2012.
-- `--inum N`: Trajectories of the projection-approximation and exact hard-sphere pass, which the helium program alone makes: 250,000 in 2012.
-- `--inor N`: The most reflections followed per trajectory of the exact hard-sphere pass, in helium alone: 30 in 2012.
+- `--imp N`: Trajectories per block of the trajectory method, one block for each velocity point in each cycle.
+- `--itn N`: Cycles of the trajectory method, each an independent estimate of the collision integral, whose standard deviation the output reports.
+- `--inp N`: Velocity points of the trajectory method's integration over the relative velocity.
+- `--inum N`: Trajectories of the projection-approximation and exact hard-sphere pass, which the helium program alone makes.
+- `--inor N`: The most reflections followed per trajectory of the exact hard-sphere pass.
 
 ## mobcal gui
 
