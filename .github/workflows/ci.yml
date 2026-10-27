@@ -194,8 +194,9 @@ jobs:
           done
           echo "== debian:stable-slim, with choline"
           docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp debian:stable-slim sh -c '/opt/mobcal-*/mobcal self-check --choline'
-          echo "== debian:stable-slim, the window on X11 (Xvfb), without libxcb-cursor0"
-          docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp debian:stable-slim sh -c '
+          for img in debian:stable-slim ubuntu:22.04; do
+          echo "== $img, the window on X11 (Xvfb), without libxcb-cursor0"
+          docker run --rm -e DEBIAN_FRONTEND=noninteractive -v "$RUNNER_TEMP/clean:/opt" -w /tmp "$img" sh -c '
             set -e
             apt-get update -qq
             apt-get install -y -qq --no-install-recommends xvfb xauth libgl1 libegl1 \
@@ -205,6 +206,7 @@ jobs:
               libxcb-sync1 libxcb-shm0 libxcb-render0 >/dev/null
             if dpkg -s libxcb-cursor0 >/dev/null 2>&1; then echo "libxcb-cursor0 is installed"; exit 1; fi
             QT_QPA_PLATFORM=xcb xvfb-run -a /opt/mobcal-*/mobcal gui --check'
+          done
 
       # The archive holds MOBCAL.app; the command is the console program inside it.
       - name: Unpacked on macOS

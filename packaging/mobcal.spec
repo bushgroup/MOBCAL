@@ -87,9 +87,21 @@ if sys.platform.startswith("linux"):
                        r"expat|pcre2|gcrypt|gpg-error|lz4|cap\b|selinux|mount|blkid)")
     _SYSTEM = ("/lib/", "/lib64/", "/usr/lib/", "/usr/lib64/")
 
+    # Qt plugins the window never loads, which bring the build machine's GTK 3 stack (the gtk3
+    # platform theme) and Kerberos (the network plugins), and the libraries only they need:
+    # they took the Linux folder to 420 MB, and the GTK stack asks for the build machine's glibc.
+    _UNUSED_PLUGIN = re.compile(r"plugins/(platformthemes/libqgtk3|tls/|networkinformation/)")
+    _ONLY_THEIRS = re.compile(r"^lib(gtk-3|gdk-3|gdk_pixbuf|atk|atspi|cairo|pango|pixman|"
+                              r"epoxy|fribidi|thai|datrie|glycin|lcms2|Xcomposite|Xdamage|"
+                              r"Xinerama|Xrandr|Xcursor|XRes|gssapi_krb5|krb5|k5crypto|"
+                              r"com_err|keyutils|seccomp)")
+
     def _host_libs_out(toc):
         return [e for e in toc
-                if not (e[1].startswith(_SYSTEM) and _HOST.match(os.path.basename(e[0])))]
+                if not (e[1].startswith(_SYSTEM) and (_HOST.match(os.path.basename(e[0]))
+                                                      or _ONLY_THEIRS.match(
+                                                          os.path.basename(e[0]))))
+                and not _UNUSED_PLUGIN.search(e[0].replace("\\", "/"))]
 
     a.binaries = _host_libs_out(a.binaries)
     g.binaries = _host_libs_out(g.binaries)
