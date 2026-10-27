@@ -29,6 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mobcal import options
+from mobcal.app import tip
 from mobcal.io import structure
 from mobcal.io.mfj import Mfj, MfjError
 
@@ -117,6 +119,8 @@ class InputsPanel(QWidget):
         self._signals.read.connect(self._on_read)
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(COLUMNS)
+        for c, name in enumerate(COLUMNS):
+            self.table.horizontalHeaderItem(c).setToolTip(tip(options.COLUMNS["inputs"][name]))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
@@ -127,6 +131,9 @@ class InputsPanel(QWidget):
         h.setMinimumSectionSize(48)
         self.add_button = QPushButton("Add files…")
         self.remove_button = QPushButton("Remove")
+        self.add_button.setToolTip(tip(options.tooltip("add_files")))
+        self.remove_button.setToolTip(tip(options.tooltip("remove_inputs")))
+        self.table.setToolTip(tip(options.tooltip("inputs")))
         self.add_button.clicked.connect(self._browse)
         self.remove_button.clicked.connect(self.remove_selected)
         buttons = QHBoxLayout()
@@ -237,7 +244,7 @@ class InputsPanel(QWidget):
             label = f"{key} (Q/N on every atom)" if key == structure.UNIFORM else key
             combo.addItem(label, key)
         combo.setCurrentIndex(-1 if item.charges is None else combo.findData(item.charges))
-        combo.setToolTip(item.structure.offer())
+        combo.setToolTip(tip(f"{options.tooltip('charges')} {item.structure.offer()}."))
 
         def chosen(i: int) -> None:
             item.charges = combo.itemData(i) if i >= 0 else None
@@ -255,7 +262,8 @@ class InputsPanel(QWidget):
         if not item.needs_net_charge:
             spin.setValue(item.structure.net_charge)
             spin.setEnabled(False)
-            spin.setToolTip("the charge the output was computed at")
+            spin.setToolTip(tip(f"{options.tooltip('net_charge')} "
+                                f"{options.tooltip('net_charge_read')}"))
             return spin
         spin.setSpecialValueText("give…")
         spin.setRange(-100, 99)  # -100 is the "not given" value the special text shows
@@ -268,4 +276,5 @@ class InputsPanel(QWidget):
             self.changed.emit()
         spin.valueChanged.connect(given)
         spin.setAlignment(Qt.AlignmentFlag.AlignRight)
+        spin.setToolTip(tip(options.tooltip("net_charge")))
         return spin

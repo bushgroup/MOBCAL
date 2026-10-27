@@ -15,6 +15,7 @@ an ORCA output) happens on a thread pool.
 from __future__ import annotations
 
 import ctypes.util
+import html
 import os
 import sys
 from pathlib import Path
@@ -23,6 +24,12 @@ ORGANISATION = "bushgroup"
 APPLICATION = "MOBCAL"
 # The icon at each size tools/make_icon.py renders (16 to 512 px); the bundle carries them here.
 ICONS = Path(__file__).resolve().parent / "icons"
+
+
+def tip(text: str) -> str:
+    """A tooltip from ``mobcal.options``' plain text, as rich text: Qt wraps a rich-text
+    tooltip at a readable width and draws a plain one on a single line."""
+    return f"<qt>{html.escape(text, quote=False)}</qt>"
 
 
 def missing_platform_library() -> str | None:

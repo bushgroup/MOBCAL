@@ -5,7 +5,9 @@ would rather not use a terminal. It takes `.mfj` files, or ORCA outputs and `.xy
 imports, runs them in helium, nitrogen or both under one of three named methods, shows how long
 the batch will take and how far it has got, and gives a table of cross sections with the run
 folders, the records and a methods paragraph one click away. Everything the window does, the
-command line does too, with the same rules and the same records; this page says where.
+command line does too, with the same rules and the same records; this page says where, and
+[command-line.md](command-line.md) lists every command and option. Every control carries a
+tooltip that says what it sets, in the words the command line's help uses for the same option.
 
 ```
 uv run mobcal gui

@@ -16,6 +16,9 @@ of N, each running run's elapsed time (and blocks written, for a split run), aga
 estimate. Results are one row per ion and gas, TM headline, mean ± s.d. over seeds, with Copy,
 Save CSV, Show in folder, Open output and Copy methods text. Closing asks, then stops the
 running batch; the queue stays saved.
+
+Every control and column header has a tooltip from ``mobcal.options``; a control that an
+option of ``mobcal run`` also sets shows that option's description, so the two cannot drift.
 """
 
 from __future__ import annotations
@@ -61,7 +64,8 @@ from PySide6.QtWidgets import (
 
 import mobcal
 from mobcal import batch as batches
-from mobcal import estimate, methods, parameters, settings
+from mobcal import estimate, methods, options, parameters, settings
+from mobcal.app import tip
 from mobcal.app.about import AboutDialog
 from mobcal.app.inputs import InputsPanel
 from mobcal.app.store import Store
@@ -77,6 +81,17 @@ OTHER_TABLE = "Other file…"
 RESULT_COLUMNS = ("Ion", "Gas", "TM (Å²)", "PA (Å²)", "EHS (Å²)", "Status", "Time")
 CSV_HEADER = ("ion", "input", "gas", "TM", "PA", "EHS", "runs", "status", "seconds", "folder",
               "message")
+
+
+def set_tip(key: str, *widgets: QWidget) -> None:
+    """Give each widget, a control and its label, the tooltip ``mobcal.options`` holds."""
+    for w in widgets:
+        w.setToolTip(tip(options.tooltip(key)))
+
+
+def form_row(lay: QFormLayout, label: str, widget: QWidget, key: str) -> None:
+    lay.addRow(label, widget)
+    set_tip(key, widget, lay.labelForField(widget))
 
 
 def seeds(n: int) -> tuple[int, ...]:
@@ -205,12 +220,8 @@ class MainWindow(QMainWindow):
         self.method_combo = QComboBox()
         for key, m in methods.METHODS.items():
             self.method_combo.addItem(m.title, key)
-        self.method_combo.setToolTip(
-            "Current: this version's defaults (the 2012 table and settings, Philox).\n"
-            "MOBCAL 2012: the 2012 release's calculation (RANLUX).\n"
-            "MOBCAL 2000: the 2000 release's, helium only (its table, 298 K, imp 25, RANLUX).")
         self.method_combo.activated.connect(self._method_picked)
-        lay.addRow("Method", self.method_combo)
+        form_row(lay, "Method", self.method_combo, "method")
         return box
 
     def _basics_box(self) -> QWidget:
@@ -222,16 +233,14 @@ class MainWindow(QMainWindow):
         self.table_combo = QComboBox()
         self.seeds_spin = QSpinBox()
         self.seeds_spin.setRange(1, 1000)
-        self.seeds_spin.setToolTip(f"One run per seed, the first {DEFAULT_SEED}, the 2012 "
-                                   "seed; with several, each cross section is the mean ± s.d.")
         self.temperature = QDoubleSpinBox()
         self.temperature.setRange(0.01, 100000.0)
         self.temperature.setDecimals(2)
         self.temperature.setSuffix(" K")
-        lay.addRow("Gas", self.gas_combo)
-        lay.addRow("Element table", self.table_combo)
-        lay.addRow("Seeds per ion", self.seeds_spin)
-        lay.addRow("Temperature", self.temperature)
+        form_row(lay, "Gas", self.gas_combo, "gas")
+        form_row(lay, "Element table", self.table_combo, "parameters")
+        form_row(lay, "Seeds per ion", self.seeds_spin, "seeds")
+        form_row(lay, "Temperature", self.temperature, "temperature")
         self.gas_combo.currentIndexChanged.connect(self._gas_changed)
         self.table_combo.activated.connect(self._table_picked)
         self.seeds_spin.valueChanged.connect(self.update_estimate)
@@ -247,6 +256,7 @@ class MainWindow(QMainWindow):
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        set_tip("advanced", self.advanced_toggle)
         self.advanced = QGroupBox()
         self.advanced.setVisible(False)
 
@@ -263,24 +273,25 @@ class MainWindow(QMainWindow):
         for label, g in GENERATORS:
             self.generator_combo.addItem(label, g)
         self.generator_combo.currentIndexChanged.connect(self.fields_changed)
-        lay.addWidget(QLabel("Generator"), 0, 0)
+        label = QLabel("Generator")
+        set_tip("rng", self.generator_combo, label)
+        lay.addWidget(label, 0, 0)
         lay.addWidget(self.generator_combo, 0, 1, 1, 3)
         self.counts: dict[str, QSpinBox] = {}
-        tips = {"imp": "trajectories per block", "itn": "cycles", "inp": "velocity points",
-                "inum": "projection and hard-sphere trajectories (helium)",
-                "inor": "reflections per hard-sphere trajectory (helium)"}
         for k, name in enumerate(settings.COUNTS):
             spin = QSpinBox()
             spin.setRange(*settings.BOUNDS[name])
             spin.setGroupSeparatorShown(True)
-            spin.setToolTip(tips[name])
             spin.valueChanged.connect(self.fields_changed)
             self.counts[name] = spin
+            label = QLabel(name)
+            set_tip(name, spin, label)
             r, c = 1 + k // 2, (k % 2) * 2
-            lay.addWidget(QLabel(name), r, c)
+            lay.addWidget(label, r, c)
             lay.addWidget(spin, r, c + 1)
         self.auto_cores = QCheckBox("Choose how the batch uses the cores")
         self.auto_cores.setChecked(True)
+        set_tip("auto_cores", self.auto_cores)
         self.workers_spin = QSpinBox()
         self.workers_spin.setRange(1, max(1, self.cpus))
         self.split_spin = QSpinBox()
@@ -293,10 +304,12 @@ class MainWindow(QMainWindow):
                                                     self.split_spin.setEnabled(not on),
                                                     self.update_estimate()))
         lay.addWidget(self.auto_cores, 4, 0, 1, 4)
-        lay.addWidget(QLabel("Runs at once"), 5, 0)
-        lay.addWidget(self.workers_spin, 5, 1)
-        lay.addWidget(QLabel("Processes per run"), 5, 2)
-        lay.addWidget(self.split_spin, 5, 3)
+        for c, (text, key, spin) in enumerate((("Runs at once", "workers", self.workers_spin),
+                                               ("Processes per run", "split", self.split_spin))):
+            label = QLabel(text)
+            set_tip(key, spin, label)
+            lay.addWidget(label, 5, 2 * c)
+            lay.addWidget(spin, 5, 2 * c + 1)
         self.cores_label = QLabel()
         self.cores_label.setWordWrap(True)
         lay.addWidget(self.cores_label, 6, 0, 1, 4)
@@ -306,10 +319,10 @@ class MainWindow(QMainWindow):
         box = QGroupBox("Results folder")
         lay = QHBoxLayout(box)
         self.out_edit = QLineEdit(self.store.default_out_dir())
-        self.out_edit.setToolTip("One folder per study: every batch adds its runs here, and "
-                                 "summary.csv covers them all.")
+        set_tip("out", self.out_edit)
         self.out_edit.editingFinished.connect(self.update_estimate)
         choose = QPushButton("Choose…")
+        set_tip("choose_folder", choose)
         choose.clicked.connect(self._choose_folder)
         lay.addWidget(self.out_edit, 1)
         lay.addWidget(choose)
@@ -636,11 +649,14 @@ class MainWindow(QMainWindow):
         self.queue.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.queue.model().rowsMoved.connect(self.save_queue)
         self.queue.setMaximumHeight(120)
+        set_tip("queue", self.queue)
         row = QHBoxLayout()
         remove = QPushButton("Remove")
+        set_tip("remove_queued", remove)
         remove.clicked.connect(self._remove_queued)
         self.start_queue_button = QPushButton("Start queue")
         self.start_queue_button.setEnabled(False)
+        set_tip("start_queue", self.start_queue_button)
         self.start_queue_button.clicked.connect(
             lambda: self.worker is None and self.queue.count() and self.start(
                 self._take_queued(0)))
@@ -717,6 +733,8 @@ class MainWindow(QMainWindow):
         self.progress.setValue(0)
         self.running_list = QListWidget()
         self.running_list.setMaximumHeight(100)
+        set_tip("progress", self.progress)
+        set_tip("running", self.running_list)
         lay.addWidget(self.status_label)
         lay.addWidget(self.progress)
         lay.addWidget(self.running_list)
@@ -727,6 +745,10 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(box)
         self.results_table = QTableWidget(0, len(RESULT_COLUMNS))
         self.results_table.setHorizontalHeaderLabels(RESULT_COLUMNS)
+        set_tip("results", self.results_table)
+        for c, name in enumerate(RESULT_COLUMNS):
+            self.results_table.horizontalHeaderItem(c).setToolTip(
+                tip(options.COLUMNS["results"][name]))
         self.results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.results_table.verticalHeader().setVisible(False)
@@ -735,14 +757,17 @@ class MainWindow(QMainWindow):
         h.setSectionResizeMode(RESULT_COLUMNS.index("Status"), QHeaderView.ResizeMode.Stretch)
         self.results_table.doubleClicked.connect(lambda _: self.open_output())
         row = QHBoxLayout()
-        buttons = (("Copy", self.copy_results), ("Save CSV…", self.save_csv),
-                   ("Show in folder", self.show_in_folder), ("Open output", self.open_output))
-        for text, slot in buttons:
+        buttons = (("Copy", "copy", self.copy_results), ("Save CSV…", "save_csv", self.save_csv),
+                   ("Show in folder", "show_in_folder", self.show_in_folder),
+                   ("Open output", "open_output", self.open_output))
+        for text, key, slot in buttons:
             b = QPushButton(text)
+            set_tip(key, b)
             b.clicked.connect(slot)
             row.addWidget(b)
         self.methods_button = QPushButton("Copy methods text")
         self.methods_button.setEnabled(False)
+        set_tip("methods_text", self.methods_button)
         self.methods_button.clicked.connect(self.copy_methods_text)
         row.addWidget(self.methods_button)
         row.addStretch(1)

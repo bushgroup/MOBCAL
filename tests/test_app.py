@@ -21,20 +21,30 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QRect, QSettings, Qt  # noqa: E402
 from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPalette  # noqa: E402
+from PySide6.QtGui import Qt as QtGui_Qt  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
+    QAbstractButton,
+    QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
+    QComboBox,
     QGroupBox,
+    QHeaderView,
     QLabel,
+    QLineEdit,
+    QMenuBar,
     QMessageBox,
+    QProgressBar,
     QStyle,
     QToolBar,
     QVBoxLayout,
+    QWidget,
 )
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
-from mobcal import cli, fortran, methods  # noqa: E402
-from mobcal.app import theme  # noqa: E402
+from mobcal import cli, fortran, methods, options  # noqa: E402
+from mobcal.app import theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
 from mobcal.app.window import MainWindow  # noqa: E402
@@ -424,6 +434,54 @@ def test_an_unreadable_input_says_why(window, qtbot, tmp_path):
     junk.write_text("not a structure\n", encoding="ascii")
     add(qtbot, w, junk)
     assert w.inputs.items[0].state == "error" and not w.run_action.isEnabled()
+
+
+# --- the tooltips -------------------------------------------------------------------------
+
+def controls(w: MainWindow) -> list:
+    """Every widget a user sets or presses, found by walking the window, without Qt's own
+    parts of them: a spin box's line edit, a table's header view and corner button, the menu
+    bar's overflow button, a combo box's list, which is a window of its own."""
+    kinds = (QAbstractButton, QAbstractSpinBox, QComboBox, QLineEdit, QAbstractItemView,
+             QProgressBar)
+    inner = (QAbstractSpinBox, QAbstractItemView, QMenuBar)
+    return [x for x in w.findChildren(QWidget)
+            if isinstance(x, kinds) and not isinstance(x, QHeaderView) and x.window() is w
+            and not isinstance(x.parentWidget(), inner)]
+
+
+def test_every_control_and_column_has_a_tooltip(window, qtbot):
+    w = window
+    add(qtbot, w, CHOLINE, ORCA / "choline_sp" / "choline_sp.out",
+        ORCA / "choline_opt" / "choline_opt.xyz")
+    found = controls(w)
+    assert len(found) >= 30
+    bare = [f"{type(x).__name__} {getattr(x, 'text', lambda: '')()!r}" for x in found
+            if not x.toolTip()]
+    assert not bare
+    for table in (w.inputs.table, w.results_table):
+        for c in range(table.columnCount()):
+            assert table.horizontalHeaderItem(c).toolTip(), table.horizontalHeaderItem(c).text()
+
+
+def test_the_tooltips_are_the_command_lines_descriptions(window):
+    """A control the command line also sets carries the option's shared text, and the window's
+    own addition; nothing in the window restates or rewords it."""
+    w = window
+    by_key = {"method": w.method_combo, "gas": w.gas_combo, "parameters": w.table_combo,
+              "seeds": w.seeds_spin, "temperature": w.temperature, "rng": w.generator_combo,
+              "workers": w.workers_spin, "split": w.split_spin, "out": w.out_edit,
+              "methods_text": w.methods_button, "inputs": w.inputs.table,
+              **{name: spin for name, spin in w.counts.items()}}
+    for key, widget in by_key.items():
+        assert widget.toolTip() == tip(options.tooltip(key)), key
+        assert widget.toolTip().startswith(tip(options.SHARED[key].text).removesuffix("</qt>"))
+    assert options.AUTO_RULE in html.unescape(w.auto_cores.toolTip())
+
+
+def test_a_tooltip_wraps_and_says_what_it_is_given():
+    assert tip("Å² & <b>") == "<qt>Å² &amp; &lt;b&gt;</qt>"
+    assert QtGui_Qt.mightBeRichText(tip(options.tooltip("method")))
 
 
 # --- the platform -------------------------------------------------------------------------

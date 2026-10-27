@@ -54,10 +54,11 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import sys
 from pathlib import Path
 
-from mobcal import ROOT, __version__, estimate, fortran, methods, parameters, settings
+from mobcal import ROOT, __version__, estimate, fortran, methods, options, parameters, settings
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError, prior
 from mobcal.io.infile import GENERATORS
 from mobcal.run import DEFAULT_RNG, Job, Result, run_many
@@ -85,13 +86,6 @@ def _seeds(text: str) -> list[int]:
     return seeds
 
 
-def _set_names() -> str:
-    """The shipped sets, for the help: ``2012 (He, N2), 2000 (He)``."""
-    sets = parameters.SETS
-    return ", ".join(f"{n} ({', '.join(parameters.GAS[g] for g in sets if n in sets[g])})"
-                     for n in parameters.names())
-
-
 def expand_inputs(patterns: list[str]) -> list[Path]:
     """Each argument as a path if it exists, else as a glob; duplicates dropped, order kept."""
     found: list[Path] = []
@@ -103,114 +97,167 @@ def expand_inputs(patterns: list[str]) -> list[Path]:
     return found
 
 
+def _settings_default() -> str:
+    """The run settings without options, for the group's description."""
+    d = settings.DEFAULTS
+    two = methods.get("2000").overrides()
+    return (f"temperature {d.temperature:g} K, "
+            + ", ".join(f"{k} {getattr(d, k)}" for k in settings.COUNTS)
+            + "), or under 2000, "
+            + " and ".join(f"{v:g} K" if k == "temperature" else f"{k} {v}"
+                           for k, v in two.items()))
+
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="mobcal", description="Collision cross sections by the trajectory method: the 2012 "
         "MOBCAL Fortran, run many calculations at a time.")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("version", help="print the package version")
+    def command(name: str, help: str, description: str | None = None) -> argparse.ArgumentParser:
+        return sub.add_parser(name, help=help, description=description or help)
 
-    c = sub.add_parser("self-check", help="check that this copy can compute a cross section")
+    command("version", "Print the package version.")
+
+    c = command("self-check", "Check that this copy can compute a cross section.")
     c.add_argument("--choline", action="store_true",
-                   help="also run the 2012 choline input in helium and compare (about 3 min)")
+                   help="Also run the 2012 choline input in helium and compare it with the 2012 "
+                        "output, about 3 min.")
     c.add_argument("--report", type=Path, metavar="PATH",
-                   help="write the report to this file as well")
+                   help="Write the report to this file as well.")
 
-    b = sub.add_parser("build", help="compile the 2012 Fortran with gfortran")
-    b.add_argument("--gas", choices=fortran.GASES, help="one gas; default both")
+    b = command("build", "Compile the 2012 Fortran with gfortran.")
+    b.add_argument("--gas", choices=fortran.GASES, help="One gas. Default: both.")
     b.add_argument("--out", type=Path, default=ROOT / "build" / "fortran",
-                   help="output directory (default build/fortran/)")
+                   metavar="DIR",
+                   help="The output directory. Default: build/fortran/.")
 
-    r = sub.add_parser("run", help="run calculations in parallel, one process per run")
-    r.add_argument("inputs", nargs="+", metavar="INPUT", help=".mfj files, paths or globs")
+    r = command("run", "Run calculations in parallel, one process per run.")
+    r.add_argument("inputs", nargs="+", metavar="INPUT", help=options.cli_help("inputs"))
     r.add_argument("--gas", choices=(*fortran.GASES, "both"), default="he",
-                   help="which binary (default he)")
+                   help=options.cli_help("gas", "he"))
     r.add_argument("--seeds", type=_seeds, default=[DEFAULT_SEED], metavar="N[,N...]",
-                   help=f"one run per seed (default {DEFAULT_SEED}, the 2012 seed)")
+                   help=options.cli_help("seeds", str(DEFAULT_SEED)))
     r.add_argument("--method", choices=tuple(methods.METHODS), default=methods.CURRENT,
-                   help="a preset of the table, generator and settings: current (default), "
-                        "2012 (the 2012 release's calculation), 2000 (the 2000 release's, "
-                        "helium only); an option below given beside it overrides it")
+                   help=options.cli_help("method", methods.CURRENT))
     r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
                    default=None,
-                   help=f"random number generator (default the method's, {DEFAULT_RNG} for "
-                        "current); ranlux is the 2012 generator, which reproduces the 2012 "
-                        "numbers at the 2012 seed")
+                   help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under current"))
     r.add_argument("--workers", type=int, default=None, metavar="N",
-                   help="runs in flight at once (default: the number of CPUs)")
+                   help=options.cli_help("workers", "the number of processors divided by the "
+                                         "processes per run, or under --split auto, the "
+                                         "number it chooses"))
     r.add_argument("--split", type=_split, default=None, metavar="W|auto",
-                   help="run each calculation across W processes, with the serial result "
-                        "exactly; auto chooses the runs in flight and each run's split from "
-                        "the run count, the CPUs and the ion sizes (default: one process per "
-                        "calculation)")
+                   help=options.cli_help("split", "1, one process per calculation"))
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
-                   help="the element table for every run: a TOML file, or a shipped set by "
-                        f"name ({_set_names()}); default {parameters.DEFAULT}")
-    r.add_argument("--out", type=Path, default=DEFAULT_OUT,
-                   help="where the run directories and the summary go; the summary covers "
-                        f"every run the folder holds (default {DEFAULT_OUT}/)")
+                   help=options.cli_help("parameters",
+                                         f"the method's, {parameters.DEFAULT} under current"))
+    r.add_argument("--out", type=Path, default=DEFAULT_OUT, metavar="DIR",
+                   help=options.cli_help("out", f"{DEFAULT_OUT}/"))
     r.add_argument("--skip-done", action="store_true",
-                   help="leave out the runs the output folder already holds complete")
+                   help="Leave out the runs the output folder already holds complete.")
     s = r.add_argument_group(
-        "run settings", "the temperature and the five sampling counts the 2012 programs "
-        "compiled in; without these every run uses the 2012 values (temperature 301 K, imp "
-        "1000, itn 10, inp 40, inum 250000, inor 30)")
+        "run settings", "The temperature and the five sampling counts the 2012 programs "
+        "compiled in. Without these, every run uses its method's values: the 2012 values ("
+        f"{_settings_default()}.")
     s.add_argument("--settings", type=Path, default=None, metavar="PATH",
-                   help="a settings file (TOML) for every run; a key it leaves out keeps the "
-                        "2012 value")
+                   help="A settings file (TOML) for every run, which replaces the method's "
+                        "settings; a key it leaves out keeps the 2012 value.")
     s.add_argument("--temperature", type=float, default=None, metavar="T",
-                   help="buffer gas temperature in kelvin")
-    s.add_argument("--imp", type=int, default=None, metavar="N",
-                   help="trajectories per block of the trajectory method")
-    s.add_argument("--itn", type=int, default=None, metavar="N",
-                   help="cycles of the trajectory method")
-    s.add_argument("--inp", type=int, default=None, metavar="N",
-                   help="velocity points of the trajectory method")
-    s.add_argument("--inum", type=int, default=None, metavar="N",
-                   help="trajectories of the projection and hard-sphere pass (helium)")
-    s.add_argument("--inor", type=int, default=None, metavar="N",
-                   help="reflections followed per hard-sphere trajectory (helium)")
+                   help=options.cli_help("temperature"))
+    for name in settings.COUNTS:
+        s.add_argument(f"--{name}", type=int, default=None, metavar="N",
+                       help=options.cli_help(name))
 
-    g = sub.add_parser("gui", help="open the window")
+    g = command("gui", "Open the window.")
     g.add_argument("--check", action="store_true",
-                   help="open the window, close it, and exit 0: a test that it starts")
+                   help="Open the window, close it, and exit 0: a test that it starts.")
 
-    t = sub.add_parser("methods-text", help="print the methods paragraph for runs")
+    t = command("methods-text", "Print the methods paragraph for runs.",
+                options.cli_help("methods_text"))
     t.add_argument("paths", nargs="+", type=Path, metavar="PATH",
-                   help="run directories, or folders of them")
+                   help="Run directories, or folders of them.")
 
-    p = sub.add_parser("render-parameters",
-                       help="write the element table and the settings the program reads into "
-                            "a directory")
-    p.add_argument("gas", choices=fortran.GASES)
+    p = command("render-parameters", "Write the element table and the settings the program "
+                "reads into a directory, for running the program there by hand.")
+    p.add_argument("gas", choices=fortran.GASES, metavar="GAS",
+                   help="The gas whose table is written: he or n2.")
     p.add_argument("dir", type=Path, nargs="?", default=Path("."), metavar="DIR",
-                   help="where to write parameters.tab and settings.tab (default: the current "
-                        "directory)")
+                   help="Where to write parameters.tab and settings.tab. Default: the current "
+                        "directory.")
     p.add_argument("--parameters", default=None, metavar="PATH|NAME",
-                   help="render this TOML file, or this shipped set by name "
-                        f"({_set_names()}), instead of the gas's default set")
+                   help="Write this TOML file, or this shipped table by name "
+                        f"({options.set_names()}), instead of the gas's default table.")
     p.add_argument("--settings", type=Path, default=None, metavar="PATH",
-                   help="render this settings file instead of the 2012 values")
+                   help="Write this settings file instead of the 2012 values.")
 
-    m = sub.add_parser("import", help="write an .mfj from an ORCA output or an .xyz, with the "
-                                      "charges you name")
-    m.add_argument("source", type=Path, metavar="SOURCE", help="an ORCA output, or an .xyz")
-    m.add_argument("--charges", metavar="KEY",
-                   help="which charges: a block the file holds (mulliken, lowdin, chelpg, "
-                        "hirshfeld; column for an .xyz's fifth column), or uniform for Q/N on "
-                        "every atom; without it, the import lists what the file holds")
+    m = command("import", "Write an .mfj from an ORCA output or an .xyz file, with the charges "
+                "you name.")
+    m.add_argument("source", type=Path, metavar="SOURCE",
+                   help="An ORCA output, or an .xyz file.")
+    m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
     m.add_argument("--net-charge", type=int, default=None, metavar="Q",
-                   help="the ion's net charge; an .xyz needs it, and for an output it must "
-                        "agree with the charge the output was computed at")
+                   help=options.cli_help("net_charge"))
     m.add_argument("--gas", choices=(*fortran.GASES, "both"), default="both",
-                   help="whose element table the atoms must be in (default both)")
+                   help="Whose element table the atoms must be in. Default: both.")
     m.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
-                   help="the file to write (default SOURCE-STEM_KEY.mfj in the current "
-                        "directory); its record goes beside it as OUT.import.json")
+                   help="The file to write, with its record beside it as OUT.import.json. "
+                        "Default: SOURCE-STEM_KEY.mfj in the current directory.")
     m.add_argument("--force", action="store_true",
-                   help="replace OUT.mfj and its record if they exist")
+                   help="Replace OUT.mfj and its record if they exist.")
     return ap
+
+
+REFERENCE = Path("docs") / "command-line.md"
+REFERENCE_WIDTH = 88  # the usage lines' wrap, fixed so the page does not follow the terminal
+REFERENCE_OPENING = (
+    "`mobcal` is one command with a subcommand for each task: running calculations, writing an "
+    "input from a quantum chemistry output, writing the methods paragraph for finished runs, "
+    "checking and building the programs, and opening the window. An installed copy puts "
+    "`mobcal` on the `PATH` ([install.md](install.md)); from a source checkout, each command "
+    "is `uv run mobcal ...`. The options of `mobcal run` and `mobcal import` that the window "
+    "also sets carry the same descriptions as its tooltips, from one table in the package, so "
+    "the two say the same thing about every setting they share ([window.md](window.md)). "
+    "`mobcal COMMAND -h` prints a command's section of this page.")
+
+
+def _code(help: str) -> str:
+    """A help string for the page: argparse's escapes undone, option names as code."""
+    return re.sub(r"(?<![\w`])(--[a-z][\w-]*)", r"`\1`", help.replace("%%", "%"))
+
+
+def reference() -> str:
+    """``docs/command-line.md``: every subcommand's usage and arguments, from the parser.
+    ``tools/make_command_line.py`` writes it and a test holds the committed page to it."""
+    # argparse keeps its subcommands and groups in private attributes, stable since 2.7.
+    ap = parser()
+    sub = next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction))
+    short = {a.dest: a.help for a in sub._choices_actions}
+    lines = ["# The command line", "",
+             "<!-- Generated by tools/make_command_line.py from the argument parser in "
+             "src/mobcal/cli.py and the descriptions in src/mobcal/options.py. Edit those and "
+             "run the tool; a test fails while this page differs from what it writes. -->", "",
+             REFERENCE_OPENING, ""]
+    lines += [f"- [`mobcal {name}`](#mobcal-{name}): {short[name]}" for name in sub.choices]
+    for name, p in sub.choices.items():
+        p.formatter_class = lambda prog: argparse.HelpFormatter(prog, width=REFERENCE_WIDTH)
+        lines += ["", f"## mobcal {name}", "", p.description, "", "```",
+                  p.format_usage().strip(), "```"]
+        fmt = argparse.HelpFormatter(p.prog)
+        for g in p._action_groups:
+            acts = [a for a in g._group_actions if a.dest != "help"]
+            if not acts:
+                continue
+            if g.title not in ("positional arguments", "options"):
+                lines += ["", f"### {g.title[0].upper()}{g.title[1:]}"]
+                if g.description:
+                    lines += ["", g.description]
+                lines.append("")
+            elif lines[-1] == "```":
+                lines.append("")
+            lines += [f"- `{fmt._format_action_invocation(a)}`: {_code(a.help or '')}"
+                      for a in acts]
+    return "\n".join(lines) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:

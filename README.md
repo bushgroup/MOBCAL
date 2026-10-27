@@ -57,7 +57,8 @@ to check an installation with `mobcal self-check`.
   in `src/mobcal/parameters/`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
-- `docs/`: the installation guide, the element-table format
+- `docs/`: the installation guide, every command and option
+  ([`docs/command-line.md`](docs/command-line.md)), the element-table format
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
   ([`docs/settings.md`](docs/settings.md)), writing an input from an ORCA output or an `.xyz`
@@ -107,7 +108,8 @@ uv run mobcal import choline_sp.out --charges chelpg -o choline.mfj
 ```
 
 `mobcal run` runs the built binaries on one or more input files, one process per calculation
-and several at once:
+and several at once ([`docs/command-line.md`](docs/command-line.md) lists every command and
+option):
 
 ```
 uv run mobcal run choline.mfj --gas both --seeds 5013489,1234567 --workers 4 --out runs
