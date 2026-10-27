@@ -9,10 +9,13 @@ One layout on every platform, PyInstaller's onedir folder plus two folders the b
 
 ```
 mobcal/
-  mobcal(.exe)        the command, frozen with its own Python
+  mobcal(.exe)        the command, frozen with its own Python; `mobcal gui` opens the window
+  mobcal-gui(.exe)    the window alone, without a console: the Start-menu shortcut's target
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
                       in mobcal/parameters/ and the 2012 settings file in mobcal/settings/,
-                      and cclib with numpy, scipy and periodictable for `mobcal import`
+                      cclib with numpy, scipy and periodictable for `mobcal import`, and
+                      PySide6-Essentials (QtCore, QtGui, QtWidgets and their plugins) for the
+                      window; on Linux, libxcb-cursor.so.0, which Qt's xcb plugin needs
   fortran/            mobcal_he(.exe), mobcal_n2(.exe), build.json
   examples/           Choline.mfj, sample-output/Choline_He.out, sample-output/Choline_N2.out,
                       choline_sp.out (an ORCA 6.1.1 output, from tests/data/qm/)
@@ -22,15 +25,22 @@ mobcal/
 cclib and what it brings are most of the folder: on Windows (2026-10-26, local binaries) it went
 from 23.6 MB to 124.3 MB, of which scipy is 67 MB and the OpenBLAS libraries that numpy and scipy
 each carry are 40 MB together, and the installer from 8.7 MB to 34.1 MB. Only `mobcal import`
-loads them. `mobcal.spec` leaves out pytest, pluggy and setuptools, which scipy's test helpers
+loads them. The window's Qt (PySide6-Essentials, 73 MB, and shiboken6) and the second executable
+took the Windows folder from 124.3 MB to 207.6 MB (2026-10-26, local binaries); only `mobcal
+gui` and `mobcal-gui` load Qt. `mobcal.spec` leaves out pytest, pluggy and setuptools, which scipy's test helpers
 name: with setuptools in the bundle, PyInstaller adds a runtime hook that imports it on every
 start of the program.
 
 `mobcal.fortran.binary_dir()` and `examples_dir()` look in `fortran/` and `examples/` beside the
 executable when the program is frozen, so the frozen program and a source checkout run the same
-code. On Windows, Inno Setup (`mobcal.iss`) installs the folder per user. On macOS and Linux the
-folder is shipped as `mobcal-<version>-<os>-<arch>.tar.gz`, whose top folder is
-`mobcal-<version>/`. Onedir rather than onefile, because a onefile program unpacks itself into
+code. On Windows, Inno Setup (`mobcal.iss`) installs the folder per user, with the window first
+in the Start menu. On Linux the folder is shipped as `mobcal-<version>-linux-x86_64.tar.gz`, whose
+top folder is `mobcal-<version>/`. On macOS the spec wraps the folder in `MOBCAL.app`, whose
+executable is `mobcal-gui`, and `build_bundle.py` puts `fortran/`, `examples/` and `LICENSE` in
+`Contents/MacOS/` beside both executables, signs the bundle again, ad hoc, because adding files
+breaks the seal of the ad-hoc signature PyInstaller applied, and ships
+`mobcal-<version>-macos-arm64.tar.gz` holding `MOBCAL.app`. Nothing is signed with a developer
+identity on either platform. Onedir rather than onefile, because a onefile program unpacks itself into
 a temporary directory on every start.
 
 ## The Fortran inside is built in CI
@@ -72,7 +82,8 @@ uv run tools/build_bundle.py --archive
 `examples/` and `LICENSE`, and runs the built program's `self-check` with `PATH` cut to the
 operating system's own directories, so a program that works only because something on the
 build machine's `PATH` helps it fails here. The report is also written to
-`build/self-check.log`. It then times two starts of `mobcal version`, and has the built program
+`build/self-check.log`. It also opens and closes the built window (`mobcal gui --check`, on Qt's
+offscreen platform), so a bundle missing Qt or a plugin it needs fails here. It then times two starts of `mobcal version`, and has the built program
 import `examples/choline_sp.out` with its CHELPG charges, which must write the file the source
 tree's import writes, so a bundle missing any part of cclib fails here and not on a user's
 first import.

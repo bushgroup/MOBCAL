@@ -23,6 +23,9 @@ To calculate a cross section as the 2000 release would have, run the helium prog
 uv run mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
 ```
 
+`--method 2000 --seeds 5013486` is the same command in fewer words, and the window's MOBCAL 2000
+method is the same again; the run records its method as `2000` whichever way it was asked for.
+
 Each option sets one thing to its value in the release's example run, where the default run
 would use the 2012 value:
 
@@ -39,7 +42,7 @@ velocity points, `inum = 250,000` hard-sphere trajectories, `inor = 30` reflecti
 need no option. Helium is the default gas. The seed is the one choice that belongs to the
 calculation rather than to the release: for an ion of one's own, any seed gives a 2000-release
 calculation, and the seed the 2000 run used gives that run's numbers. The run writes its output
-to `runs/a10A1-he-5013486-ranlux-t298-imp25/mobcal.out`, and its `record.json` names the table
+to `runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out`, and its `record.json` names the table
 as `MOBCAL 2000 helium` with its SHA-256 ([parameters.md](parameters.md)) and records the two
 settings ([settings.md](settings.md)).
 
@@ -63,7 +66,7 @@ above in the directory that holds them, and compare the two outputs line by line
 end-of-line carriage returns, which a build on Windows writes and the reference does not carry:
 
 ```bash
-diff <(tr -d '\r' < a10A1.out.orig) <(tr -d '\r' < runs/a10A1-he-5013486-ranlux-t298-imp25/mobcal.out)
+diff <(tr -d '\r' < a10A1.out.orig) <(tr -d '\r' < runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out)
 ```
 
 Keep the input's name. The output echoes it twice, in its first line and in the SUMMARY, and the

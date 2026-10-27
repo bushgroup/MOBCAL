@@ -14,18 +14,25 @@ package's own for the gas unless the job names another, the random number genera
 Philox4x32-10 unless the job says ``ranlux``, the 2012 generator, which is what reproduces a
 2012 number, and the run settings (``mobcal.settings``: the temperature and the five sampling
 counts), the 2012 values unless the job says otherwise. The run directory's name carries
-``-ranlux`` when the job does, and each setting that differs from 2012 (``-t298-imp25``), so
-the same input and seed under other generators or settings never share a directory.
+``-ranlux`` when the job does, the table when it is not the gas's default (``-lj2000`` for a
+shipped set, ``-lj`` and the first eight hex digits of its SHA-256 for any other file), and each
+setting that differs from 2012 (``-t298-imp25``), so the same input and seed under another
+method never share a directory, and one results folder can hold a whole study.
 ``run_one`` checks the table (``mobcal.parameters``) and gives the job the directory
 ``<out_dir>/<name>/`` holding a copy of the input (under the name the output will echo), its
 ``mobcal.in``, the table rendered as ``parameters.tab``, the settings rendered as
 ``settings.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
 complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
 account of itself: the package, the binary and its build, the input and its hash, the seed, the
-parameter set and its hash, the settings and where they came from, the times, the verdict and
+parameter set and its hash, the settings and where they came from, the method they make
+(``mobcal.methods``: ``current``, ``2012``, ``2000`` or ``custom``), the times, the verdict and
 the cross sections. ``run_many`` runs a list of jobs with a cap on how many are in flight,
 calls back as each lands, and returns a ``Summary`` that writes ``summary.csv`` and
-``summary.json`` beside the run directories.
+``summary.json`` beside the run directories, covering every run the folder holds: the batch's
+own results and every earlier run's ``record.json``. A ``Stop`` handed to ``run_many`` ends the
+batch from another thread: no run starts after it, every process running is killed with its
+whole process tree, and the runs it ended report ``stopped`` and keep their directories as
+partial records.
 
 A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
@@ -39,8 +46,7 @@ statements. That output is the run's output, read exactly as a serial one. A wor
 blocks are missing is a failure, with its output's last line as the reason, and the combining
 run never starts.
 
-No Qt here. The window, when it exists, calls ``run_many`` from a worker thread and draws from
-the callbacks.
+No Qt here. The window calls ``run_many`` from a worker thread and draws from the callbacks.
 
     from mobcal.run import Job, run_many
     jobs = [Job(Path("choline.mfj"), gas, 5013489, Path("runs")) for gas in ("he", "n2")]
@@ -59,17 +65,18 @@ import json
 import os
 import platform
 import shutil
+import signal
 import subprocess
 import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran, parameters, settings
+from mobcal import fortran, methods, parameters, settings
 from mobcal.io.block import expected_names
 from mobcal.io.infile import FIELD_WIDTH, GENERATORS, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
@@ -83,8 +90,8 @@ RECORD_JSON = "record.json"
 FALLBACK_STAGED_NAME = "input.mfj"  # for an input whose name would not fit the a30 field
 SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
-CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", *settings.NAMES, "status", "PA", "EHS",
-               "TM", "sets", "seconds", "output", "message")
+CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", "method", *settings.NAMES, "status", "PA",
+               "EHS", "TM", "sets", "seconds", "output", "message")
 BLOCK_GLOB = "block-*.dat"
 POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
 # The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
@@ -109,6 +116,10 @@ class Job:
     parameters: Path | None = None  # the element table; None is the package's for the gas
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
+    # the shipped set the table is by its pin (None for any other file) and the label's part
+    # for it, both from the file's bytes when the job is made
+    set_name: str | None = field(default=None, init=False, compare=False, repr=False)
+    table_tag: str = field(default="", init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.gas not in fortran.GASES:
@@ -127,13 +138,22 @@ class Job:
         object.__setattr__(self, "out_dir", Path(self.out_dir))
         if self.parameters is not None:
             object.__setattr__(self, "parameters", Path(self.parameters))
+        set_name, tag = _table(self.gas, self.parameters)
+        object.__setattr__(self, "set_name", set_name)
+        object.__setattr__(self, "table_tag", tag)
+
+    @property
+    def method(self) -> str:
+        """The method the job's table, generator and settings make (``mobcal.methods``)."""
+        return methods.identify(self.gas, self.set_name, self.generator, self.settings)
 
     @property
     def label(self) -> str:
         if self.name:
             return self.name
         rng = "" if self.generator == DEFAULT_RNG else f"-{self.generator}"
-        return f"{self.input.stem}-{self.gas}-{self.seed}{rng}{self.settings.suffix()}"
+        return (f"{self.input.stem}-{self.gas}-{self.seed}{rng}{self.table_tag}"
+                f"{self.settings.suffix()}")
 
     @property
     def run_dir(self) -> Path:
@@ -165,15 +185,17 @@ class Result:
     cross_sections: dict[str, float]  # the run's reported values (the mean over sets)
     conformers: list[dict[str, float]]  # per coordinate set
     parameters: dict = dataclasses.field(default_factory=dict)  # the set's record; {} if unread
+    stopped: bool = False  # ended by a Stop, not by itself
 
     @property
     def status(self) -> str:
-        return "ok" if self.ok else "failed"
+        return "ok" if self.ok else "stopped" if self.stopped else "failed"
 
     def record(self) -> dict:
         j = self.job
         return {"name": j.label, "input": str(j.input), "gas": j.gas, "seed": j.seed,
-                "rng": j.generator, "split": j.split, "settings": j.settings.record(),
+                "rng": j.generator, "method": j.method, "split": j.split,
+                "settings": j.settings.record(),
                 "status": self.status,
                 "message": self.message, "returncode": self.returncode,
                 "seconds": round(self.seconds, 2), "output": str(self.output or ""),
@@ -182,24 +204,129 @@ class Result:
                 "parameters_sha256": self.parameters.get("sha256")}
 
     def row(self) -> dict[str, object]:
-        cs = self.cross_sections
-        return {"name": self.job.label, "input": str(self.job.input), "gas": self.job.gas,
-                "seed": self.job.seed, "rng": self.job.generator,
-                **{k: (f"{v:g}" if k == "temperature" else v)
-                   for k, v in self.job.settings.values().items()},
-                "status": self.status,
-                "PA": cs.get("PA", ""), "EHS": cs.get("EHS", ""), "TM": cs.get("TM", ""),
-                "sets": len(self.conformers) if self.ok else "",
-                "seconds": round(self.seconds, 1), "output": str(self.output or ""),
-                "message": self.message}
+        return row(self.record())
 
     def __str__(self) -> str:
         split = f"  ({self.job.split} workers)" if self.job.split else ""
         if not self.ok:
-            return f"{self.job.label}  FAILED  {self.message}{split}"
+            return f"{self.job.label}  {self.status.upper()}  {self.message}{split}"
         cs = "  ".join(f"{k} {v:g}" for k, v in self.cross_sections.items())
         sets = f"  ({len(self.conformers)} sets)" if len(self.conformers) > 1 else ""
         return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}"
+
+
+def _table(gas: str, path: Path | None) -> tuple[str | None, str]:
+    """The shipped set a table file is by its pin, and the label's part for it: ``""`` for the
+    gas's default set, ``-lj2000`` for another shipped set, ``-lj`` and eight hex digits of the
+    SHA-256 for any other file, ``-lj-<stem>`` for one that cannot be read (the run says why)."""
+    if path is None:
+        return parameters.DEFAULT, ""
+    try:
+        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None, f"-lj-{path.stem}"
+    name = next((n for n, f in parameters.SETS[gas].items() if parameters.SHA256[f] == sha), None)
+    if name == parameters.DEFAULT:
+        return name, ""
+    return name, f"-lj{name}" if name else f"-lj{sha[:8]}"
+
+
+def row(run: dict) -> dict[str, object]:
+    """A summary.csv row from a run's entry in summary.json."""
+    cs, ok = run["cross_sections"], run["status"] == "ok"
+    return {"name": run["name"], "input": run["input"], "gas": run["gas"], "seed": run["seed"],
+            "rng": run["rng"], "method": run.get("method", ""),
+            **{k: (f"{run['settings'][k]:g}" if k == "temperature" else run["settings"][k])
+               for k in settings.NAMES},
+            "status": run["status"],
+            "PA": cs.get("PA", ""), "EHS": cs.get("EHS", ""), "TM": cs.get("TM", ""),
+            "sets": len(run["conformers"]) if ok else "",
+            "seconds": round(run["seconds"], 1), "output": run["output"],
+            "message": run["message"]}
+
+
+def from_record(doc: dict, run_dir: Path) -> dict:
+    """A run's entry in summary.json from the ``record.json`` it left in ``run_dir``: the same
+    fields ``Result.record`` gives a run of this batch."""
+    out = run_dir / doc.get("output", OUTPUT_NAME)
+    p = doc.get("parameters") or {}
+    return {"name": doc["name"], "input": doc["input"]["path"], "gas": doc["binary"]["gas"],
+            "seed": doc["mobcal_in"]["seed"], "rng": doc["mobcal_in"]["generator"],
+            "method": methods.record_method(doc), "split": doc["mobcal_in"]["split"],
+            "settings": doc["settings"], "status": doc["status"], "message": doc["message"],
+            "returncode": doc["returncode"], "seconds": doc["seconds"],
+            "output": str(out) if out.is_file() else "",
+            "cross_sections": doc["cross_sections"], "conformers": doc["conformers"],
+            "parameters": p.get("name"), "parameters_sha256": p.get("sha256")}
+
+
+def read_records(out_dir: Path) -> dict[str, dict]:
+    """Every run directory's record in ``out_dir`` as summary.json entries, by name. A record
+    that cannot be read or parsed is skipped: the folder may hold anything else besides."""
+    found = {}
+    for f in sorted(Path(out_dir).glob(f"*/{RECORD_JSON}")):
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+            found[doc["name"]] = from_record(doc, f.parent)
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return found
+
+
+class Stop:
+    """Ends a ``run_many`` batch from any thread: once called, no run starts, every process
+    running is killed with its whole tree, and the runs it ended report stopped."""
+
+    def __init__(self) -> None:
+        self._event = threading.Event()
+        self._lock = threading.Lock()
+        self._procs: set[subprocess.Popen] = set()
+
+    def __call__(self) -> None:
+        self._event.set()
+        with self._lock:
+            procs = list(self._procs)
+        for p in procs:
+            _kill_tree(p)
+
+    stop = __call__
+
+    def is_set(self) -> bool:
+        return self._event.is_set()
+
+    def add(self, proc: subprocess.Popen) -> None:
+        with self._lock:
+            self._procs.add(proc)
+        if self._event.is_set():  # started as the stop came: end it too
+            _kill_tree(proc)
+
+    def discard(self, proc: subprocess.Popen) -> None:
+        with self._lock:
+            self._procs.discard(proc)
+
+
+# A process group of its own on POSIX, so that killing the run kills whatever it started.
+_POPEN_EXTRA = {} if os.name == "nt" else {"start_new_session": True}
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Kill a process and every process it started. On Windows ``taskkill /T`` walks the tree
+    (a venv's python.exe, for one, is a launcher that starts the real interpreter as a child);
+    elsewhere the run is its own process group."""
+    if proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        else:
+            os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    try:
+        proc.kill()
+    except OSError:
+        pass
 
 
 def default_launcher(job: Job) -> Sequence[str]:
@@ -226,18 +353,17 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     job.settings.render(d)
 
 
-def _start(command: Sequence[str], d: Path,
-           running: set[subprocess.Popen] | None) -> subprocess.Popen:
+def _start(command: Sequence[str], d: Path, running: Stop | None) -> subprocess.Popen:
     """Start the program in ``d``, its console output to ``stdout.log``. Raises OSError."""
     with open(d / LOG_NAME, "wb") as log:
         proc = subprocess.Popen(command, cwd=d, stdout=log, stderr=subprocess.STDOUT,
-                                stdin=subprocess.DEVNULL)
+                                stdin=subprocess.DEVNULL, **_POPEN_EXTRA)
     if running is not None:
         running.add(proc)
     return proc
 
 
-def _finish(proc: subprocess.Popen, running: set[subprocess.Popen] | None) -> None:
+def _finish(proc: subprocess.Popen, running: Stop | None) -> None:
     if running is not None:
         running.discard(proc)
 
@@ -262,8 +388,9 @@ expected. Called at least once, when the workers have landed."""
 
 
 def run_one(job: Job, launcher: Launcher | None = None, *,
-            _running: set[subprocess.Popen] | None = None,
-            blocks: BlocksProgress | None = None) -> Result:
+            _running: Stop | None = None,
+            blocks: BlocksProgress | None = None,
+            on_start: Callable[[Job], None] | None = None) -> Result:
     """Stage one job in its own directory, run the binary there, and read what it wrote.
 
     The input and the element table are read first, and a file the program would stop on, or
@@ -292,18 +419,25 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     except (FileNotFoundError, ValueError) as e:
         return _failed(job, str(e))
 
+    if _running is not None and _running.is_set():
+        return dataclasses.replace(_failed(job, "not started: the batch was stopped"),
+                                   stopped=True)
+    if on_start is not None:
+        on_start(job)
     started = dt.datetime.now().astimezone()
     if job.split:
         r = _run_split(job, command, mfj.coordinate_sets, pset, _running, blocks)
     else:
         r = _run_serial(job, command, pset, _running)
     r = dataclasses.replace(r, parameters=pset.record())
+    if not r.ok and _running is not None and _running.is_set():
+        r = dataclasses.replace(r, stopped=True, message=f"stopped ({r.message})")
     _write_record(r, command, mfj, started)
     return r
 
 
 def _run_serial(job: Job, command: list[str], pset: ParameterSet,
-                running: set[subprocess.Popen] | None) -> Result:
+                running: Stop | None) -> Result:
     d = job.run_dir
     _prepare(job, d, None, pset)
     t0 = time.perf_counter()
@@ -319,7 +453,7 @@ def _run_serial(job: Job, command: list[str], pset: ParameterSet,
 
 
 def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: ParameterSet,
-               running: set[subprocess.Popen] | None, blocks: BlocksProgress | None) -> Result:
+               running: Stop | None, blocks: BlocksProgress | None) -> Result:
     total, d = job.split, job.run_dir
     blocks_per_set = job.settings.blocks_per_set
     expected = {w: expected_names(coordinate_sets, total, w, blocks_per_set)
@@ -348,7 +482,7 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
             if blocks is not None and n != written:
                 blocks(job, n, n_expected)
                 written = n
-            if not alive:
+            if not alive or (running is not None and running.is_set()):
                 break
             try:
                 alive[0].wait(timeout=POLL_SECONDS)
@@ -359,6 +493,12 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
             _finish(p, running)
 
     problems = []
+    if running is not None and running.is_set():
+        for p in procs.values():
+            _kill_tree(p)
+            p.wait()
+        return _failed(job, "split run ended before its combining run", None,
+                       time.perf_counter() - t0)
     for w, names in expected.items():
         missing = [n for n in names if not (job.worker_dir(w) / n).is_file()]
         if not missing:
@@ -407,6 +547,7 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
         "input": {"path": str(j.input), "staged_name": j.staged, "sha256": _sha256(j.input),
                   "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
         "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split},
+        "method": j.method,
         "parameters": r.parameters,
         "settings": j.settings.record(),
         "started": started.isoformat(timespec="seconds"),
@@ -434,18 +575,22 @@ Progress = Callable[[Result, int, int], None]
 
 
 def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress | None = None,
-             launcher: Launcher | None = None, blocks: BlocksProgress | None = None) -> Summary:
+             launcher: Launcher | None = None, blocks: BlocksProgress | None = None,
+             stop: Stop | None = None,
+             on_start: Callable[[Job], None] | None = None) -> Summary:
     """Run the jobs with at most ``workers`` in flight (default: the CPU count).
 
     Each job runs in its own directory from a supervising thread; results are returned in the
-    jobs' order whatever order they land in. A split job counts as one job in flight and
-    starts its own W processes. A KeyboardInterrupt stops every running binary and is
-    re-raised.
+    jobs' order whatever order they land in. ``on_start`` is called as each job's program is
+    about to start, once its input and table have been read. A split job counts as one job in
+    flight and starts its own W processes. ``stop`` ends the batch from another thread: every
+    job still to start returns at once as stopped, and every running one is killed and reports
+    stopped. A KeyboardInterrupt stops every running binary and is re-raised.
     """
     jobs = list(jobs)
     workers = max(1, min(workers or os.cpu_count() or 1, len(jobs) or 1))
     results: list[Result | None] = [None] * len(jobs)
-    running: set[subprocess.Popen] = set()
+    running = stop if stop is not None else Stop()
     lock = threading.Lock()
 
     def report_blocks(job: Job, n: int, total: int) -> None:
@@ -453,9 +598,15 @@ def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress
             with lock:
                 blocks(job, n, total)
 
+    def report_start(job: Job) -> None:
+        if on_start is not None:
+            with lock:
+                on_start(job)
+
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mobcal-run") as pool:
-        futures = {pool.submit(run_one, job, launcher, _running=running, blocks=report_blocks): i
+        futures = {pool.submit(run_one, job, launcher, _running=running, blocks=report_blocks,
+                               on_start=report_start): i
                    for i, job in enumerate(jobs)}
         done = 0
         try:
@@ -467,11 +618,7 @@ def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress
                     with lock:
                         progress(r, done, len(jobs))
         except BaseException:
-            for p in list(running):
-                try:
-                    p.terminate()
-                except OSError:
-                    pass
+            running.stop()
             pool.shutdown(wait=False, cancel_futures=True)
             raise
     return Summary([r for r in results if r is not None], workers, time.perf_counter() - t0)
@@ -489,19 +636,29 @@ class Summary:
 
     @property
     def failed(self) -> list[Result]:
-        return [r for r in self.results if not r.ok]
+        return [r for r in self.results if not r.ok and not r.stopped]
+
+    @property
+    def stopped(self) -> list[Result]:
+        return [r for r in self.results if r.stopped]
 
     def write(self, out_dir: Path) -> tuple[Path, Path]:
         """Write ``summary.csv`` (one row per run) and ``summary.json`` (the same, with the
-        per-set values and the batch's provenance) into ``out_dir``; return the two paths."""
+        per-set values and the provenance) into ``out_dir`` and return the two paths. They
+        cover every run the folder holds, in name order: this batch's results, and every other
+        run directory's ``record.json``; ``summary.json`` also names this batch's runs, its
+        workers and its wall time."""
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         csv_path, json_path = out_dir / SUMMARY_CSV, out_dir / SUMMARY_JSON
+        found = read_records(out_dir)
+        found.update((r.job.label, r.record()) for r in self.results)
+        runs = [found[k] for k in sorted(found)]
         with open(csv_path, "w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
             w.writeheader()
-            for r in self.results:
-                w.writerow(r.row())
+            for run in runs:
+                w.writerow(row(run))
         doc = {
             "mobcal_version": mobcal.__version__,
             "date": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -509,7 +666,8 @@ class Summary:
             "python": sys.version.split()[0],
             "workers": self.workers,
             "seconds": round(self.seconds, 1),
-            "runs": [r.record() for r in self.results],
+            "batch": [r.job.label for r in self.results],
+            "runs": runs,
         }
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(doc, f, indent=2, ensure_ascii=False)
@@ -517,7 +675,8 @@ class Summary:
         return csv_path, json_path
 
     def __str__(self) -> str:
-        n, bad = len(self.results), len(self.failed)
+        n, bad, stopped = len(self.results), len(self.failed), len(self.stopped)
         w = self.workers
-        return (f"{n} run{'s' if n != 1 else ''}, {n - bad} ok, {bad} failed, "
-                f"{self.seconds:.0f} s wall on {w} worker{'s' if w != 1 else ''}")
+        return (f"{n} run{'s' if n != 1 else ''}, {len(self.ok)} ok, {bad} failed, "
+                + (f"{stopped} stopped, " if stopped else "")
+                + f"{self.seconds:.0f} s wall on {w} worker{'s' if w != 1 else ''}")

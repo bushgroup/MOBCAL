@@ -7,19 +7,23 @@
    and checks that each one needs no gfortran runtime: no program interpreter on Linux (a
    static binary), nothing outside ``/usr/lib`` and ``/System`` on macOS, no MinGW runtime DLL
    on Windows.
-2. Runs PyInstaller on ``packaging/mobcal.spec``, giving ``dist/mobcal/``.
-3. Copies the binaries and ``build.json`` to ``dist/mobcal/fortran/`` (executable, since an
-   artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one ORCA
-   output of the choline cation (``tests/data/qm/``) to ``dist/mobcal/examples/``, and
-   ``LICENSE``.
+2. Runs PyInstaller on ``packaging/mobcal.spec``, giving ``dist/mobcal/`` with the console
+   ``mobcal`` and the windowed ``mobcal-gui`` in it, and on macOS ``dist/MOBCAL.app``, whose
+   ``Contents/MacOS/`` holds both.
+3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
+   since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
+   ORCA output of the choline cation (``tests/data/qm/``) to ``examples/``, and ``LICENSE``; on
+   macOS into the ``.app``, which is then signed again, ad hoc, since adding files breaks the
+   seal PyInstaller's ad-hoc signature put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
-   ``mobcal version`` starts, and has the built program import the ORCA example's CHELPG
-   charges, which must give the file the source tree's import gives: cclib and everything
-   under it are in the bundle and work.
+   ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
+   charges, which must give the file the source tree's import gives (cclib and everything
+   under it are in the bundle and work), and opens and closes the window with ``mobcal gui
+   --check`` on Qt's offscreen platform (Qt and its plugins are in the bundle and start).
 5. With ``--archive`` (macOS and Linux), writes ``dist/mobcal-<version>-<os>-<arch>.tar.gz``,
-   whose top folder is ``mobcal-<version>/``. Windows packages the folder with Inno Setup
-   instead (``tools/build_exe.ps1``).
+   whose top folder is ``mobcal-<version>/`` on Linux and ``MOBCAL.app`` on macOS. Windows
+   packages the folder with Inno Setup instead (``tools/build_exe.ps1``).
 
 The binaries are built in CI, not on the machine that runs this; a local ``mobcal build`` is
 for trying the chain, and its ``build.json`` says where it came from either way.
@@ -47,7 +51,11 @@ import mobcal  # noqa: E402
 from mobcal import fortran  # noqa: E402
 
 DIST = ROOT / "dist"
-BUNDLE = DIST / "mobcal"
+APP = DIST / "MOBCAL.app"  # macOS only
+# Where the executables are, and fortran/ and examples/ go beside them.
+BUNDLE = APP / "Contents" / "MacOS" if sys.platform == "darwin" else DIST / "mobcal"
+EXE = "mobcal.exe" if sys.platform == "win32" else "mobcal"
+GUI_EXE = "mobcal-gui.exe" if sys.platform == "win32" else "mobcal-gui"
 WORK = ROOT / "build" / "pyinstaller"
 SELF_CHECK_LOG = ROOT / "build" / "self-check.log"
 
@@ -114,9 +122,9 @@ def pyinstaller() -> None:
 
 
 def assemble(bin_dir: Path) -> None:
-    exe = BUNDLE / ("mobcal.exe" if sys.platform == "win32" else "mobcal")
-    if not exe.is_file():
-        raise SystemExit(f"no {exe}: run without --skip-pyinstaller first")
+    for name in (EXE, GUI_EXE):
+        if not (BUNDLE / name).is_file():
+            raise SystemExit(f"no {BUNDLE / name}: run without --skip-pyinstaller first")
     for sub in ("fortran", "examples"):
         shutil.rmtree(BUNDLE / sub, ignore_errors=True)
     (BUNDLE / "fortran").mkdir()
@@ -129,6 +137,9 @@ def assemble(bin_dir: Path) -> None:
         shutil.copy2(fortran.FORTRAN_DIR / rel, BUNDLE / "examples" / rel)
     shutil.copy2(ORCA_EXAMPLE, BUNDLE / "examples" / ORCA_EXAMPLE.name)
     shutil.copy2(ROOT / "LICENSE", BUNDLE / "LICENSE")
+    if sys.platform == "darwin":
+        subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(APP)], check=True)
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(APP)], check=True)
 
 
 def clean_env() -> dict[str, str]:
@@ -145,7 +156,7 @@ def clean_env() -> dict[str, str]:
 
 
 def self_check() -> None:
-    exe = BUNDLE / ("mobcal.exe" if sys.platform == "win32" else "mobcal")
+    exe = BUNDLE / EXE
     SELF_CHECK_LOG.unlink(missing_ok=True)
     env = clean_env()
     rc = subprocess.run([str(exe), "self-check", "--report", str(SELF_CHECK_LOG)], env=env,
@@ -164,7 +175,7 @@ def self_check() -> None:
 
 def import_check() -> None:
     from mobcal.io import structure
-    exe = BUNDLE / ("mobcal.exe" if sys.platform == "win32" else "mobcal")
+    exe = BUNDLE / EXE
     out = ROOT / "build" / "import-check" / "choline_sp.mfj"
     shutil.rmtree(out.parent, ignore_errors=True)
     out.parent.mkdir(parents=True)
@@ -184,6 +195,17 @@ def import_check() -> None:
           "source tree's file")
 
 
+def window_check() -> None:
+    env = {**clean_env(), "QT_QPA_PLATFORM": "offscreen"}
+    t0 = time.perf_counter()
+    proc = subprocess.run([str(BUNDLE / EXE), "gui", "--check"], env=env, capture_output=True,
+                          text=True, timeout=300)
+    if proc.returncode != 0:
+        raise SystemExit(f"the built program's window did not open (exit {proc.returncode}):\n"
+                         f"{proc.stdout}{proc.stderr}")
+    print(f"window: {proc.stdout.strip()} in {time.perf_counter() - t0:.2f} s")
+
+
 def archive_name() -> str:
     os_name = {"darwin": "macos", "linux": "linux", "win32": "windows"}.get(sys.platform,
                                                                          sys.platform)
@@ -194,9 +216,11 @@ def archive_name() -> str:
 
 def archive() -> Path:
     out = DIST / archive_name()
-    top = f"mobcal-{mobcal.__version__}"
     with tarfile.open(out, "w:gz") as tf:
-        tf.add(BUNDLE, arcname=top)
+        if sys.platform == "darwin":
+            tf.add(APP, arcname=APP.name)
+        else:
+            tf.add(BUNDLE, arcname=f"mobcal-{mobcal.__version__}")
     return out
 
 
@@ -218,9 +242,11 @@ def main() -> int:
     if not args.skip_pyinstaller:
         pyinstaller()
     assemble(args.bin_dir.resolve())
-    print(f"bundle: {BUNDLE}, {size(BUNDLE):.1f} MB")
+    top = APP if sys.platform == "darwin" else BUNDLE
+    print(f"bundle: {top}, {size(top):.1f} MB")
     self_check()
     import_check()
+    window_check()
     if args.archive:
         out = archive()
         print(f"archive: {out}, {out.stat().st_size / 2**20:.1f} MB")

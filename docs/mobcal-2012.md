@@ -23,7 +23,8 @@ uv run mobcal run Choline_pop.mfj --rng ranlux
 uv run mobcal run Choline_pop.mfj --gas n2 --rng ranlux
 ```
 
-or both gases in one command with `--gas both`. Everything else a calculation depends on is
+or both gases in one command with `--gas both`; `--method 2012` is the same command, and the
+window's MOBCAL 2012 method is the same again. Everything else a calculation depends on is
 already the 2012 value:
 
 | What it sets | The 2012 release | A run without options |

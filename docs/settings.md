@@ -41,7 +41,8 @@ values, then the file named by `--settings`, then the single-value options, so
 
 The run directory's name carries each value that differs from 2012, in the order above, so two
 runs of one input and seed at different settings never share a directory:
-`choline-he-5013489-ranlux-t298-imp25`.
+`choline-he-5013489-ranlux-t298-imp25`, or, with the 2000 element table as well,
+`choline-he-5013489-ranlux-lj2000-t298-imp25`.
 
 ## What the values are
 

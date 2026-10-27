@@ -3,18 +3,28 @@
     mobcal version
     mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
-    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]] [--rng philox|ranlux]
-               [--workers N] [--split W] [--parameters PATH|NAME] [--out DIR]
+    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]]
+               [--method current|2012|2000] [--rng philox|ranlux] [--parameters PATH|NAME]
+               [--workers N] [--split W|auto] [--out DIR] [--skip-done]
                [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
                [--inor N]
+    mobcal methods-text PATH [PATH ...]
+    mobcal gui [--check]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
     mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
                   [-o OUT.mfj] [--force]
 
-``run`` takes input files (paths or globs), makes one job per input, gas and seed, runs them
+``run`` takes input files (paths or globs), makes one job per input, gas and seed, prints
+how they will use the cores and about how long they will take (``mobcal.estimate``), runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
-``summary.csv`` and ``summary.json`` beside the run directories. With ``--split W`` each
-calculation runs across W processes and reports the serial result exactly. ``--rng`` picks the
+``summary.csv`` and ``summary.json`` covering every run in the output folder, which can hold a
+whole study. It refuses a run whose directory holds a different input of the same name, and
+with ``--skip-done`` leaves out the runs the folder already holds complete. With ``--split W``
+each calculation runs across W processes and reports the serial result exactly; ``--split
+auto`` lets ``mobcal.estimate.allocate`` choose the runs in flight and each run's split.
+``--method`` picks a preset (``mobcal.methods``): ``current``, the default; ``2012``, the 2012
+release's calculation; ``2000``, the 2000 release's, helium only. A table, generator or setting
+given beside it overrides it, and the run records ``custom``. ``--rng`` picks the
 random number generator: Philox4x32-10 by default, or ``ranlux``, the 2012 generator, which
 with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
 default is not the run file's). With
@@ -30,11 +40,13 @@ named by ``--charges`` (refused, listing what the file holds, until one is named
 provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads and
 refuses. With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default
 the file must run in both.
+``methods-text`` prints the methods paragraph and its references for the runs in the run
+directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
 driver does into each run directory, for running the program there by hand. ``self-check`` is
 ``mobcal.selfcheck``.
-``build`` needs a source checkout; an installed copy carries binaries built in CI. The window's
-``gui`` arrives with its task. This module imports no Qt.
+``build`` needs a source checkout; an installed copy carries binaries built in CI. ``gui``
+opens the window (``mobcal.app``), which is imported only then: this module imports no Qt.
 """
 
 from __future__ import annotations
@@ -45,13 +57,22 @@ import os
 import sys
 from pathlib import Path
 
-from mobcal import ROOT, __version__, fortran, parameters, settings
+from mobcal import ROOT, __version__, estimate, fortran, methods, parameters, settings
+from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError, prior
 from mobcal.io.infile import GENERATORS
 from mobcal.run import DEFAULT_RNG, Job, Result, run_many
 
-# The seed the shipped mobcal.in carries, at which the 2012 references were run.
-DEFAULT_SEED = 5013489
 DEFAULT_OUT = Path("runs")
+
+
+def _split(text: str) -> int | str:
+    if text == AUTO:
+        return AUTO
+    try:
+        return int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"--split takes a worker count or {AUTO}, "
+                                         f"not {text!r}") from None
 
 
 def _seeds(text: str) -> list[int]:
@@ -107,20 +128,30 @@ def parser() -> argparse.ArgumentParser:
                    help="which binary (default he)")
     r.add_argument("--seeds", type=_seeds, default=[DEFAULT_SEED], metavar="N[,N...]",
                    help=f"one run per seed (default {DEFAULT_SEED}, the 2012 seed)")
+    r.add_argument("--method", choices=tuple(methods.METHODS), default=methods.CURRENT,
+                   help="a preset of the table, generator and settings: current (default), "
+                        "2012 (the 2012 release's calculation), 2000 (the 2000 release's, "
+                        "helium only); an option below given beside it overrides it")
     r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
-                   default=DEFAULT_RNG,
-                   help=f"random number generator (default {DEFAULT_RNG}); ranlux is the 2012 "
-                        "generator, which reproduces the 2012 numbers at the 2012 seed")
+                   default=None,
+                   help=f"random number generator (default the method's, {DEFAULT_RNG} for "
+                        "current); ranlux is the 2012 generator, which reproduces the 2012 "
+                        "numbers at the 2012 seed")
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help="runs in flight at once (default: the number of CPUs)")
-    r.add_argument("--split", type=int, default=None, metavar="W",
+    r.add_argument("--split", type=_split, default=None, metavar="W|auto",
                    help="run each calculation across W processes, with the serial result "
-                        "exactly (default: one process per calculation)")
+                        "exactly; auto chooses the runs in flight and each run's split from "
+                        "the run count, the CPUs and the ion sizes (default: one process per "
+                        "calculation)")
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help="the element table for every run: a TOML file, or a shipped set by "
                         f"name ({_set_names()}); default {parameters.DEFAULT}")
     r.add_argument("--out", type=Path, default=DEFAULT_OUT,
-                   help=f"where the run directories and the summary go (default {DEFAULT_OUT}/)")
+                   help="where the run directories and the summary go; the summary covers "
+                        f"every run the folder holds (default {DEFAULT_OUT}/)")
+    r.add_argument("--skip-done", action="store_true",
+                   help="leave out the runs the output folder already holds complete")
     s = r.add_argument_group(
         "run settings", "the temperature and the five sampling counts the 2012 programs "
         "compiled in; without these every run uses the 2012 values (temperature 301 K, imp "
@@ -140,6 +171,14 @@ def parser() -> argparse.ArgumentParser:
                    help="trajectories of the projection and hard-sphere pass (helium)")
     s.add_argument("--inor", type=int, default=None, metavar="N",
                    help="reflections followed per hard-sphere trajectory (helium)")
+
+    g = sub.add_parser("gui", help="open the window")
+    g.add_argument("--check", action="store_true",
+                   help="open the window, close it, and exit 0: a test that it starts")
+
+    t = sub.add_parser("methods-text", help="print the methods paragraph for runs")
+    t.add_argument("paths", nargs="+", type=Path, metavar="PATH",
+                   help="run directories, or folders of them")
 
     p = sub.add_parser("render-parameters",
                        help="write the element table and the settings the program reads into "
@@ -213,6 +252,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "import":
         return _import(args)
 
+    if args.cmd == "gui":
+        from mobcal.app import main as gui
+        return gui(sys.argv[:1], check=args.check)
+
+    if args.cmd == "methods-text":
+        try:
+            print(methods.text(methods.read_records(args.paths)), end="")
+        except (OSError, ValueError, KeyError) as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        return 0
+
     if args.cmd == "render-parameters":
         try:
             ps = parameters.load(parameters.path_for(args.parameters, args.gas), gas=args.gas)
@@ -253,63 +304,100 @@ def _import(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run(args: argparse.Namespace) -> int:
+class UsageError(ValueError):
+    """Options that cannot make a batch; the message is the one the command prints."""
+
+
+def batch_from_args(args: argparse.Namespace) -> Batch:
+    """The batch ``mobcal run``'s options describe, checked but not run: what the window's
+    form makes too. Raises UsageError."""
     try:
         inputs = expand_inputs(args.inputs)
     except FileNotFoundError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
+        raise UsageError(str(e)) from None
     gases = list(fortran.GASES) if args.gas == "both" else [args.gas]
+    method = methods.get(args.method)
+    try:
+        for gas in gases:
+            method.check_gas(gas)
+    except methods.MethodError as e:
+        raise UsageError(f"{e}; run it with --gas he") from None
     # A shipped set's name stands for each gas's set of that name; a path, for one gas's table.
     try:
-        tables = {gas: parameters.path_for(args.parameters, gas) for gas in gases}
+        for gas in gases:
+            parameters.path_for(args.parameters, gas)
     except parameters.ParameterError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
+        raise UsageError(str(e)) from None
     if args.parameters is not None and args.parameters not in parameters.names():
         try:
             ps = parameters.load(args.parameters)
         except parameters.ParameterError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 2
+            raise UsageError(str(e)) from None
         if gases != [ps.gas]:
-            print(f"error: {args.parameters} is a table for {parameters.GAS[ps.gas]}; run it "
-                  f"with --gas {ps.gas}", file=sys.stderr)
-            return 2
-    for gas in gases:
-        try:
-            fortran.find_binary(gas)
-        except FileNotFoundError as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 2
+            raise UsageError(f"{args.parameters} is a table for {parameters.GAS[ps.gas]}; "
+                             f"run it with --gas {ps.gas}")
+    # The method's settings, then a settings file over them whole, then single values.
+    given = {k: getattr(args, k) for k in settings.NAMES}
     try:
-        st = settings.resolve(args.settings, **{k: getattr(args, k) for k in settings.NAMES})
+        if args.settings is not None:
+            st = settings.resolve(args.settings, **given)
+        elif any(v is not None for v in given.values()) or method.overrides():
+            st = settings.resolve(None, **{**method.overrides(),
+                                           **{k: v for k, v in given.items() if v is not None}})
+        else:
+            st = None
     except settings.SettingsError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return 2
-    split = args.split
-    if split is not None and not 1 <= split <= st.blocks_per_set:
-        print(f"error: --split takes a worker count from 1 to {st.blocks_per_set} "
-              f"(itn {st.itn} * inp {st.inp} blocks per coordinate set)", file=sys.stderr)
-        return 2
+        raise UsageError(str(e)) from None
+    s = st or settings.DEFAULTS
+    if isinstance(args.split, int) and not 1 <= args.split <= s.blocks_per_set:
+        raise UsageError(f"--split takes a worker count from 1 to {s.blocks_per_set} "
+                         f"(itn {s.itn} * inp {s.inp} blocks per coordinate set) or {AUTO}")
     try:
-        jobs = [Job(p, gas, seed, args.out, split=split,
-                    parameters=tables[gas] if args.parameters is not None else None,
-                    generator=args.rng, settings=st)
-                for p in inputs for gas in gases for seed in args.seeds]
-    except ValueError as e:
+        batch = Batch(tuple(inputs), args.out, tuple(gases), tuple(args.seeds), method.key,
+                      parameters=args.parameters, generator=args.rng, settings=st,
+                      split=args.split, workers=args.workers)
+        batch.jobs()
+    except (BatchError, ValueError) as e:
+        raise UsageError(str(e)) from None
+    return batch
+
+
+def _run(args: argparse.Namespace) -> int:
+    try:
+        batch = batch_from_args(args)
+        for gas in batch.gases:
+            fortran.find_binary(gas)
+    except (UsageError, FileNotFoundError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    cpus = os.cpu_count() or 1
-    workers = max(1, min(args.workers or (cpus // split if split else cpus), len(jobs)))
+    jobs = batch.jobs()
+
+    found = prior(jobs)
+    clashes = [f for f in found if f.kind == CLASH]
+    if clashes:
+        for f in clashes:
+            print(f"error: {f.job.run_dir} {f.detail}", file=sys.stderr)
+        print("error: rename the input or choose another --out", file=sys.stderr)
+        return 2
+    if args.skip_done:
+        done = {f.job.label for f in found if f.kind == DONE}
+        if done:
+            print(f"skipping {len(done)} run{'s' if len(done) != 1 else ''} the folder holds "
+                  "complete", flush=True)
+        jobs = [j for j in jobs if j.label not in done]
+        if not jobs:
+            print(f"nothing to run; {args.out}/ holds every run complete")
+            return 0
+    plan = batch.plan(jobs=jobs)
+    gen = batch.resolved_generator
+    st = batch.resolved_settings
     changed = " ".join(f"{k}={v:g}" for k, v in st.values().items()
                        if v != getattr(settings.DEFAULTS, k))
-    print(f"{len(jobs)} run{'s' if len(jobs) != 1 else ''} on {workers} worker"
-          f"{'s' if workers != 1 else ''}" + (f", each across {split} processes" if split else "")
-          + f", generator {args.rng}"
+    print(f"method {batch.title()}, generator {gen}"
           + (f", settings {changed}" if changed else ", the 2012 settings")
-          + f", binaries from {fortran.binary_dir()}, output under {args.out}/"
-          + (f", element table {args.parameters}" if args.parameters else ""), flush=True)
+          + (f", element table {args.parameters}" if args.parameters else "")
+          + f", binaries from {fortran.binary_dir()}, output under {args.out}/", flush=True)
+    print(estimate.describe(plan), flush=True)
 
     def progress(r: Result, done: int, total: int) -> None:
         print(f"[{done}/{total}] {r}", flush=True)
@@ -318,7 +406,7 @@ def _run(args: argparse.Namespace) -> int:
         if n and n % 40 == 0 or n == total:
             print(f"    {job.label}: {n}/{total} blocks", flush=True)
 
-    summary = run_many(jobs, workers, progress, blocks=blocks)
+    summary = run_many(plan.jobs, plan.workers, progress, blocks=blocks)
     csv_path, json_path = summary.write(args.out)
     print(f"{summary}; wrote {csv_path} and {json_path}")
     return 1 if summary.failed else 0

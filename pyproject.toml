@@ -20,9 +20,13 @@ classifiers = [
 # mobcal.io.structure imports it, lazily, so `mobcal run` never loads it or the
 # numpy and scipy it brings. Pinned exactly: 1.8.1, the last stable release,
 # stops with an IndexError on every ORCA 6.1.1 output in tests/data/qm/, and
-# 1.9rc1 reads all six. The window (task 08) brings PySide6, and only
-# mobcal.app imports it.
-dependencies = ["cclib==1.9rc1"]
+# 1.9rc1 reads all six. The window, `mobcal gui`, is PySide6: the Essentials
+# wheel alone (QtCore, QtGui, QtWidgets), not the Addons the window never uses,
+# and only mobcal.app imports it, so `mobcal run` never loads Qt either.
+dependencies = [
+    "cclib==1.9rc1",
+    "PySide6-Essentials~=6.11.2",
+]
 
 [project.scripts]
 mobcal = "mobcal.cli:main"
@@ -44,6 +48,7 @@ package = true
 dev = [
     "pyinstaller~=6.22",
     "pytest~=9.1",
+    "pytest-qt~=4.5",
     "ruff~=0.16",
 ]
 

@@ -1,7 +1,8 @@
 ; Inno Setup script for the mobcal installer.
 ;
-; Packages the onedir folder dist\mobcal\ that tools\build_exe.ps1 builds: mobcal.exe and
-; PyInstaller's _internal\, the two Fortran binaries built in CI with their build.json under
+; Packages the onedir folder dist\mobcal\ that tools\build_exe.ps1 builds: mobcal.exe (the
+; command), mobcal-gui.exe (the window, without a console) and PyInstaller's _internal\, the
+; two Fortran binaries built in CI with their build.json under
 ; fortran\, and the 2012 choline input and outputs under examples\. Compile with Inno Setup 6:
 ;
 ;   iscc packaging\mobcal.iss
@@ -11,8 +12,8 @@
 ; Per-user (PrivilegesRequired=lowest): an instrument PC's operator account may lack admin
 ; rights, and nothing here needs them. mobcal is a command, so the default-checked "addtopath"
 ; task puts the install directory on the user's PATH, and the uninstaller takes it off again.
-; The Start menu gets a command prompt with mobcal on its PATH whichever way that task went,
-; and the self-check.
+; The Start menu gets the window, MOBCAL, first; then a command prompt with mobcal on its PATH
+; whichever way that task went, and the self-check. The last page offers to open the window.
 ;
 ; MyAppVersion is one of the three version declarations tools\check_public.py compares.
 
@@ -21,6 +22,7 @@
 #define MyAppPublisher "University of Washington"
 #define MyAppURL "https://github.com/bushgroup/MOBCAL"
 #define MyAppExeName "mobcal.exe"
+#define MyGuiExeName "mobcal-gui.exe"
 
 [Setup]
 AppId={{A4606743-A6A3-4002-A966-D8EA444CAB47}
@@ -30,7 +32,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\{#MyGuiExeName}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -50,6 +52,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "addtopath"; Description: "Add mobcal to my PATH, so that a new terminal can run it"
+Name: "desktopicon"; Description: "Put MOBCAL on the desktop"; Flags: unchecked
 
 [InstallDelete]
 ; Setup never deletes a file the new build does not carry, so an upgrade would otherwise keep
@@ -62,11 +65,14 @@ Type: filesandordirs; Name: "{app}\examples"
 Source: "..\dist\mobcal\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
+Name: "{group}\MOBCAL"; Filename: "{app}\{#MyGuiExeName}"; WorkingDir: "{userdocs}"; Comment: "Calculate collision cross sections"
+Name: "{userdesktop}\MOBCAL"; Filename: "{app}\{#MyGuiExeName}"; WorkingDir: "{userdocs}"; Tasks: desktopicon
 Name: "{group}\MOBCAL command prompt"; Filename: "{cmd}"; Parameters: "/k ""set ""PATH={app};%PATH%"" && mobcal --help"""; WorkingDir: "{userdocs}"; Comment: "A command prompt in which mobcal runs"
 Name: "{group}\MOBCAL self-check"; Filename: "{cmd}"; Parameters: "/k """"{app}\{#MyAppExeName}"" self-check"""; WorkingDir: "{app}"; Comment: "Check that this installation can compute a cross section"
 Name: "{group}\Uninstall MOBCAL"; Filename: "{uninstallexe}"
 
 [Run]
+Filename: "{app}\{#MyGuiExeName}"; WorkingDir: "{userdocs}"; Description: "Open MOBCAL"; Flags: postinstall skipifsilent nowait unchecked
 Filename: "{cmd}"; Parameters: "/k """"{app}\{#MyAppExeName}"" self-check"""; WorkingDir: "{app}"; Description: "Run the self-check"; Flags: postinstall skipifsilent nowait
 
 [Code]

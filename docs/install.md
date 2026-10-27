@@ -2,8 +2,9 @@
 
 MOBCAL is distributed as a program that runs without a Fortran compiler and without Python: an
 installer for Windows, and an archive for macOS on Apple silicon and for Linux on x86-64. Each
-holds the `mobcal` command, the two 2012 Fortran programs (helium and nitrogen) compiled for that
-platform, and the 2012 choline input with its two reference outputs. To build from source
+holds the window ([window.md](window.md)), the `mobcal` command, the two 2012 Fortran programs
+(helium and nitrogen) compiled for that platform, and the 2012 choline input with its two
+reference outputs. To build from source
 instead, see the [README](../README.md).
 
 Released versions are on the repository's
@@ -21,33 +22,34 @@ signed, and Windows SmartScreen answers an unsigned installer it has not seen be
 "Windows protected your PC"; choose **More info**, then **Run anyway**.
 
 One option, checked by default, adds the installation directory to your `PATH`, so that `mobcal`
-runs in any terminal opened after the installation. The Start menu gets three entries:
-**MOBCAL command prompt**, a command prompt in which `mobcal` runs whether or not that option was
-chosen; **MOBCAL self-check**, which runs the check described below; and **Uninstall MOBCAL**.
+runs in any terminal opened after the installation, and another, unchecked, puts the window on
+the desktop. The Start menu gets four entries: **MOBCAL**, the window; **MOBCAL command
+prompt**, a command prompt in which `mobcal` runs whether or not the first option was chosen;
+**MOBCAL self-check**, which runs the check described below; and **Uninstall MOBCAL**.
 Uninstalling removes the program and its `PATH` entry, and leaves alone any calculation output
 written elsewhere.
 
 ## macOS (Apple silicon)
 
-Unpack the archive wherever the program should live, for example in your home directory:
+Unpack the archive into Applications:
 
 ```
-tar -xzf mobcal-<version>-macos-arm64.tar.gz -C ~
+tar -xzf mobcal-<version>-macos-arm64.tar.gz -C /Applications
 ```
 
-This gives a folder `mobcal-<version>` holding the `mobcal` command. The program is not signed
-by Apple, so macOS refuses to run a copy that was downloaded with a web browser until the
-download's quarantine flag is removed:
+This gives `MOBCAL.app`, which opens the window, and holds the `mobcal` command in
+`MOBCAL.app/Contents/MacOS`. The program is not signed by Apple, so macOS refuses to open a copy
+that was downloaded with a web browser until the download's quarantine flag is removed:
 
 ```
-xattr -dr com.apple.quarantine ~/mobcal-<version>
+xattr -dr com.apple.quarantine /Applications/MOBCAL.app
 ```
 
-To run `mobcal` by name, add the folder to your `PATH`, for example by adding this line to
+To run `mobcal` by name, add that folder to your `PATH`, for example by adding this line to
 `~/.zprofile`:
 
 ```
-export PATH="$HOME/mobcal-<version>:$PATH"
+export PATH="/Applications/MOBCAL.app/Contents/MacOS:$PATH"
 ```
 
 The macOS package runs on Apple silicon (arm64) only. On an Intel Mac, build from source.
@@ -63,7 +65,10 @@ export PATH="$HOME/mobcal-<version>:$PATH"
 
 The Fortran programs are linked statically and depend on no library. The `mobcal` command needs
 a glibc-based distribution; each build is tested in AlmaLinux 8, Ubuntu 20.04 and Debian stable
-containers that have neither a compiler nor Python installed.
+containers that have neither a compiler nor Python installed. `mobcal gui` opens the window. It
+needs a desktop's X11 libraries, which any desktop installation has; the one a desktop may lack,
+`libxcb-cursor0`, is in the archive, and the window is tested in a Debian container without it.
+On a machine without a display, `mobcal run` does everything the window does.
 
 ## Checking an installation
 

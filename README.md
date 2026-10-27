@@ -116,20 +116,38 @@ uv run mobcal run choline.mfj --gas both --seeds 5013489,1234567 --workers 4 --o
 A calculation is one input file, one gas, one seed and one random number generator. The
 command makes one job for every combination of the inputs given (paths or globs), the gas
 (`he`, `n2` or `both`; helium by default) and the seeds (the 2012 seed, 5013489, by default),
-under the generator `--rng` names (Philox4x32-10 by default, or `ranlux`), runs them
-`--workers` at a time (by default, as many as the machine has processors), and prints each
-result as it lands. Each run gets a directory of its own under `--out`, named for the input, the
-gas and the seed, with `-ranlux` appended under RANLUX, and holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
+under the generator `--rng` names (Philox4x32-10 by default, or `ranlux`), prints how the runs
+will use the processors and about how long they will take, runs them `--workers` at a time (by
+default, as many as the machine has processors), and prints each result as it lands. Each run
+gets a directory of its own under `--out`, named for the input, the gas and the seed, with
+`-ranlux` appended under RANLUX, the element table when it is not the gas's default (`-lj2000`,
+or `-lj` and the start of a file's SHA-256), and each setting that differs from 2012, and
+holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
 `parameters.tab`, the run settings rendered as `settings.tab`, the output it wrote as
 `mobcal.out`, whatever it printed to the console as `stdout.log`, and `record.json`, which
 records the program and its build, the input and its hash, the seed and the generator, the
-element table and its hash, the settings and where they came from, the times and the result.
+element table and its hash, the settings and where they came from, the method they make
+(`current`, `2012`, `2000` or `custom`), the times and the result.
 The directory is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
-run directories, one row per run with its seed and generator, its status, its cross sections
-in Å², and the time the program took. For an input with several coordinate sets the row carries the mean over sets, as
-the program reports it, and `summary.json` the value for each set.
+run directories, one row per run with its seed, generator and method, its status, its cross
+sections in Å², and the time the program took. For an input with several coordinate sets the
+row carries the mean over sets, as the program reports it, and `summary.json` the value for
+each set. The summaries cover every run the folder holds, not only the last command's, so one
+results folder can hold a study: a later command adds its runs beside the earlier ones, with
+`--skip-done` leaves out the runs the folder already holds complete, and refuses to run an input
+whose name another input's run directory already carries. `mobcal methods-text runs` prints a
+methods paragraph for the runs in a folder, with the program, version, method, gas, element
+table, temperature, trajectory counts, generator and seeds, and the papers to cite.
+
+`--method` names a calculation as a whole. `--method 2012` is the calculation of the 2012
+release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and `--method 2000` that of the 2000
+helium release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)), each equal to the command lines
+those pages give, and the default, `current`, is the 2012 tables and settings under Philox. An
+option given beside a method overrides that one value, and the run records the method as
+`custom`. The seed is not part of a method. The window, `mobcal gui`, offers the same three
+methods ([`docs/window.md`](docs/window.md)).
 
 A number published from MOBCAL 2012 reproduces only under the generator it was computed with,
 RANLUX, and at its seed:
