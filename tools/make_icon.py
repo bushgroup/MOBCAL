@@ -34,6 +34,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from mobcal.app.theme import (  # noqa: E402
+    BACK,
+    HEAVY,
+    LIGHT,
+    LONG_RANGE,
+    MISS,
+    SCATTERED,
+    TILE,
+    mix,
+)
 from mobcal.io.mfj import Mfj  # noqa: E402
 
 ION = ROOT / "fortran" / "Choline.mfj"
@@ -48,9 +58,10 @@ ELEMENT = {1: "H", 12: "C", 14: "N", 16: "O"}
 ROTATION = (80.0, 180.0, -30.0)
 FIT = dict(cx=61.0, cy=63.0, w=66.0, h=54.0)
 
-TILE = "#0D2240"
-HEAVY, LIGHT, BACK, DEPTH = "#3B82D6", "#6FA8EC", "#1E4A86", 0.8
-MISS, LONG_RANGE, SCATTERED = "#4E6F9C", "#5FB8D8", "#3FE0D0"
+# The palette (TILE, HEAVY, LIGHT, BACK, MISS, LONG_RANGE, SCATTERED) and mix are
+# mobcal.app.theme's, which the window uses too. DEPTH is how far the farthest atom is shaded
+# toward BACK.
+DEPTH = 0.8
 
 SCATTER_Y = 76.0  # height at which the scattered trajectory comes in
 TURN = 16.0  # size of its turn
@@ -59,12 +70,6 @@ LONG_RANGE_PATH = ((-5.0, 27.0), (34.0, 27.0), (72.0, 26.0), (90.0, 38.0), (104.
 
 VARIANTS = {"full": 5.5, "small": 8.0}  # stroke width
 MAC_SCALE = 0.875  # 92 % x 0.875 = 80.5 %, 824 of 1024
-
-
-def mix(a: str, b: str, t: float) -> str:
-    pa = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
-    pb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
-    return "#" + "".join(f"{round(u + (v - u) * t):02x}" for u, v in zip(pa, pb, strict=True))
 
 
 def project() -> list[dict]:

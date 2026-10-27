@@ -53,11 +53,13 @@ def main(argv: list[str] | None = None, check: bool = False) -> int:
         return 2
     from PySide6.QtWidgets import QApplication
 
+    from mobcal.app import theme
     from mobcal.app.window import MainWindow
 
     app = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     app.setOrganizationName(ORGANISATION)
     app.setApplicationName(APPLICATION)
+    theme.install(app)
     icon = window_icon()
     app.setWindowIcon(icon)
     if check:  # in a folder of its own, so it never touches the user's settings or queue

@@ -7,9 +7,11 @@ results folder, one per study, remembered. The method shown is the one the field
 *Custom (from …)* once a field moves off the method picked; the runs' records say the same.
 Under the form, the estimate for the batch as it stands.
 
-Right, the queue, the progress and the results. Run starts the batch, or appends it to the
-queue while one is running; the queue is reorderable, starts its next batch when the running
-one ends, and is saved on every change and offered back at the next launch. Stop asks, then
+Above, a menu bar (File ▸ Exit, Batch ▸ Run and Stop, Help ▸ About) and a toolbar showing Run
+and Stop, each one ``QAction`` that owns its text and enabled state. Right, the queue, the
+progress and the results. Run starts the batch, or appends it to the queue while one is
+running; the queue is reorderable, starts its next batch when the running one ends, and is
+saved on every change and offered back at the next launch. Stop asks, then
 ends every process of the running batch. Progress is runs done of N, each running run's
 elapsed time (and blocks written, for a split run), against the estimate. Results are one row
 per ion and gas, TM headline, mean ± s.d. over seeds, with Copy, Save CSV, Show in folder,
@@ -29,9 +31,10 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QDesktopServices, QGuiApplication
+from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -53,6 +56,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolBar,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -61,6 +65,8 @@ from PySide6.QtWidgets import (
 import mobcal
 from mobcal import batch as batches
 from mobcal import estimate, methods, parameters, settings
+from mobcal.app import theme
+from mobcal.app.about import AboutDialog
 from mobcal.app.inputs import InputsPanel
 from mobcal.app.store import Store
 from mobcal.app.worker import BatchWorker
@@ -135,17 +141,7 @@ class MainWindow(QMainWindow):
         self.estimate_label = QLabel()
         self.estimate_label.setWordWrap(True)
         lv.addWidget(self.estimate_label)
-        row = QHBoxLayout()
-        self.run_button = QPushButton("Run")
-        self.run_button.setDefault(True)
-        self.stop_button = QPushButton("Stop")
-        self.stop_button.setEnabled(False)
-        self.run_button.clicked.connect(self.run_clicked)
-        self.stop_button.clicked.connect(self.stop_clicked)
-        row.addWidget(self.run_button)
-        row.addWidget(self.stop_button)
-        row.addStretch(1)
-        lv.addLayout(row)
+        self._actions()
 
         right = QWidget()
         rv = QVBoxLayout(right)
@@ -164,12 +160,68 @@ class MainWindow(QMainWindow):
         else:
             self.resize(1280, 820)
 
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self.draw_icons)
         self.inputs.changed.connect(self.update_estimate)
         self.tick = QTimer(self)
         self.tick.setInterval(1000)
         self.tick.timeout.connect(self._draw_progress)
         self.apply_method(self.store.method if self.store.method in methods.METHODS
                           else methods.CURRENT)
+
+    # --- the menus and the toolbar ---------------------------------------------------------
+
+    def _actions(self) -> None:
+        """Run and Stop as actions, in the Batch menu and the toolbar; File ▸ Exit, which closes
+        the window by the same path as its close button; Help ▸ About. The roles put Exit, About
+        and About Qt in the application menu on macOS."""
+        self.run_action = QAction("&Run", self)
+        self.run_action.setShortcuts([QKeySequence("Ctrl+R"), QKeySequence("F5")])
+        self.run_action.triggered.connect(self.run_clicked)
+        self.stop_action = QAction("&Stop…", self)
+        self.stop_action.setShortcut(QKeySequence("Shift+F5"))
+        self.stop_action.setEnabled(False)
+        self.stop_action.triggered.connect(self.stop_clicked)
+        self.exit_action = QAction("E&xit", self)
+        self.exit_action.setShortcuts(QKeySequence.StandardKey.Quit)
+        self.exit_action.setMenuRole(QAction.MenuRole.QuitRole)
+        self.exit_action.triggered.connect(self.close)
+        self.about_action = QAction("&About MOBCAL", self)
+        self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
+        self.about_action.triggered.connect(self.show_about)
+        about_qt = QAction("About &Qt", self)
+        about_qt.setMenuRole(QAction.MenuRole.AboutQtRole)
+        about_qt.triggered.connect(QApplication.aboutQt)
+
+        bar = self.menuBar()
+        bar.addMenu("&File").addAction(self.exit_action)
+        batch = bar.addMenu("&Batch")
+        batch.addAction(self.run_action)
+        batch.addAction(self.stop_action)
+        help_ = bar.addMenu("&Help")
+        help_.addAction(self.about_action)
+        help_.addAction(about_qt)
+
+        self.toolbar = QToolBar("Batch")
+        self.toolbar.setObjectName("batch")
+        self.toolbar.setMovable(False)
+        self.toolbar.setFloatable(False)
+        self.toolbar.toggleViewAction().setVisible(False)  # no way to hide Run from sight
+        self.toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toolbar.addAction(self.run_action)
+        self.toolbar.addAction(self.stop_action)
+        self.addToolBar(self.toolbar)
+        self.draw_icons()
+
+    def draw_icons(self, *_) -> None:
+        s = theme.scheme()
+        self.run_action.setIcon(theme.run_icon(s))
+        self.stop_action.setIcon(theme.stop_icon(s))
+
+    def show_about(self) -> AboutDialog:
+        """Open the About box, window-modal, and return it."""
+        self.about = AboutDialog(self)
+        self.about.open()
+        return self.about
 
     # --- the form -------------------------------------------------------------------------
 
@@ -439,23 +491,23 @@ class MainWindow(QMainWindow):
             b = self.form_batch()
         except (BatchError, settings.SettingsError, ValueError) as e:
             self.estimate_label.setText(str(e))
-            self.run_button.setEnabled(False)
+            self.run_action.setEnabled(False)
             return
         if problems:
             self.estimate_label.setText("; ".join(problems))
-            self.run_button.setEnabled(False)
+            self.run_action.setEnabled(False)
             self.cores_label.setText("")
             return
         try:
             p = b.plan(self.cpus, sizes=self.inputs.sizes(self.out_dir))
         except (BatchError, ValueError) as e:
             self.estimate_label.setText(str(e))
-            self.run_button.setEnabled(False)
+            self.run_action.setEnabled(False)
             return
         self.estimate_label.setText(f"{self.method_title()}: {estimate.describe(p)}")
         self.cores_label.setText(estimate.describe(p).split(";")[0] + f", of {self.cpus} CPUs")
-        self.run_button.setEnabled(True)
-        self.run_button.setText("Add to queue" if self.worker is not None else "Run")
+        self.run_action.setEnabled(True)
+        self.run_action.setText("Add to &queue" if self.worker is not None else "&Run")
 
     def run_clicked(self) -> None:
         if self.inputs.problems() or not self.inputs.items:
@@ -512,10 +564,10 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"{self.current_title}: starting…")
         self.progress.setRange(0, 0)
         self.results_table.setRowCount(0)
-        self.stop_button.setEnabled(True)
+        self.stop_action.setEnabled(True)
         self.start_queue_button.setEnabled(False)
         self.methods_button.setEnabled(False)
-        self.run_button.setText("Add to queue")
+        self.run_action.setText("Add to &queue")
         self.tick.start()
         self.worker.start()
 
@@ -559,8 +611,8 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.stop_button.setEnabled(False)
-        self.run_button.setText("Run")
+        self.stop_action.setEnabled(False)
+        self.run_action.setText("&Run")
         self._draw_running()
         if self.queue.count():
             self.start(self._take_queued(0))

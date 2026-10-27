@@ -8,6 +8,7 @@ and driver as a real batch.
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import subprocess
@@ -18,12 +19,14 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtGui import QGuiApplication  # noqa: E402
-from PySide6.QtWidgets import QMessageBox  # noqa: E402
+from PySide6.QtCore import QSettings, Qt  # noqa: E402
+from PySide6.QtGui import QAction, QColor, QGuiApplication, QPalette  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox, QStyle  # noqa: E402
 
+import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
 from mobcal import cli, fortran, methods  # noqa: E402
+from mobcal.app import theme  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
 from mobcal.app.window import MainWindow  # noqa: E402
@@ -116,16 +119,16 @@ def test_the_form_makes_the_batch_the_command_line_makes(window, tmp_path):
     assert b.jobs() == by_cli.jobs() and b.title() == "MOBCAL 2000"
 
 
-def test_the_estimate_and_the_run_button(window, qtbot):
+def test_the_estimate_and_the_run_action(window, qtbot):
     w = window
-    assert not w.run_button.isEnabled() and "add an input" in w.estimate_label.text()
+    assert not w.run_action.isEnabled() and "add an input" in w.estimate_label.text()
     add(qtbot, w, CHOLINE)
-    assert w.run_button.isEnabled()
+    assert w.run_action.isEnabled()
     assert w.estimate_label.text().startswith("Current: 1 run on 1 worker, each across 8 "
                                               "processes; about")
     w.counts["itn"].setValue(100)
     w.counts["inp"].setValue(100)  # 100 * 100 * 1000 points: over the program's 9,999,999
-    assert not w.run_button.isEnabled() and "points per coordinate set" in \
+    assert not w.run_action.isEnabled() and "points per coordinate set" in \
         w.estimate_label.text()
 
 
@@ -163,7 +166,7 @@ def test_run_while_running_queues_and_the_queue_survives(window, qtbot, tmp_path
     w = window
     add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
     w.run_clicked()
-    assert w.worker is not None and w.run_button.text() == "Add to queue"
+    assert w.worker is not None and w.run_action.iconText() == "Add to queue"
     w.seeds_spin.setValue(2)
     w.run_clicked()
     w.apply_method("2012")
@@ -210,6 +213,112 @@ def test_closing_asks_then_stops_and_keeps_the_queue(window, qtbot, tmp_path):
     assert len(batches.load(w.store.queue_path)[0]) == 1
 
 
+def test_the_run_and_stop_actions_track_the_batch(window, qtbot, tmp_path):
+    w = window
+    assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    w.run_action.trigger()
+    assert w.worker is not None and w.stop_action.isEnabled()
+    assert w.run_action.isEnabled() and w.run_action.iconText() == "Add to queue"
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w.stop_action.trigger()  # answered yes
+    wait_idle(qtbot, w)
+    assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
+
+
+# --- the menus, the toolbar and the colours -------------------------------------------------
+
+def test_the_menus_and_the_toolbar_hold_the_actions(window):
+    w = window
+    menus = {m.text(): m.menu().actions() for m in w.menuBar().actions()}
+    assert list(menus) == ["&File", "&Batch", "&Help"]
+    assert menus["&File"] == [w.exit_action] and menus["&Batch"] == [w.run_action, w.stop_action]
+    assert menus["&Help"][0] is w.about_action
+    roles = [a.menuRole() for a in (w.exit_action, w.about_action, menus["&Help"][1])]
+    assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole,
+                     QAction.MenuRole.AboutQtRole]
+    assert w.toolbar.actions() == [w.run_action, w.stop_action]
+    assert not w.toolbar.toggleViewAction().isVisible()
+    assert [s.toString() for s in w.run_action.shortcuts()] == ["Ctrl+R", "F5"]
+    assert w.stop_action.shortcut().toString() == "Shift+F5"
+    assert not w.run_action.icon().isNull() and not w.stop_action.icon().isNull()
+
+
+def test_exit_while_running_asks_and_no_keeps_the_window(window, qtbot, tmp_path):
+    w = window
+    w.show()
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    w.run_clicked()
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w._answers.append(QMessageBox.StandardButton.No)
+    w.exit_action.trigger()
+    assert w.isVisible() and w.worker is not None and not w.worker.stopping
+    w.exit_action.trigger()  # answered yes: stops the batch and closes
+    assert not w.isVisible()
+
+
+def test_about_opens_and_closes(window):
+    w = window
+    d = w.show_about()
+    assert d.isVisible() and d.windowTitle() == "About MOBCAL"
+    text = d.body.text()
+    assert f"MOBCAL {mobcal.__version__}" in text and methods.REPOSITORY in text
+    assert "CHE-2603156" in text and "68949-ND6" in text
+    assert html.escape(methods.REFERENCES["campuzano2012"]) in text
+    assert "GNU General Public License, version 3" in text and "PySide6 6." in text
+    d.close()
+    assert not d.isVisible()
+
+
+def contrast(a: str, b: str) -> float:
+    def lum(h):
+        c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        c = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+# The window and base colours of Qt's windows11 style (Qt 6.11, Windows 11), light and dark, and
+# of Fusion (Linux), against which each colour of the scheme does its job.
+BACKGROUNDS = {False: ("#F3F3F3", "#FFFFFF", "#EFEFEF"), True: ("#1E1E1E", "#2D2D2D", "#323232")}
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_the_schemes_colours_meet_their_contrast(dark):
+    s = theme.DARK_SCHEME if dark else theme.LIGHT_SCHEME
+    for bg in BACKGROUNDS[dark]:
+        assert contrast(s.text, bg) >= 4.5, (s.text, bg)  # text: WCAG 1.4.3
+        for fill in (s.accent, s.run, s.stop):  # graphics: WCAG 1.4.11
+            assert contrast(fill, bg) >= 3.0, (fill, bg)
+    assert contrast(s.highlighted_text, s.accent) >= 4.5  # a checked button's text
+
+
+def test_the_theme_follows_the_colour_scheme(window, monkeypatch):
+    """Through the signal, with the scheme patched: the offscreen platform takes no scheme."""
+    app = QApplication.instance()
+    hints = QGuiApplication.styleHints()
+    style, palette = app.style().name(), app.palette()
+    dark = [False]
+    monkeypatch.setattr(theme, "is_dark", lambda: dark[0])
+    try:
+        theme.install(app)
+        for dark[0], s in ((True, theme.DARK_SCHEME), (False, theme.LIGHT_SCHEME)):
+            hints.colorSchemeChanged.emit(Qt.ColorScheme.Dark if dark[0]
+                                          else Qt.ColorScheme.Light)
+            for role in (QPalette.ColorRole.Accent, QPalette.ColorRole.Highlight):
+                assert app.palette().color(role).name() == s.accent.lower()
+            assert app.palette().color(QPalette.ColorRole.Link).name() == s.text.lower()
+            hint = app.style().styleHint(QStyle.StyleHint.SH_GroupBox_TextLabelColor)
+            assert QColor.fromRgba(hint & 0xFFFFFFFF).name() == s.text.lower()
+            for action, colour in ((window.run_action, s.run), (window.stop_action, s.stop)):
+                centre = action.icon().pixmap(32, 32).toImage().pixelColor(14, 16)
+                assert centre.name() == colour.lower()
+    finally:
+        app.setStyle(style)
+        app.setPalette(palette)
+
+
 def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path, monkeypatch):
     w = window
     add(qtbot, w, write_input(tmp_path / "a.mfj", "ok"))
@@ -253,11 +362,11 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     sp, opt = w.inputs.items
     assert sp.charges == "chelpg" and sp.atoms == 21 and not sp.problem()
     assert opt.charges is None and opt.problem().endswith("choose its charges")
-    assert not w.run_button.isEnabled()
+    assert not w.run_action.isEnabled()
     combo = w.inputs.table.cellWidget(1, 3)
     assert combo.itemData(combo.count() - 1) == "uniform"
     combo.setCurrentIndex(combo.findData("mulliken"))
-    assert w.run_button.isEnabled()
+    assert w.run_action.isEnabled()
     b = w.form_batch()
     assert [p.name for p in b.inputs] == ["choline_sp_chelpg.mfj", "choline_opt_mulliken.mfj"]
     w.launcher = launcher
@@ -277,7 +386,7 @@ def test_an_xyz_asks_for_its_net_charge(window, qtbot):
     combo.setCurrentIndex(combo.findData("uniform"))
     assert item.problem().endswith("give the ion's net charge")
     w.inputs.table.cellWidget(0, 4).setValue(1)
-    assert not item.problem() and w.run_button.isEnabled()
+    assert not item.problem() and w.run_action.isEnabled()
 
 
 def test_an_unreadable_input_says_why(window, qtbot, tmp_path):
@@ -285,7 +394,7 @@ def test_an_unreadable_input_says_why(window, qtbot, tmp_path):
     junk = tmp_path / "junk.mfj"
     junk.write_text("not a structure\n", encoding="ascii")
     add(qtbot, w, junk)
-    assert w.inputs.items[0].state == "error" and not w.run_button.isEnabled()
+    assert w.inputs.items[0].state == "error" and not w.run_action.isEnabled()
 
 
 # --- the platform -------------------------------------------------------------------------

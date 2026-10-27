@@ -130,6 +130,22 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # The window and its About box, light and dark where the platform takes a colour scheme,
+      # to see what each native style does with mobcal.app.theme's palette. Linux grabs on Qt's
+      # offscreen platform: Fusion, one scheme.
+      - name: Screenshots of the window
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then export QT_QPA_PLATFORM=offscreen; fi
+          uv run tools/window_shots.py build/screenshots
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: window-${{ runner.os }}
+          path: build/screenshots/
+          if-no-files-found: error
+          retention-days: 30
+
   package:
     name: package ${{ matrix.os }}
     needs: build
