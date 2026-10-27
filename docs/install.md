@@ -66,8 +66,10 @@ export PATH="$HOME/mobcal-<version>:$PATH"
 The Fortran programs are linked statically and depend on no library. The `mobcal` command needs
 a glibc-based distribution; each build is tested in AlmaLinux 8, Ubuntu 20.04 and Debian stable
 containers that have neither a compiler nor Python installed. `mobcal gui` opens the window. It
-needs a desktop's X11 libraries, which any desktop installation has; the one a desktop may lack,
-`libxcb-cursor0`, is in the archive, and the window is tested in a Debian container without it.
+needs a newer system than the command does, Ubuntu 22.04, Debian 12, RHEL 9 or later, because the
+Qt libraries it is built on need the C++ runtime of GCC 11, and a desktop's X11 libraries, which
+any desktop installation has; the one a desktop may lack, `libxcb-cursor0`, is in the archive,
+and the window is tested in Ubuntu 22.04 and Debian stable containers without it.
 On a machine without a display, `mobcal run` does everything the window does.
 
 ## Checking an installation

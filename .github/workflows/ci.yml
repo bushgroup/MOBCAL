@@ -137,8 +137,12 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
+      # Linux on the oldest runner the window supports: the archive carries libxcb-cursor and
+      # the C runtime's companions from the machine it is built on, and each asks for that
+      # machine's glibc. Qt's wheels need GCC 11's libstdc++ (Ubuntu 22.04) in any case. The
+      # Fortran binaries are static and come from the build job.
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-22.04, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7
