@@ -305,8 +305,13 @@ class Stop:
             self._procs.discard(proc)
 
 
-# A process group of its own on POSIX, so that killing the run kills whatever it started.
-_POPEN_EXTRA = {} if os.name == "nt" else {"start_new_session": True}
+# A process group of its own on POSIX, so that killing the run kills whatever it started. On
+# Windows no console window: a console program started by one that has none, as the window's
+# mobcal-gui.exe has none, is given a console window of its own, one per run on the screen.
+# The program's output goes to stdout.log, and a terminal's Ctrl+C, which reaches neither, is
+# passed on by run_many and _wait, which kill the running binaries.
+_POPEN_EXTRA = ({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt"
+                else {"start_new_session": True})
 
 
 def _kill_tree(proc: subprocess.Popen) -> None:
@@ -318,7 +323,8 @@ def _kill_tree(proc: subprocess.Popen) -> None:
     try:
         if os.name == "nt":
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+                           **_POPEN_EXTRA)
         else:
             os.killpg(proc.pid, signal.SIGKILL)
     except OSError:
@@ -363,6 +369,16 @@ def _start(command: Sequence[str], d: Path, running: Stop | None) -> subprocess.
     return proc
 
 
+def _wait(proc: subprocess.Popen) -> int:
+    """Wait for the program; a KeyboardInterrupt while waiting kills it and is re-raised. Its
+    own process group, or no console on Windows, keeps a terminal's Ctrl+C from reaching it."""
+    try:
+        return proc.wait()
+    except BaseException:
+        _kill_tree(proc)
+        raise
+
+
 def _finish(proc: subprocess.Popen, running: Stop | None) -> None:
     if running is not None:
         running.discard(proc)
@@ -398,7 +414,8 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     making the run directory. A stale ``mobcal.out`` in the directory is removed before the run,
     so that an output is never read from an earlier run. A job with ``split`` runs its workers
     and then the combining run; see the module docstring. Every run that got as far as its
-    directory ends with ``record.json`` written there, failed or not.
+    directory ends with ``record.json`` written there, failed or not. A KeyboardInterrupt
+    stops the job's processes and is re-raised.
     """
     try:
         mfj = Mfj.read(job.input)
@@ -446,7 +463,7 @@ def _run_serial(job: Job, command: list[str], pset: ParameterSet,
     except OSError as e:
         return _failed(job, f"cannot start {command[0]}: {e}")
     try:
-        rc = proc.wait()
+        rc = _wait(proc)
     finally:
         _finish(proc, running)
     return _collect(job, d, rc, time.perf_counter() - t0)
@@ -488,6 +505,10 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
                 alive[0].wait(timeout=POLL_SECONDS)
             except subprocess.TimeoutExpired:
                 pass
+    except BaseException:  # a KeyboardInterrupt, which does not reach the workers themselves
+        for p in procs.values():
+            _kill_tree(p)
+        raise
     finally:
         for p in procs.values():
             _finish(p, running)
@@ -520,7 +541,7 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
         return _failed(job, f"cannot start the combining run: {e}", None,
                        time.perf_counter() - t0)
     try:
-        rc = proc.wait()
+        rc = _wait(proc)
     finally:
         _finish(proc, running)
     return _collect(job, d, rc, time.perf_counter() - t0)

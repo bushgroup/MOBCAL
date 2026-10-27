@@ -205,6 +205,68 @@ def test_stop_ends_a_split_run_before_its_combining_run(tmp_path):
     assert r.status == "stopped" and not (job.run_dir / "mobcal.out").exists()
 
 
+def test_no_process_opens_a_console_window(tmp_path, monkeypatch):
+    # The window's mobcal-gui.exe has no console, and Windows gives each console program it
+    # starts a console window of its own unless told not to: one per run, and one per taskkill.
+    seen = []
+    popen, sub_run = run.subprocess.Popen, run.subprocess.run
+
+    def spy_popen(*a, **kw):
+        seen.append(("Popen", kw))
+        return popen(*a, **kw)
+
+    def spy_run(*a, **kw):
+        seen.append(("run", kw))
+        return sub_run(*a, **kw)
+
+    monkeypatch.setattr(run.subprocess, "Popen", spy_popen)
+    monkeypatch.setattr(run.subprocess, "run", spy_run)
+    job = Job(write_input(tmp_path / "s.mfj", "sleep 30"), "he", 1, tmp_path / "runs", split=2)
+    stop = Stop()
+    run.threading.Timer(1.5, stop).start()
+    assert run_many([job], 1, launcher=launcher, stop=stop).results[0].status == "stopped"
+    kinds = [k for k, _ in seen]
+    assert kinds.count("Popen") >= 2  # the two workers, and on Windows taskkill's own Popen
+    if sys.platform == "win32":
+        assert kinds.count("run") >= 2  # taskkill, once per worker at least
+        assert all(kw.get("creationflags", 0) & run.subprocess.CREATE_NO_WINDOW
+                   for _, kw in seen)
+    else:
+        assert all(kw.get("start_new_session") for k, kw in seen if k == "Popen")
+
+
+def test_an_interrupt_kills_the_program_it_was_waiting_for(tmp_path, monkeypatch):
+    # Ctrl+C in a terminal does not reach a program with no console or its own process group.
+    job = Job(write_input(tmp_path / "s.mfj", "sleep 30"), "he", 1, tmp_path / "runs")
+    procs = []
+    start = run._start
+
+    def interrupted(command, d, running):
+        proc = start(command, d, running)
+        procs.append(proc)
+        monkeypatch.setattr(proc, "wait", _interrupt_once(proc.wait))
+        return proc
+
+    monkeypatch.setattr(run, "_start", interrupted)
+    t0 = time.perf_counter()
+    with pytest.raises(KeyboardInterrupt):
+        run.run_one(job, launcher)
+    assert procs and procs[0].wait(timeout=15) is not None
+    assert time.perf_counter() - t0 < 15
+
+
+def _interrupt_once(wait):
+    calls = []
+
+    def fake(timeout=None):
+        if not calls:
+            calls.append(1)
+            raise KeyboardInterrupt
+        return wait(timeout)
+
+    return fake
+
+
 # --- the batch as data -------------------------------------------------------------------
 
 def test_a_batch_round_trips_through_the_queue_file(tmp_path):
