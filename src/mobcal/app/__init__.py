@@ -17,9 +17,12 @@ from __future__ import annotations
 import ctypes.util
 import os
 import sys
+from pathlib import Path
 
 ORGANISATION = "bushgroup"
 APPLICATION = "MOBCAL"
+# The icon at each size tools/make_icon.py renders (16 to 512 px); the bundle carries them here.
+ICONS = Path(__file__).resolve().parent / "icons"
 
 
 def missing_platform_library() -> str | None:
@@ -55,7 +58,12 @@ def main(argv: list[str] | None = None, check: bool = False) -> int:
     app = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     app.setOrganizationName(ORGANISATION)
     app.setApplicationName(APPLICATION)
+    icon = window_icon()
+    app.setWindowIcon(icon)
     if check:  # in a folder of its own, so it never touches the user's settings or queue
+        if not icon.availableSizes():
+            print(f"error: no window icon in {ICONS}", file=sys.stderr)
+            return 1
         import tempfile
         from pathlib import Path
 
@@ -68,12 +76,23 @@ def main(argv: list[str] | None = None, check: bool = False) -> int:
             w.show()
             QTimer.singleShot(500, w.close)
             rc = app.exec()
-        print(f"window opened and closed on {app.platformName()}, Qt {qt_version()}")
+        print(f"window opened and closed on {app.platformName()}, Qt {qt_version()}, icon at "
+              f"{len(icon.availableSizes())} sizes")
         return rc
     w = MainWindow()
     w.show()
     w.offer_saved_queue()
     return app.exec()
+
+
+def window_icon():
+    """The window's and taskbar's icon, one QIcon holding every size there is."""
+    from PySide6.QtGui import QIcon
+
+    icon = QIcon()
+    for png in sorted(ICONS.glob("mobcal-*.png")):
+        icon.addFile(str(png))
+    return icon
 
 
 def qt_version() -> str:

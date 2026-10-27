@@ -21,7 +21,9 @@
 # Qt plugins QtCore, QtGui and QtWidgets need. On Linux, Qt >= 6.5's xcb platform plugin needs
 # libxcb-cursor.so.0, which many desktops lack; the build machine's copy is collected beside
 # the plugin. The package's data files are the element tables (each gas's default set and the
-# named alternates) and the settings file, which the self-check verifies by SHA-256.
+# named alternates) and the settings file, which the self-check verifies by SHA-256, and the
+# window's icon as PNGs. The executables carry packaging/icon/mobcal.ico on Windows, MOBCAL.app
+# carries mobcal.icns; tools/make_icon.py draws all of them.
 
 import os
 import sys
@@ -29,6 +31,7 @@ import sys
 from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = os.path.dirname(SPECPATH)  # SPECPATH is injected by PyInstaller: packaging/
+ICON = os.path.join(SPECPATH, "icon")
 
 XCB_CURSOR = "libxcb-cursor.so.0"
 _binaries = []
@@ -50,11 +53,14 @@ def _analysis(script):
         pathex=[os.path.join(ROOT, "src")],
         binaries=_binaries,
         # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks,
-        # and the 2012 settings file beside mobcal/settings/__init__.
+        # the 2012 settings file beside mobcal/settings/__init__, and the window's icon where
+        # mobcal.app.ICONS looks.
         datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
                 os.path.join("mobcal", "parameters")),
                (os.path.join(ROOT, "src", "mobcal", "settings", "*.toml"),
-                os.path.join("mobcal", "settings"))] + collect_data_files("periodictable"),
+                os.path.join("mobcal", "settings")),
+               (os.path.join(ROOT, "src", "mobcal", "app", "icons", "*.png"),
+                os.path.join("mobcal", "app", "icons"))] + collect_data_files("periodictable"),
         hiddenimports=[],
         hookspath=[],
         hooksconfig={},
@@ -145,6 +151,12 @@ if _tables != _want:
                        "missing would be refused, and the settings file is what the window "
                        "reads.")
 
+_icons = {os.path.basename(dest) for dest, *_ in g.datas
+          if dest.replace("\\", "/").startswith("mobcal/app/icons/")}
+if not _icons:
+    raise RuntimeError("Refusing to build: no window icon in the bundle (src/mobcal/app/icons/, "
+                       "which tools/make_icon.py writes), so the window would open without one.")
+
 # --- Provenance guard (Windows) -------------------------------------------------------------
 # PyInstaller resolves a collected binary's DLL dependencies through the binary's own directory,
 # then sys.path, then PATH. A PATH carrying another Python distribution substitutes its DLLs
@@ -186,6 +198,7 @@ def _exe(analysis, name, console):
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        icon=os.path.join(ICON, "mobcal.ico") if sys.platform == "win32" else None,
     )
 
 
@@ -197,7 +210,8 @@ if sys.platform == "darwin":
     # it in Contents/MacOS, where build_bundle.py also puts fortran/ and examples/.
     coll = COLLECT(exe_gui, exe, a.binaries, a.datas, g.binaries, g.datas, strip=False,
                    upx=False, upx_exclude=[], name="mobcal")
-    app = BUNDLE(coll, name="MOBCAL.app", icon=None, bundle_identifier="edu.uw.bushgroup.mobcal",
+    app = BUNDLE(coll, name="MOBCAL.app", icon=os.path.join(ICON, "mobcal.icns"),
+                 bundle_identifier="edu.uw.bushgroup.mobcal",
                  info_plist={"CFBundleName": "MOBCAL", "CFBundleDisplayName": "MOBCAL",
                              "NSHighResolutionCapable": True})
 else:

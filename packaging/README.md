@@ -12,7 +12,8 @@ mobcal/
   mobcal(.exe)        the command, frozen with its own Python; `mobcal gui` opens the window
   mobcal-gui(.exe)    the window alone, without a console: the Start-menu shortcut's target
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
-                      in mobcal/parameters/ and the 2012 settings file in mobcal/settings/,
+                      in mobcal/parameters/, the 2012 settings file in mobcal/settings/ and
+                      the window's icon in mobcal/app/icons/,
                       cclib with numpy, scipy and periodictable for `mobcal import`, and
                       PySide6-Essentials (QtCore, QtGui, QtWidgets and their plugins) for the
                       window; on Linux, libxcb-cursor.so.0, which Qt's xcb plugin needs
@@ -44,6 +45,18 @@ the Fortran binaries and change the bytes `build.json` records, and ships
 `mobcal-<version>-macos-arm64.tar.gz` holding `MOBCAL.app`. Nothing is signed with a developer
 identity on either platform. Onedir rather than onefile, because a onefile program unpacks itself into
 a temporary directory on every start.
+
+## The icon
+
+`tools/make_icon.py` draws it from `fortran/Choline.mfj`: three helium trajectories past the
+choline cation, space-filling at van der Waals radii, one missing, one bent by the long-range
+potential and one scattered off a methyl hydrogen. It writes `icon/mobcal.svg` and
+`icon/mobcal-small.svg` (heavier strokes, for 16 to 32 px), `icon/mobcal.ico` (the Windows
+executables, through `mobcal.spec`, and the installer, through `mobcal.iss`), `icon/mobcal.icns`
+(`MOBCAL.app`, drawn on Apple's smaller grid) and `src/mobcal/app/icons/mobcal-<n>.png`, which
+the window sets as its icon. All of them are committed; run the script again after changing it
+and commit what it writes. `mobcal gui --check` fails when the window finds no icon, so a bundle
+without the PNGs fails its build.
 
 ## The Fortran inside is built in CI
 

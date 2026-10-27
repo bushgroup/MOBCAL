@@ -307,6 +307,26 @@ def test_the_window_starts_and_closes_by_itself():
     assert p.stdout.startswith("window opened and closed on offscreen, Qt 6.")
 
 
+def test_the_window_has_its_icon_at_every_size(qtbot):
+    import mobcal.app as app
+    sizes = sorted(s.width() for s in app.window_icon().availableSizes())
+    assert sizes == [16, 24, 32, 48, 64, 128, 256, 512]
+
+
+def test_the_packages_icons_hold_every_size():
+    icon = Path(__file__).resolve().parent.parent / "packaging" / "icon"
+    ico = (icon / "mobcal.ico").read_bytes()
+    assert ico[:4] == b"\0\0\1\0" and int.from_bytes(ico[4:6], "little") == 7
+    icns = (icon / "mobcal.icns").read_bytes()
+    assert icns[:4] == b"icns" and int.from_bytes(icns[4:8], "big") == len(icns)
+    kinds, i = [], 8
+    while i < len(icns):
+        kinds.append(icns[i:i + 4].decode())
+        i += int.from_bytes(icns[i + 4:i + 8], "big")
+    assert kinds == ["icp4", "icp5", "ic11", "ic12", "ic07", "ic13", "ic08", "ic14", "ic09",
+                     "ic10"]
+
+
 def test_the_linux_platform_library_check(monkeypatch):
     import mobcal.app as app
     monkeypatch.setattr(app.sys, "platform", "linux")
