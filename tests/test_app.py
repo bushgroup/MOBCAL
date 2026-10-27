@@ -341,16 +341,17 @@ def test_group_titles_take_the_text_colour_and_nothing_inside_does(qtbot, monkey
         w.setFont(QFont(w.font().family(), 28, QFont.Weight.Bold))
     qtbot.addWidget(box)
     box.resize(400, 200)
-    img = box.grab().toImage()
+    box.layout().activate()
     want = QColor(s.text)
 
-    def near(rect) -> int:
-        return sum(1 for x in range(rect.left(), rect.right()) for y in range(rect.top(),
-                   rect.bottom()) if max(abs(img.pixelColor(x, y).red() - want.red()),
-                                         abs(img.pixelColor(x, y).green() - want.green()),
-                                         abs(img.pixelColor(x, y).blue() - want.blue())) < 24)
-    title = QRect(0, 0, 400, label.geometry().top())
-    assert near(title) > 50 and near(label.geometry()) == 0
+    def near(widget, rect=None) -> int:
+        img = widget.grab(rect or QRect()).toImage()
+        return sum(1 for x in range(img.width()) for y in range(img.height())
+                   if max(abs(img.pixelColor(x, y).red() - want.red()),
+                          abs(img.pixelColor(x, y).green() - want.green()),
+                          abs(img.pixelColor(x, y).blue() - want.blue())) < 24)
+    # The label grabbed alone: a large title's glyphs can reach into the label's rectangle.
+    assert near(box, QRect(0, 0, 400, label.geometry().top())) > 50 and near(label) == 0
 
 
 def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path, monkeypatch):
