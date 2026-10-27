@@ -5,7 +5,8 @@ imports, and the worked examples `docs/import.md` points at. Six ORCA 6.1.1 jobs
 cation (C5H14NO+, 21 atoms, z = +1, singlet), the test ion of the 2012 reference calculations,
 run on 2026-10-26 on Windows 11 with `%pal nprocs 8` and `%maxcore 3000`. Every job starts from
 the geometry of `fortran/Choline.mfj` (its first three columns, in ångström, as
-`choline_2012.xyz`) or from an optimized geometry another job here produced.
+`choline_2012.xyz`) or from an optimized geometry another job here produced. Three Gaussian 16
+inputs on the same ion are here too, waiting for their outputs (below).
 
 | Job | Route | Start geometry | Charge blocks the `.out` prints |
 |---|---|---|---|
@@ -41,6 +42,28 @@ What the tests rely on, and what the outputs show:
   earlier in the file.
 - The Hirshfeld charges of the two unoptimized jobs sum to +1.0002 (ORCA integrates them on a
   grid); Mulliken, Löwdin and CHELPG sum to +1.0000 to the printed digits.
+
+## Gaussian 16 inputs, outputs to come
+
+`gaussian/` holds three Gaussian 16 inputs, written on 2026-10-26 from the geometry of
+`fortran/Choline.mfj` at its five decimals. Their outputs are not here yet. Until they are,
+`mobcal import` refuses a Gaussian output as not yet supported, and no test reads these inputs
+beyond the hash check below. All three are B3LYP/6-31++G(d,p), the basis named in the label of
+the 2012 charge column (`Choline_631G++dp_pop`), with Gaussian's B3LYP (VWN functional III) and
+its default Cartesian d functions for this basis.
+
+| Job | Route | Start geometry | What the output is for |
+|---|---|---|---|
+| `choline_2012_mk` | `# B3LYP/6-31++G(d,p) SP NoSymm Pop=(MK,Hirshfeld)` | `Choline.mfj`, not optimized | Merz-Kollman, Hirshfeld and CM5 charges at the 2012 geometry, printed in the input orientation |
+| `choline_2012_chelpg` | `# B3LYP/6-31++G(d,p) SP NoSymm Pop=(CHELPG,NBO)` | `Choline.mfj`, not optimized | CHELPG and natural (NBO) charges at the 2012 geometry |
+| `choline_optfreq` | `# B3LYP/6-31++G(d,p) Opt Freq Pop=CHELPG` | `Choline.mfj` | an optimization and a frequency calculation, two job steps in one output, printed in the standard orientation |
+
+`NoSymm` keeps the two single points at the coordinates as given, so that their charges compare
+atom by atom with the 2012 column; the optimization keeps Gaussian's symmetry handling, as most
+users run it. Each input names its checkpoint file without a path and asks for 4 cores and
+4 GB of memory, the two lines that may change on another machine without changing a result.
+When the outputs arrive, each job directory gains its output, kept whole, and this section
+gains what each output prints.
 
 `SHA256SUMS` pins every file here except this README and itself, in the format `sha256sum -c`
 reads, and `tests/test_import.py` compares. A fixture changes only in a commit that updates its

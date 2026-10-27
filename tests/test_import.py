@@ -95,7 +95,8 @@ def test_every_fixture_is_its_pinned_file_and_every_file_is_pinned():
     for line in (QM / "SHA256SUMS").read_text(encoding="ascii").splitlines():
         digest, name = line.split("  ", 1)
         pins[name] = digest
-    on_disk = {p.relative_to(QM).as_posix() for p in ORCA.rglob("*") if p.is_file()}
+    on_disk = {p.relative_to(QM).as_posix() for p in QM.rglob("*")
+               if p.is_file() and p.name not in ("README.md", "SHA256SUMS")}
     assert sorted(pins) == sorted(on_disk)
     for name, digest in pins.items():
         assert hashlib.sha256((QM / name).read_bytes()).hexdigest() == digest, name
