@@ -37,8 +37,10 @@ code. On Windows, Inno Setup (`mobcal.iss`) installs the folder per user, with t
 in the Start menu. On Linux the folder is shipped as `mobcal-<version>-linux-x86_64.tar.gz`, whose
 top folder is `mobcal-<version>/`. On macOS the spec wraps the folder in `MOBCAL.app`, whose
 executable is `mobcal-gui`, and `build_bundle.py` puts `fortran/`, `examples/` and `LICENSE` in
-`Contents/MacOS/` beside both executables, signs the bundle again, ad hoc, because adding files
-breaks the seal of the ad-hoc signature PyInstaller applied, and ships
+`Contents/Resources/` (codesign takes any file in `Contents/MacOS/` for code; `mobcal.fortran.
+payload_dir` looks there), seals the bundle again, ad hoc and without `--deep`, because adding
+files breaks the seal of the ad-hoc signature PyInstaller applied and `--deep` would re-sign
+the Fortran binaries and change the bytes `build.json` records, and ships
 `mobcal-<version>-macos-arm64.tar.gz` holding `MOBCAL.app`. Nothing is signed with a developer
 identity on either platform. Onedir rather than onefile, because a onefile program unpacks itself into
 a temporary directory on every start.

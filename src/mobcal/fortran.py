@@ -148,6 +148,17 @@ def install_dir() -> Path:
     return Path(sys.executable).resolve().parent
 
 
+def payload_dir() -> Path:
+    """Where an installed program's ``fortran/`` and ``examples/`` are: beside the executable,
+    except inside a macOS app bundle, where they are in ``Contents/Resources`` (codesign takes
+    every file in ``Contents/MacOS`` for code, and the Fortran binaries must keep the bytes
+    their build.json records). Frozen only."""
+    d = install_dir()
+    if d.name == "MacOS" and d.parent.name == "Contents" and (d.parent / "Resources").is_dir():
+        return d.parent / "Resources"
+    return d
+
+
 def binary_name(gas: str) -> str:
     return f"mobcal_{gas}" + (".exe" if sys.platform == "win32" else "")
 
@@ -156,21 +167,22 @@ def binary_dir() -> Path:
     """Where the built binaries are looked for, and never on PATH.
 
     ``$MOBCAL_BIN_DIR`` first; then, in a frozen (installed) program, the ``fortran`` directory
-    beside the executable, where the installer puts the binaries built in CI; otherwise
+    beside the executable (in ``Contents/Resources`` of the macOS app), where the installer puts
+    the binaries built in CI; otherwise
     ``build/fortran/`` under this checkout, where ``mobcal build`` writes them.
     """
     env = os.environ.get("MOBCAL_BIN_DIR")
     if env:
         return Path(env)
     if frozen():
-        return install_dir() / "fortran"
+        return payload_dir() / "fortran"
     return ROOT / "build" / "fortran"
 
 
 def examples_dir() -> Path:
     """Where ``Choline.mfj`` and ``sample-output/`` are: ``examples/`` beside an installed
     program, which carries copies of them, and ``fortran/`` in a source checkout."""
-    return install_dir() / "examples" if frozen() else FORTRAN_DIR
+    return payload_dir() / "examples" if frozen() else FORTRAN_DIR
 
 
 def find_binary(gas: str) -> Path:

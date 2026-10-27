@@ -13,8 +13,8 @@
 3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
    since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
    ORCA output of the choline cation (``tests/data/qm/``) to ``examples/``, and ``LICENSE``; on
-   macOS into the ``.app``, which is then signed again, ad hoc, since adding files breaks the
-   seal PyInstaller's ad-hoc signature put on it.
+   macOS into the ``.app``'s ``Contents/Resources``, after which the bundle is sealed again, ad
+   hoc, since adding files breaks the seal PyInstaller's ad-hoc signature put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
    ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
@@ -52,8 +52,11 @@ from mobcal import fortran  # noqa: E402
 
 DIST = ROOT / "dist"
 APP = DIST / "MOBCAL.app"  # macOS only
-# Where the executables are, and fortran/ and examples/ go beside them.
+# Where the executables are; and where fortran/, examples/ and LICENSE go: beside them, except
+# in the macOS app, where codesign would take them for unsigned code in Contents/MacOS
+# (mobcal.fortran.payload_dir finds them in Contents/Resources).
 BUNDLE = APP / "Contents" / "MacOS" if sys.platform == "darwin" else DIST / "mobcal"
+PAYLOAD = APP / "Contents" / "Resources" if sys.platform == "darwin" else BUNDLE
 EXE = "mobcal.exe" if sys.platform == "win32" else "mobcal"
 GUI_EXE = "mobcal-gui.exe" if sys.platform == "win32" else "mobcal-gui"
 WORK = ROOT / "build" / "pyinstaller"
@@ -126,17 +129,17 @@ def assemble(bin_dir: Path) -> None:
         if not (BUNDLE / name).is_file():
             raise SystemExit(f"no {BUNDLE / name}: run without --skip-pyinstaller first")
     for sub in ("fortran", "examples"):
-        shutil.rmtree(BUNDLE / sub, ignore_errors=True)
-    (BUNDLE / "fortran").mkdir()
+        shutil.rmtree(PAYLOAD / sub, ignore_errors=True)
+    (PAYLOAD / "fortran").mkdir()
     for name in [fortran.binary_name(g) for g in fortran.GASES] + [fortran.MANIFEST]:
-        shutil.copy2(bin_dir / name, BUNDLE / "fortran" / name)
+        shutil.copy2(bin_dir / name, PAYLOAD / "fortran" / name)
         if name != fortran.MANIFEST:
-            (BUNDLE / "fortran" / name).chmod(0o755)
-    (BUNDLE / "examples" / "sample-output").mkdir(parents=True)
+            (PAYLOAD / "fortran" / name).chmod(0o755)
+    (PAYLOAD / "examples" / "sample-output").mkdir(parents=True)
     for rel in ("Choline.mfj", "sample-output/Choline_He.out", "sample-output/Choline_N2.out"):
-        shutil.copy2(fortran.FORTRAN_DIR / rel, BUNDLE / "examples" / rel)
-    shutil.copy2(ORCA_EXAMPLE, BUNDLE / "examples" / ORCA_EXAMPLE.name)
-    shutil.copy2(ROOT / "LICENSE", BUNDLE / "LICENSE")
+        shutil.copy2(fortran.FORTRAN_DIR / rel, PAYLOAD / "examples" / rel)
+    shutil.copy2(ORCA_EXAMPLE, PAYLOAD / "examples" / ORCA_EXAMPLE.name)
+    shutil.copy2(ROOT / "LICENSE", PAYLOAD / "LICENSE")
     if sys.platform == "darwin":
         # Not --deep: that would re-sign the Fortran binaries, changing the bytes build.json
         # records. They are already signed (the arm64 linker signs ad hoc), as is everything
@@ -183,7 +186,7 @@ def import_check() -> None:
     shutil.rmtree(out.parent, ignore_errors=True)
     out.parent.mkdir(parents=True)
     t0 = time.perf_counter()
-    proc = subprocess.run([str(exe), "import", str(BUNDLE / "examples" / ORCA_EXAMPLE.name),
+    proc = subprocess.run([str(exe), "import", str(PAYLOAD / "examples" / ORCA_EXAMPLE.name),
                            "--charges", ORCA_CHARGES, "-o", str(out)], env=clean_env(),
                           capture_output=True, text=True)
     seconds = time.perf_counter() - t0

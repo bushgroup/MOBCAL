@@ -103,7 +103,7 @@ kept.
 
 The installed command is the same `mobcal run` that the [README](../README.md#running-calculations)
 describes, without the `uv run` in front of it. The choline input is in the `examples` folder
-of the installation:
+of the installation, which on macOS is `MOBCAL.app/Contents/Resources/examples`:
 
 ```
 mobcal run <installation>/examples/Choline.mfj --gas he --out runs
