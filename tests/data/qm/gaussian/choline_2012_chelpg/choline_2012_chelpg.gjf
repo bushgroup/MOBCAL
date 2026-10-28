@@ -1,6 +1,6 @@
-%chk=choline_2012_chelpg.chk
-%nprocshared=4
-%mem=4GB
+%chk=/gscratch/chem/yarramh/Bush/choline_2012_chelpg.chk
+%nprocshared=40
+%mem=128GB
 # B3LYP/6-31++G(d,p) SP NoSymm Pop=(CHELPG,NBO)
 
 choline cation, 2012 MOBCAL Choline.mfj geometry, CHELPG and NBO
@@ -27,4 +27,10 @@ O       2.83000      0.38500      0.00000
 H       1.64500     -1.07900      0.89300
 H       1.64700     -1.08100     -0.89100
 H       3.63300     -0.15400      0.00000
+
+
+
+
+
+
 
