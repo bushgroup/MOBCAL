@@ -58,7 +58,7 @@ wheels = [
 
 [[package]]
 name = "mobcal"
-version = "2.0.0rc2.dev0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cclib" },
