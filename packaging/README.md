@@ -20,7 +20,8 @@ mobcal/
                       window; on Linux, libxcb-cursor.so.0, which Qt's xcb plugin needs
   fortran/            mobcal_he(.exe), mobcal_n2(.exe), build.json
   examples/           Choline.mfj, sample-output/Choline_He.out, sample-output/Choline_N2.out,
-                      choline_sp.out (an ORCA 6.1.1 output, from tests/data/qm/)
+                      choline_sp.out (an ORCA 6.1.1 output) and choline_2012_mk.log (a
+                      Gaussian 16 output), from tests/data/qm/
   LICENSE
 ```
 
@@ -101,8 +102,8 @@ build machine's `PATH` helps it fails here. The report is also written to
 `build/self-check.log`. It also opens and closes the built window and its Help viewer (`mobcal
 gui --check`, on Qt's offscreen platform), so a bundle missing Qt, a plugin it needs or the
 guide's pages fails here; `mobcal.spec` refuses to build without every page of `docs/`. It then times two starts of `mobcal version`, and has the built program
-import `examples/choline_sp.out` with its CHELPG charges, which must write the file the source
-tree's import writes, so a bundle missing any part of cclib fails here and not on a user's
+import `examples/choline_sp.out` with its CHELPG charges and `examples/choline_2012_mk.log` with
+its MK charges, each of which must write the file the source tree's import writes, so a bundle missing any part of cclib fails here and not on a user's
 first import.
 
 `build_exe.ps1` runs the same with `PATH` cut to the Windows directories and uv's for the whole

@@ -1,9 +1,10 @@
-"""mobcal.io.structure and ``mobcal import``: the ORCA fixtures, the .xyz reader, the refusals,
-and an imported ion run through the driver in both gases.
+"""mobcal.io.structure and ``mobcal import``: the ORCA and Gaussian fixtures, the .xyz reader,
+the refusals, and an imported ion run through the driver in both gases.
 
 Every value an import writes is checked against the output as printed, read here by a few
-regular expressions and no cclib, and the CHELPG charges also against ORCA's own
-``<job>.chelpg.xyz``. The fixtures are pinned by ``tests/data/qm/SHA256SUMS``.
+regular expressions and no cclib, and the ORCA CHELPG charges also against ORCA's own
+``<job>.chelpg.xyz``. Each refusal is shown on an edited copy of a fixture. The fixtures are
+pinned by ``tests/data/qm/SHA256SUMS``.
 """
 
 from __future__ import annotations
@@ -260,14 +261,23 @@ def test_an_optimization_that_did_not_converge_is_refused(tmp_path):
         structure.read(p)
 
 
-def test_a_gaussian_output_is_refused_as_not_yet_supported(tmp_path):
+def test_a_gaussian_file_with_no_finished_job_is_refused(tmp_path):
     p = tmp_path / "ion.log"
     p.write_text(" Entering Gaussian System, Link 0=g16\n"
                  " Copyright (c) 1988-2019, Gaussian, Inc.  All Rights Reserved.\n",
                  encoding="utf-8")
-    with pytest.raises(StructureError, match="a Gaussian output; Gaussian outputs are not yet "
-                                             "supported"):
+    with pytest.raises(StructureError, match="0 of 1 job step terminated normally"):
         structure.read(p)
+
+
+def test_an_orca_output_of_another_version_imports_with_a_warning(tmp_path):
+    p = orca_variant(tmp_path, "choline_sp", "orca5.out",
+                     lambda t: t.replace("Program Version 6.1.1", "Program Version 5.0.4"))
+    s = structure.read(p)
+    assert s.version == "5.0.4" and s.details["untested_version"] is True
+    assert "tested on ORCA 6 outputs" in s.warnings[0]
+    rec = structure.convert(s, "chelpg").record
+    assert rec["source"]["untested_version"] is True and rec["format"] == 2
 
 
 def test_a_file_no_program_wrote_is_refused(tmp_path):
@@ -277,6 +287,215 @@ def test_a_file_no_program_wrote_is_refused(tmp_path):
         structure.read(p)
     with pytest.raises(StructureError, match="cannot read"):
         structure.read(tmp_path / "missing.out")
+
+
+# --- Gaussian --------------------------------------------------------------------------------
+
+GAUSSIAN = QM / "gaussian"
+# The blocks each log holds at its last geometry, under the import's keys.
+G_BLOCKS = {
+    "choline_2012_mk": {"mulliken", "hirshfeld", "cm5", "mk"},
+    "choline_2012_chelpg": {"mulliken", "natural", "chelpg"},
+    "choline_optfreq": {"mulliken", "chelpg"},
+}
+G_STEPS = {"choline_2012_mk": 1, "choline_2012_chelpg": 1, "choline_optfreq": 2}
+
+_G_COORD = re.compile(r"^\s+(Input|Standard|Z-Matrix) orientation:\s*$")
+_G_COORD_ROW = re.compile(r"^\s+\d+\s+(\d+)\s+-?\d+\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)$")
+_G_ROW = re.compile(r"^\s+\d+\s+[A-Z][a-z]?\s+(-?\d+\.\d+)((?:\s+-?\d+\.\d+)*)\s*$")
+_G_NPA_ROW = re.compile(r"^\s+[A-Z][a-z]?\s+\d+\s+(-?\d+\.\d+)\s")
+_G_HEADS = {"mulliken": " Mulliken charges:", "hirshfeld": " Hirshfeld charges, spin densities",
+            "esp": " ESP charges:", "natural": " Summary of Natural Population Analysis:"}
+_G_RADII = {"Merz-Kollman atomic radii used.": "mk", "Breneman (CHELPG) radii used.": "chelpg"}
+
+
+def g_printed(job: str):
+    """Every coordinate block of a log (line index, kind, [(Z, x, y, z)]) and every charge
+    block (line index, values), the ESP blocks keyed by the radii line before them."""
+    lines = (GAUSSIAN / job / f"{job}.log").read_text(encoding="ascii").splitlines()
+    coords, charges, radii = [], {}, None
+    for i, line in enumerate(lines):
+        if m := _G_COORD.match(line):
+            rows = [_G_COORD_ROW.match(s) for s in lines[i + 5:i + 5 + 21]]
+            coords.append((i, m[1], [(int(r[1]), *map(float, r.group(2, 3, 4))) for r in rows]))
+        radii = _G_RADII.get(line.strip(), radii)
+        key = next((k for k, h in _G_HEADS.items() if line.rstrip().startswith(h)), None)
+        if key is None:
+            continue
+        rows = [(_G_NPA_ROW if key == "natural" else _G_ROW).match(s)
+                for s in lines[i + 1:i + 40]]
+        rows = [r for r in rows if r][:21]
+        if key == "esp":
+            key = radii
+        charges.setdefault(key, []).append((i, [float(r[1]) for r in rows]))
+        if key == "hirshfeld":
+            charges.setdefault("cm5", []).append((i, [float(r[2].split()[-1]) for r in rows]))
+    return lines, coords, charges
+
+
+@pytest.fixture(scope="module")
+def g_read() -> dict[str, structure.Structure]:
+    return {job: structure.read(GAUSSIAN / job / f"{job}.log") for job in G_BLOCKS}
+
+
+def g_variant(tmp_path: Path, job: str, name: str, edit) -> Path:
+    p = tmp_path / name
+    text = (GAUSSIAN / job / f"{job}.log").read_text(encoding="ascii")
+    edited = edit(text)
+    assert edited != text
+    p.write_text(edited, encoding="ascii", newline="\n")
+    return p
+
+
+def test_the_gaussian_fixtures_are_three_g16_logs_with_their_inputs():
+    assert sorted(p.name for p in GAUSSIAN.iterdir()) == sorted(G_BLOCKS)
+    for job, steps in G_STEPS.items():
+        log = (GAUSSIAN / job / f"{job}.log").read_bytes()
+        gjf = (GAUSSIAN / job / f"{job}.gjf").read_bytes()
+        assert b"\r" not in log and b"\r" not in gjf, job
+        text = log.decode("ascii")
+        assert " Gaussian 16:  ES64L-G16RevB.01 20-Dec-2017" in text
+        assert text.count(" Normal termination of Gaussian 16") == steps
+        route = next(s for s in gjf.decode("ascii").splitlines() if s.startswith("#"))
+        assert f"\n {route}\n" in text, job  # the log echoes the input it was run from
+
+
+@pytest.mark.parametrize("job", G_BLOCKS)
+def test_a_gaussian_log_reads_as_its_last_geometry_and_blocks(g_read, job):
+    s = g_read[job]
+    _, coords, charges = g_printed(job)
+    last = coords[-1][2]
+    assert (s.program, s.version, s.net_charge, s.warnings) == ("Gaussian", "16 Rev. B.01", 1, ())
+    assert set(s.charges) == G_BLOCKS[job] and s.unpaired == {}
+    assert s.details["untested_version"] is False
+    assert [{"H": 1, "C": 6, "N": 7, "O": 8}[e] for e in s.symbols] == [a[0] for a in last]
+    assert s.coordinates == tuple(a[1:] for a in last)
+    for key in G_BLOCKS[job]:
+        assert charges[key][-1][0] > coords[-1][0], key
+        assert list(s.charges[key]) == charges[key][-1][1], key
+
+
+@pytest.mark.parametrize("job,key", [(j, k) for j in G_BLOCKS for k in sorted(G_BLOCKS[j])])
+def test_each_gaussian_block_imports_as_printed(g_read, job, key):
+    imp = structure.convert(g_read[job], key)
+    _, _, charges = g_printed(job)
+    assert [a.charge for a in imp.mfj.sets[0]] == charges[key][-1][1]
+    assert Mfj.parse(imp.mfj.text()) == imp.mfj
+    assert abs(imp.record["charges"]["difference"]) <= structure.TOLERANCE
+    assert imp.record["source"]["route"].startswith("# B3LYP/6-31++G(d,p) ")
+
+
+def test_the_single_points_are_at_the_2012_geometry_and_mk_is_the_2012_column(g_read):
+    """NoSymm keeps Choline.mfj's coordinates; the 2012 charge column is a B3LYP/6-31++G(d,p)
+    Merz-Kollman fit (every atom within 0.005 e, against 0.17 e for CHELPG)."""
+    ref = Mfj.read(CHOLINE).sets[0]
+    for job in ("choline_2012_mk", "choline_2012_chelpg"):
+        assert g_read[job].coordinates == tuple((a.x, a.y, a.z) for a in ref), job
+    dq = [abs(q - a.charge) for q, a in zip(g_read["choline_2012_mk"].charges["mk"], ref,
+                                            strict=True)]
+    assert max(dq) < 0.005
+    dq = [abs(q - a.charge) for q, a in zip(g_read["choline_2012_chelpg"].charges["chelpg"], ref,
+                                            strict=True)]
+    assert max(dq) > 0.1
+
+
+def test_the_opt_freq_import_reads_step_2(g_read):
+    """Step 2 (Freq) prints its own coordinate block, equal to step 1's stationary point, and
+    its own population analysis after it: pop=CHELPG carries into the frequency step."""
+    lines, coords, charges = g_printed("choline_optfreq")
+    step2 = next(i for i, s in enumerate(lines) if s.startswith(" Link1:  Proceeding"))
+    standard = [c for c in coords if c[1] == "Standard"]
+    assert standard[-1][0] > step2 > standard[-2][0] and standard[-1][2] == standard[-2][2]
+    for key in ("mulliken", "chelpg"):
+        assert charges[key][-1][0] > standard[-1][0]
+        assert list(g_read["choline_optfreq"].charges[key]) == charges[key][-1][1]
+
+
+def test_a_gaussian_log_cut_short_is_refused(tmp_path):
+    full = (GAUSSIAN / "choline_optfreq" / "choline_optfreq.log").read_text(encoding="ascii")
+    last = full.rindex(" Normal termination of Gaussian")
+    for name, edit in (("no_final.log", lambda t: t[:last]),
+                       ("no_freq.log", lambda t: t[:t.index("\n", t.index(" Link1:  ")) + 1])):
+        with pytest.raises(StructureError, match="1 of 2 job steps terminated normally"):
+            structure.read(g_variant(tmp_path, "choline_optfreq", name, edit))
+    p = g_variant(tmp_path, "choline_2012_mk", "error.log",
+                  lambda t: t.replace(" Normal termination", " Error termination via Lnk1e"))
+    with pytest.raises(StructureError, match="error termination"):
+        structure.read(p)
+
+
+def test_a_gaussian_optimization_that_stopped_is_refused(tmp_path):
+    p = g_variant(tmp_path, "choline_optfreq", "stopped.log",
+                  lambda t: t.replace("Optimization completed.", "Optimization stopped."))
+    with pytest.raises(StructureError, match="did not converge"):
+        structure.read(p)
+
+
+def test_a_step_2_geometry_other_than_cclibs_is_refused(tmp_path):
+    """cclib keeps step 1's last point; a step 2 at another geometry must not pair with it."""
+    def move(text):
+        i = text.rindex("Standard orientation:")
+        j = text.index("-0.878240", i)
+        return text[:j] + "-0.878250" + text[j + 9:]
+    with pytest.raises(StructureError, match="not the last geometry printed"):
+        structure.read(g_variant(tmp_path, "choline_optfreq", "moved.log", move))
+
+
+def test_a_gaussian_block_printed_only_before_the_last_geometry_is_refused(tmp_path):
+    def hide_step2(text):
+        i = text.index(" Link1:  Proceeding")
+        return text[:i] + (text[i:].replace(" ESP charges:\n", " ESP chargez:\n")
+                           .replace(" Mulliken charges:\n", " Mulliken chargez:\n"))
+    s = structure.read(g_variant(tmp_path, "choline_optfreq", "nostep2.log", hide_step2))
+    assert s.charges == {} and set(s.unpaired) == {"mulliken", "chelpg"}
+    assert all("before the last geometry" in why for why in s.unpaired.values())
+
+
+@pytest.mark.parametrize("job,old,new,key,match", [
+    ("choline_2012_mk", " Merz-Kollman atomic radii used.", " Read replacement radii",
+     "mk", "radii read from the input"),
+    ("choline_2012_mk", " Fitting point charges to electrostatic potential\n",
+     " Fitting point charges to electrostatic potential\n The dipole moment will be "
+     "constrained to the correct value\n", "mk", "constrains the dipole moment"),
+    ("choline_2012_chelpg", " Breneman (CHELPG) radii used.", " Merz-Kollman atomic radii used.",
+     "mk", "the radii line names mk, and the route asks for chelpg"),
+    ("choline_2012_chelpg", "Gaussian NBO Version 3.1", "NBO 7.0 (11-Nov-2026)",
+     "natural", "not from Gaussian's built-in NBO 3.1"),
+])
+def test_a_gaussian_charge_block_the_import_refuses(tmp_path, job, old, new, key, match):
+    s = structure.read(g_variant(tmp_path, job, "edited.log", lambda t: t.replace(old, new)))
+    assert key not in s.charges and match in s.unpaired[key]
+    with pytest.raises(StructureError, match=f"{key} is refused"):
+        structure.convert(s, key)
+
+
+def test_an_untested_esp_scheme_is_refused(tmp_path):
+    def chelp(text):
+        return (text.replace("Pop=(CHELPG,NBO)", "Pop=(CHELP,NBO)")
+                .replace(" Breneman (CHELPG) radii used.", " Francl (CHELP) radii used."))
+    s = structure.read(g_variant(tmp_path, "choline_2012_chelpg", "chelp.log", chelp))
+    assert "chelpg" not in s.charges
+    assert s.unpaired["chelp"] == "CHELP fits are not among the import's tested outputs"
+
+
+def test_a_gaussian_log_of_another_version_imports_with_a_warning(tmp_path, capsys,
+                                                                    monkeypatch):
+    p = g_variant(tmp_path, "choline_2012_mk", "g09.log",
+                  lambda t: t.replace("ES64L-G16RevB.01", "ES64L-G09RevD.01"))
+    s = structure.read(p)
+    assert s.version == "09 Rev. D.01" and s.details["untested_version"] is True
+    assert set(s.charges) == G_BLOCKS["choline_2012_mk"]
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["import", str(p), "--charges", "mk"]) == 0
+    err = capsys.readouterr().err
+    assert err.startswith("warning: g09.log is from Gaussian 09 Rev. D.01; the import is tested "
+                          "on Gaussian 16 outputs")
+    rec = json.loads((tmp_path / "g09_mk.import.json").read_text(encoding="utf-8"))
+    assert rec["source"]["untested_version"] is True
+    assert cli.main(["import", str(GAUSSIAN / "choline_2012_mk" / "choline_2012_mk.log"),
+                     "--charges", "mk"]) == 0
+    io = capsys.readouterr()
+    assert io.err == "" and "(Gaussian 16 Rev. B.01), mk charges" in io.out
 
 
 # --- .xyz ------------------------------------------------------------------------------------
@@ -485,4 +704,17 @@ def test_an_imported_orca_output_runs_in_both_gases(binaries, tmp_path, read_all
         assert " total charge = 1.0000E+00" in lines
         if charges == "uniform":
             assert " total absolute charge = 1.0000E+00" in lines
+        assert "TM" in r.cross_sections
+
+
+def test_an_imported_gaussian_mk_fit_runs_in_both_gases(binaries, tmp_path, g_read):
+    """At the 2012 geometry the MK import differs from Choline.mfj in the charges alone, so the
+    program prints the 2012 header but for the total absolute charge."""
+    mfj, _ = structure.write(structure.convert(g_read["choline_2012_mk"], "mk"),
+                             tmp_path / "choline_2012_mk.mfj")
+    for gas, binary in binaries.items():
+        r = run(binary, mfj, gas, tmp_path / "runs")
+        want = header(REFERENCE / f"Choline_{parameters.GAS[gas]}.out")
+        got = header(r.output)
+        assert [s for s in got if "absolute" not in s] == [s for s in want if "absolute" not in s]
         assert "TM" in r.cross_sections

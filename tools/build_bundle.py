@@ -12,13 +12,15 @@
    ``Contents/MacOS/`` holds both.
 3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
    since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
-   ORCA output of the choline cation (``tests/data/qm/``) to ``examples/``, and ``LICENSE``; on
-   macOS into the ``.app``'s ``Contents/Resources``, after which the bundle is sealed again, ad
-   hoc, since adding files breaks the seal PyInstaller's ad-hoc signature put on it.
+   ORCA and one Gaussian output of the choline cation (``tests/data/qm/``) to ``examples/``,
+   and ``LICENSE``; on macOS into the ``.app``'s ``Contents/Resources``, after which the bundle
+   is sealed again, ad hoc, since adding files breaks the seal PyInstaller's ad-hoc signature
+   put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
    ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
-   charges, which must give the file the source tree's import gives (cclib and everything
+   charges and the Gaussian example's MK charges, each of which must give the file the source
+   tree's import gives (cclib and everything
    under it are in the bundle and work), and opens and closes the window with ``mobcal gui
    --check`` on Qt's offscreen platform (Qt and its plugins are in the bundle and start).
 5. With ``--archive`` (macOS and Linux), writes ``dist/mobcal-<version>-<os>-<arch>.tar.gz``,
@@ -62,9 +64,10 @@ GUI_EXE = "mobcal-gui.exe" if sys.platform == "win32" else "mobcal-gui"
 WORK = ROOT / "build" / "pyinstaller"
 SELF_CHECK_LOG = ROOT / "build" / "self-check.log"
 
-# The ORCA output the bundle carries as an example, and the charges the import check takes.
-ORCA_EXAMPLE = ROOT / "tests" / "data" / "qm" / "orca" / "choline_sp" / "choline_sp.out"
-ORCA_CHARGES = "chelpg"
+# The outputs the bundle carries as examples, and the charges the import check takes.
+QM = ROOT / "tests" / "data" / "qm"
+EXAMPLES = {QM / "orca" / "choline_sp" / "choline_sp.out": "chelpg",
+            QM / "gaussian" / "choline_2012_mk" / "choline_2012_mk.log": "mk"}
 
 # MinGW's runtime, which a dynamically linked MSYS2 binary imports and a clean Windows lacks.
 _MINGW_DLL = re.compile(rb"(?i)(libgfortran|libgcc_s|libquadmath|libwinpthread)[\w.-]*\.dll")
@@ -138,7 +141,8 @@ def assemble(bin_dir: Path) -> None:
     (PAYLOAD / "examples" / "sample-output").mkdir(parents=True)
     for rel in ("Choline.mfj", "sample-output/Choline_He.out", "sample-output/Choline_N2.out"):
         shutil.copy2(fortran.FORTRAN_DIR / rel, PAYLOAD / "examples" / rel)
-    shutil.copy2(ORCA_EXAMPLE, PAYLOAD / "examples" / ORCA_EXAMPLE.name)
+    for example in EXAMPLES:
+        shutil.copy2(example, PAYLOAD / "examples" / example.name)
     shutil.copy2(ROOT / "LICENSE", PAYLOAD / "LICENSE")
     if sys.platform == "darwin":
         # Not --deep: that would re-sign the Fortran binaries, changing the bytes build.json
@@ -182,23 +186,25 @@ def self_check() -> None:
 def import_check() -> None:
     from mobcal.io import structure
     exe = BUNDLE / EXE
-    out = ROOT / "build" / "import-check" / "choline_sp.mfj"
-    shutil.rmtree(out.parent, ignore_errors=True)
-    out.parent.mkdir(parents=True)
-    t0 = time.perf_counter()
-    proc = subprocess.run([str(exe), "import", str(PAYLOAD / "examples" / ORCA_EXAMPLE.name),
-                           "--charges", ORCA_CHARGES, "-o", str(out)], env=clean_env(),
-                          capture_output=True, text=True)
-    seconds = time.perf_counter() - t0
-    if proc.returncode != 0:
-        raise SystemExit(f"the built program's import failed (exit {proc.returncode}):\n"
-                         f"{proc.stdout}{proc.stderr}")
-    want = structure.convert(structure.read(ORCA_EXAMPLE), ORCA_CHARGES).mfj.text()
-    if out.read_text(encoding="latin-1") != want:
-        raise SystemExit(f"the built program's import wrote {out}, which differs from the "
-                         "source tree's")
-    print(f"import: {ORCA_EXAMPLE.name} --charges {ORCA_CHARGES} in {seconds:.2f} s, the "
-          "source tree's file")
+    work = ROOT / "build" / "import-check"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    for example, charges in EXAMPLES.items():
+        out = work / f"{example.stem}_{charges}.mfj"
+        t0 = time.perf_counter()
+        proc = subprocess.run([str(exe), "import", str(PAYLOAD / "examples" / example.name),
+                               "--charges", charges, "-o", str(out)], env=clean_env(),
+                              capture_output=True, text=True)
+        seconds = time.perf_counter() - t0
+        if proc.returncode != 0:
+            raise SystemExit(f"the built program's import failed (exit {proc.returncode}):\n"
+                             f"{proc.stdout}{proc.stderr}")
+        want = structure.convert(structure.read(example), charges).mfj.text()
+        if out.read_text(encoding="latin-1") != want:
+            raise SystemExit(f"the built program's import wrote {out}, which differs from the "
+                             "source tree's")
+        print(f"import: {example.name} --charges {charges} in {seconds:.2f} s, the source "
+              "tree's file")
 
 
 def window_check() -> None:

@@ -62,9 +62,9 @@ to check an installation with `mobcal self-check`.
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
   ([`docs/settings.md`](docs/settings.md)), the methods and the method-file format
-  ([`docs/methods.md`](docs/methods.md)), writing an input from an ORCA output or an `.xyz`
-  file ([`docs/import.md`](docs/import.md)), and how to reproduce a calculation of the 2012
-  release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
+  ([`docs/methods.md`](docs/methods.md)), writing an input from an ORCA or Gaussian output or
+  an `.xyz` file ([`docs/import.md`](docs/import.md)), and how to reproduce a calculation of the
+  2012 release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
   ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
 
 ## Building the Fortran
@@ -101,7 +101,7 @@ uv run pytest
 ## Running calculations
 
 An input file can be written by hand ([`fortran/Choline.mfj`](fortran/Choline.mfj) is the 2012
-example) or from an ORCA output or an `.xyz` file with the charges you name
+example) or from an ORCA or Gaussian output or an `.xyz` file with the charges you name
 ([`docs/import.md`](docs/import.md)):
 
 ```

@@ -11,7 +11,7 @@
 - [`mobcal gui`](#mobcal-gui): Open the window.
 - [`mobcal methods-text`](#mobcal-methods-text): Print the methods paragraph for runs.
 - [`mobcal render-parameters`](#mobcal-render-parameters): Write the element table and the settings the program reads into a directory, for running the program there by hand.
-- [`mobcal import`](#mobcal-import): Write an .mfj from an ORCA output or an .xyz file, with the charges you name.
+- [`mobcal import`](#mobcal-import): Write an .mfj from an ORCA or Gaussian output or an .xyz file, with the charges you name.
 
 ## mobcal version
 
@@ -113,7 +113,7 @@ usage: mobcal render-parameters [-h] [--parameters PATH|NAME] [--settings PATH]
 
 ## mobcal import
 
-Write an .mfj from an ORCA output or an .xyz file, with the charges you name.
+Write an .mfj from an ORCA or Gaussian output or an .xyz file, with the charges you name.
 
 ```
 usage: mobcal import [-h] [--charges KEY] [--net-charge Q] [--gas {he,n2,both}]
@@ -121,8 +121,8 @@ usage: mobcal import [-h] [--charges KEY] [--net-charge Q] [--gas {he,n2,both}]
                      SOURCE
 ```
 
-- `SOURCE`: An ORCA output, or an .xyz file.
-- `--charges KEY`: Which atomic charges the .mfj carries: a set the file holds, such as CHELPG or Mulliken, or uniform, the net charge spread evenly over the atoms. The keys are mulliken, lowdin, chelpg and hirshfeld for an ORCA output's blocks, column for an .xyz file's fifth column, and uniform. Without it, the import lists what the file holds.
+- `SOURCE`: An ORCA or Gaussian output, or an .xyz file.
+- `--charges KEY`: Which atomic charges the .mfj carries: a set the file holds, such as CHELPG or Mulliken, or uniform, the net charge spread evenly over the atoms. The keys are mulliken, lowdin, chelpg and hirshfeld for an ORCA output's blocks; mulliken, hirshfeld, cm5, natural, mk and chelpg for a Gaussian output's; column for an .xyz file's fifth column; and uniform. Without it, the import lists what the file holds.
 - `--net-charge Q`: The ion's net charge, in elementary charges. An .xyz file needs it; for an output it must agree with the charge the output was computed at.
 - `--gas {he,n2,both}`: Whose element table the atoms must be in. Default: both.
 - `-o OUT.mfj, --out OUT.mfj`: The file to write, with its record beside it as OUT.import.json. Default: SOURCE-STEM_KEY.mfj in the current directory.

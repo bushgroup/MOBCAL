@@ -35,11 +35,12 @@ Jarrold group's 2000 helium table; ``2012``, the default for each gas,
 ``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the temperature and the
 five sampling counts, ``mobcal.settings``), which replaces the method's settings, and the six
 single-value options override either value by value. Its exit status is 1 if any run failed.
-``import`` writes a single-set ``.mfj`` from an ORCA output or an ``.xyz`` with the charges
-named by ``--charges`` (refused, listing what the file holds, until one is named), and its
-provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads and
-refuses. With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default
-the file must run in both.
+``import`` writes a single-set ``.mfj`` from an ORCA or Gaussian output or an ``.xyz`` with the
+charges named by ``--charges`` (refused, listing what the file holds, until one is named), and
+its provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads
+and refuses, and an output of a version the import is not tested on is taken with a warning.
+With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default the file
+must run in both.
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
@@ -191,10 +192,10 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--settings", type=Path, default=None, metavar="PATH",
                    help="Write this settings file instead of the 2012 values.")
 
-    m = command("import", "Write an .mfj from an ORCA output or an .xyz file, with the charges "
-                "you name.")
+    m = command("import", "Write an .mfj from an ORCA or Gaussian output or an .xyz file, with "
+                "the charges you name.")
     m.add_argument("source", type=Path, metavar="SOURCE",
-                   help="An ORCA output, or an .xyz file.")
+                   help="An ORCA or Gaussian output, or an .xyz file.")
     m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
     m.add_argument("--net-charge", type=int, default=None, metavar="Q",
                    help=options.cli_help("net_charge"))
@@ -342,6 +343,8 @@ def _import(args: argparse.Namespace) -> int:
     except (structure.StructureError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    for w in s.warnings:
+        print(f"warning: {w}", file=sys.stderr)
     c = imp.record["charges"]
     print(f"wrote {mfj}: {imp.mfj.atoms} atoms from {s.path.name}"
           + (f" ({s.program} {s.version})" if s.version else "")

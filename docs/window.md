@@ -1,14 +1,13 @@
 # The window
 
-The window runs the same calculations as the `mobcal` command, for anyone who would rather not
-use a terminal. It takes `.mfj` files, or ORCA outputs and `.xyz` files that it imports, runs
-them in helium or nitrogen under one of five shipped methods or a method file of one's own,
-shows how long the batch will take and how far it has got, and gives a table of cross sections
-with the run folders, the records and a methods paragraph one click away. Everything the window
-does, the command line does too, with the same rules and the same records; this page says
-where, and [The command line](command-line.md) lists every command and option. Every control
-carries a tooltip that says what it sets, in the words the command line's help uses for the same
-option.
+The window runs the same calculations as the `mobcal` command, for anyone who would rather not use a
+terminal. It takes `.mfj` files, or ORCA and Gaussian outputs and `.xyz` files that it imports, runs
+them in helium or nitrogen under one of five shipped methods or a method file of one's own, shows
+how long the batch will take and how far it has got, and gives a table of cross sections with the
+run folders, the records and a methods paragraph one click away. Everything the window does, the
+command line does too, with the same rules and the same records; this page says where, and [The
+command line](command-line.md) lists every command and option. Every control carries a tooltip that
+says what it sets, in the words the command line's help uses for the same option.
 
 To open the window, choose **MOBCAL** in the Start menu on Windows, or open `MOBCAL.app` on
 macOS; on Linux, and from a terminal on any platform, run
@@ -21,14 +20,14 @@ mobcal gui
 
 ## Inputs
 
-Add files with Add files, or drop them on the list. An `.mfj` file runs as it is. An ORCA output or
-an `.xyz` file is imported as `mobcal import` imports it ([Importing a structure and its
-charges](import.md)), and its row shows the charges the import will use. When an ORCA output holds
-CHELPG charges they are selected; otherwise the row asks for a choice before the batch can run.
-`uniform`, the net charge spread evenly over the atoms, is always offered and never selected for
-you. An `.xyz` file does not carry the ion's net charge, so its row asks for it. At Run each import
-is written, `.mfj` and `.import.json`, into `imported/` in the results folder, so the folder holds
-the file each run read.
+Add files with Add files, or drop them on the list. An `.mfj` file runs as it is. An ORCA or
+Gaussian output or an `.xyz` file is imported as `mobcal import` imports it ([Importing a structure
+and its charges](import.md)), and its row shows the charges the import will use. When an output
+holds CHELPG charges they are selected; otherwise the row asks for a choice before the batch can
+run. `uniform`, the net charge spread evenly over the atoms, is always offered and never selected
+for you. An `.xyz` file does not carry the ion's net charge, so its row asks for it. At Run each
+import is written, `.mfj` and `.import.json`, into `imported/` in the results folder, so the folder
+holds the file each run read.
 
 ## Method, Basics and Advanced
 

@@ -1,4 +1,5 @@
-"""A structure and its charges, from an ORCA output or an ``.xyz``, written as a 2012 ``.mfj``.
+"""A structure and its charges, from an ORCA or Gaussian output or an ``.xyz``, written as a
+2012 ``.mfj``.
 
 The 2012 model takes little from a structure: per atom x y z, the integer mass key of its
 element, and a charge. No atom type, bond or force-field label. ``read`` gets the last geometry
@@ -7,18 +8,33 @@ single-set ``Mfj`` (ångström, ``calc`` mode, five columns) and a provenance re
 puts the two side by side, ``X.mfj`` and ``X.import.json``, because the a30 label has no room
 for where the numbers came from.
 
-Sources. An ORCA output is read with cclib, pinned in ``pyproject.toml`` and imported here only,
-inside ``read``, so that nothing else in the package loads it or the numpy and scipy it brings.
-ORCA prints each charge block after the coordinate block it belongs to; in an optimization it
-prints Mulliken and Löwdin at the start geometry and again at the stationary point, and CHELPG,
-when asked, after every cycle. cclib keeps the last coordinate block and the last block of each
-kind, and those belong together only when the block comes after the coordinates. ``read``
-checks that order in the text, with the headings cclib's parser triggers on, and a kind whose
-last block comes before the last geometry is reported and refused, never paired. An output
-that did not terminate normally, or an optimization that did not converge, is refused. A
-Gaussian output is recognized and refused (not yet supported); any other program cclib knows
-is refused. An ``.xyz`` is read here, without cclib: a count, a comment line, then ``symbol x y
-z`` per atom with an optional fifth column, the charges (``column``). One frame only.
+Sources. ORCA and Gaussian outputs are read with cclib, pinned in ``pyproject.toml`` and
+imported here only, inside ``read``, so that nothing else in the package loads it or the numpy
+and scipy it brings. Both programs print each charge block after the coordinate block it belongs
+to; in an optimization ORCA prints Mulliken and Löwdin at the start geometry and again at the
+stationary point, and CHELPG, when asked, after every cycle. cclib keeps the last coordinate
+block and the last block of each kind, and those belong together only when the block comes
+after the coordinates. ``read`` checks that order in the text, with the headings cclib's parser
+triggers on, and a kind whose last block comes before the last geometry is reported and
+refused, never paired. cclib's last geometry must also be the last coordinate block printed, to
+its printed digits: in a Gaussian opt+freq log cclib keeps step 1's last point while step 2's
+blocks follow step 2's own coordinates. An output that did not terminate normally (for
+Gaussian, one "Normal termination" per job step and no "Error termination"), or an optimization
+that did not converge, is refused; any other program cclib knows is refused. An output of a
+major version other than ORCA 6 or Gaussian 16 is read, and carries a warning and
+``untested_version`` in the record.
+
+Gaussian. Offered: ``mulliken``, ``hirshfeld`` and ``cm5`` (G16's combined section),
+``natural`` (Gaussian's built-in NBO 3.1 only), and the ESP fits ``mk`` and ``chelpg``; never
+the hydrogen-summed sets or ``apt``. cclib reads an ESP fit only from a log printed at ``#P``,
+so the fits are read here from the text, the ``ESP charges:`` rows: the scheme is named by the
+radii line Gaussian prints before the fit and must be one the route's ``Pop=`` asks for, and
+where cclib did read the fit the two must agree. Refused, each with its reason: CHELP,
+Hu-Lu-Yang and MK-UFF fits (no test output), a fit with radii read from the input
+(``ReadRadii``), and a dipole-constrained or point-dipole fit.
+
+An ``.xyz`` is read here, without cclib: a count, a comment line, then ``symbol x y z`` per
+atom with an optional fifth column, the charges (``column``). One frame only.
 
 Charges. There is no default: ``convert`` refuses ``charges=None`` and names what the file
 holds. ``uniform`` writes Q/N on every atom as explicit values in ``calc`` mode, never in
@@ -60,7 +76,10 @@ UNIFORM = "uniform"
 COLUMN = "column"  # an .xyz file's fifth column
 GASES = ("he", "n2")
 RECORD_SUFFIX = ".import.json"
-RECORD_FORMAT = 1
+RECORD_FORMAT = 2  # 2: source.untested_version; source.route for a Gaussian output
+
+# The major version each program's outputs are tested on; another imports with a warning.
+TESTED = {"ORCA": "6", "Gaussian": "16"}
 
 # The heading of each block cclib keys, as cclib's ORCA parser matches it (a line prefix).
 ORCA_HEADINGS = {
@@ -71,8 +90,31 @@ ORCA_HEADINGS = {
 }
 ORCA_COORDINATES = "CARTESIAN COORDINATES (ANGSTROEM)"
 
+# Gaussian: the blocks offered from cclib, by the line prefixes its parser triggers on, and
+# no others (not the *_sum sets, not apt). The ESP fits are read from the text here (see
+# _gaussian_esp), because cclib reads them only from a log printed at #P.
+GAUSSIAN_HEADINGS = {
+    "mulliken": (" Mulliken charges:", " Mulliken atomic charges:",
+                 " Mulliken charges and spin densities:"),
+    "hirshfeld": " Hirshfeld charges, spin densities, dipoles, and CM5 charges",
+    "cm5": " Hirshfeld charges, spin densities, dipoles, and CM5 charges",
+    "natural": " Summary of Natural Population Analysis:",
+}
+GAUSSIAN_COORDINATES = ("Standard orientation:", "Input orientation:", "Z-Matrix orientation:")
+GAUSSIAN_ESP = " ESP charges:"
+GAUSSIAN_NBO = "Gaussian NBO Version 3.1"
+# The ESP schemes, by the radii line Gaussian prints before the fit and by the Pop= option
+# that asks for it. mk and chelpg are offered; the rest are recognized and refused.
+ESP_RADII = {"Merz-Kollman": "mk", "Breneman": "chelpg", "Francl": "chelp",
+             "Hu-Lu-Yang": "hly", "UFF": "mkuff"}
+ESP_POP = {"mk": "mk", "merzkollman": "mk", "esp": "mk", "chelpg": "chelpg", "chelp": "chelp",
+           "hly": "hly", "hlygat": "hly", "mkuff": "mkuff"}
+ESP_UNTESTED = {"chelp": "CHELP", "hly": "Hu-Lu-Yang", "mkuff": "Merz-Kollman with UFF radii"}
+
 _SYMBOL = re.compile(r"[A-Za-z]{1,2}")
 _LABEL_UNSAFE = re.compile(r"[^\x21-\x7e]")
+_ESP_ROW = re.compile(r"^\s+(\d+)\s+([A-Z][a-z]?)\s+(-?\d+\.\d+)\s*$")
+_POP = re.compile(r"\bpop(?:ulation)?\s*=\s*(\([^)]*\)|[\w-]+)", re.I)
 
 
 class StructureError(ValueError):
@@ -92,6 +134,7 @@ class Structure:
     unpaired: dict[str, str]  # each block printed but refused: key -> why
     net_charge: int | None  # the charge the output was computed at; None for an .xyz
     details: dict  # what else the record carries: route keywords, input file name, comment
+    warnings: tuple[str, ...] = ()  # what the import takes but the user should hear about
 
     @property
     def choices(self) -> tuple[str, ...]:
@@ -193,30 +236,32 @@ def _read_output(path: Path, sha: str, data: bytes) -> Structure:
     finally:
         logger.setLevel(level)
     name = type(log).__name__ if log is not None else None
-    if name == "Gaussian":
-        log.inputfile.close()
-        raise StructureError(f"{path}: a Gaussian output; Gaussian outputs are not yet "
-                             "supported. ORCA outputs and .xyz files are")
-    if name != "ORCA":
+    if name not in TESTED:
         if log is not None:
             log.inputfile.close()
         raise StructureError(f"{path}: " + (f"a {name} output" if name else
                                             "not an output of a program cclib recognizes, "
                                             "nor an .xyz")
-                             + "; ORCA outputs and .xyz files are supported")
+                             + "; ORCA and Gaussian outputs and .xyz files are supported")
     reader = f"cclib {cclib.__version__}"
     try:
         out = log.parse()
     except Exception as e:
-        raise StructureError(f"{path}: {reader} could not read this ORCA output "
+        raise StructureError(f"{path}: {reader} could not read this {name} output "
                              f"({type(e).__name__}: {e})") from None
     finally:
         log.inputfile.close()
+    lines = data.decode("utf-8", errors="replace").splitlines()
 
     meta = out.metadata
-    if not meta.get("success"):
-        raise StructureError(f"{path}: ORCA did not terminate normally; the last geometry and "
-                             "charges may be from an unfinished step")
+    if name == "ORCA":
+        version = meta.get("package_version")
+        if not meta.get("success"):
+            raise StructureError(f"{path}: ORCA did not terminate normally; the last geometry "
+                                 "and charges may be from an unfinished step")
+    else:
+        version = _gaussian_version(meta.get("package_version"))
+        _gaussian_terminated(path, lines)
     if hasattr(out, "geovalues") and not getattr(out, "optdone", False):
         raise StructureError(f"{path}: the optimization did not converge; the last geometry "
                              "is not a stationary point")
@@ -230,29 +275,175 @@ def _read_output(path: Path, sha: str, data: bytes) -> Structure:
     coordinates = tuple(tuple(float(v) for v in xyz) for xyz in out.atomcoords[-1])
 
     # Where each block is printed, by the headings cclib's parser triggers on.
-    last_geometry, last_block = -1, {}
-    for i, line in enumerate(data.decode("utf-8", errors="replace").splitlines()):
-        if line.startswith(ORCA_COORDINATES):
+    headings = ORCA_HEADINGS if name == "ORCA" else GAUSSIAN_HEADINGS
+    last_geometry, last_block, nbo = -1, {}, -1
+    for i, line in enumerate(lines):
+        if (line.startswith(ORCA_COORDINATES) if name == "ORCA"
+                else line.strip() in GAUSSIAN_COORDINATES):
             last_geometry = i
-        for key, heading in ORCA_HEADINGS.items():
+        elif GAUSSIAN_NBO in line and name == "Gaussian":
+            nbo = i
+        for key, heading in headings.items():
             if line.startswith(heading):
                 last_block[key] = i
     if last_geometry < 0:
-        raise StructureError(f"{path}: no {ORCA_COORDINATES} block")
+        raise StructureError(f"{path}: no coordinate block")
+    _check_coordinates(path, lines, name, out.atomcoords[-1])
+
     charges, unpaired = {}, {}
-    for key, values in getattr(out, "atomcharges", {}).items():
-        if key not in last_block:
+    found = getattr(out, "atomcharges", {})
+    for key, values in found.items():
+        if key not in headings:
+            if name == "ORCA":
+                unpaired[key] = "the import cannot place its block in the file"
+            continue
+        if last_block.get(key, -1) < 0:
             unpaired[key] = "the import cannot place its block in the file"
         elif last_block[key] < last_geometry:
             unpaired[key] = ("its last block is printed before the last geometry, so it "
                              "belongs to an earlier one")
         elif len(values) != n:
             unpaired[key] = f"it has {len(values)} values for {n} atoms"
+        elif key == "natural" and not last_geometry < nbo < last_block[key]:
+            unpaired[key] = ("it is not from Gaussian's built-in NBO 3.1, the only NBO program "
+                             "the import is tested on")
         else:
             charges[key] = tuple(float(q) for q in values)
-    details = {k: meta[k] for k in ("keywords", "input_file_name") if k in meta}
-    return Structure(path, sha, "ORCA", meta.get("package_version"), reader, symbols,
-                     coordinates, charges, unpaired, int(out.charge), details)
+    if name == "Gaussian":
+        route = _gaussian_route(lines)
+        _gaussian_esp(lines, route, symbols, last_geometry, found, charges, unpaired)
+        details = {"route": route} if route else {}
+    else:
+        details = {k: meta[k] for k in ("keywords", "input_file_name") if k in meta}
+    tested = version is not None and version.split(".")[0].split()[0] == TESTED[name]
+    details["untested_version"] = not tested
+    warned = () if tested else (
+        f"{path.name} is from {name} {version or '(no version printed)'}; the import is tested "
+        f"on {name} {TESTED[name]} outputs, so check the charges it writes against the output",)
+    return Structure(path, sha, name, version, reader, symbols, coordinates, charges, unpaired,
+                     int(out.charge), details, warned)
+
+
+def _gaussian_version(package_version: str | None) -> str | None:
+    """cclib's ``2016+B.01`` as Gaussian names it, ``16 Rev. B.01``."""
+    if not package_version or "+" not in package_version:
+        return package_version
+    year, revision = package_version.split("+", 1)
+    return f"{year[2:]} Rev. {revision}"
+
+
+def _gaussian_terminated(path: Path, lines: list[str]) -> None:
+    """One "Normal termination" for each job step and no "Error termination". cclib's success
+    flag is set by any normal termination, so a two-step job cut off in step 2 reads as one."""
+    if any(line.startswith(" Error termination") for line in lines):
+        raise StructureError(f"{path}: Gaussian stopped with an error termination; the last "
+                             "geometry and charges may be from an unfinished step")
+    steps = 1 + sum(line.startswith(" Link1:  Proceeding to internal job step") for line in lines)
+    normal = sum(line.startswith(" Normal termination of Gaussian") for line in lines)
+    if normal < steps:
+        raise StructureError(f"{path}: {normal} of {steps} job step"
+                             f"{'s' if steps > 1 else ''} terminated normally; the last "
+                             "geometry and charges may be from an unfinished step")
+
+
+def _gaussian_route(lines: list[str]) -> str:
+    """The route of the job as given: the first ``#`` section, its lines joined."""
+    for i, line in enumerate(lines):
+        if line.startswith(" #"):
+            parts = []
+            for s in lines[i:]:
+                if s.startswith(" ---"):
+                    break
+                parts.append(s[1:])
+            return "".join(parts).strip()
+    return ""
+
+
+def _check_coordinates(path: Path, lines: list[str], name: str, xyz) -> None:
+    """cclib's last geometry must be the last coordinate block printed, to its printed digits:
+    in a Gaussian two-step job cclib keeps step 1's last point, and step 2's blocks belong to
+    the geometry step 2 printed."""
+    if name == "ORCA":
+        starts = [i for i, s in enumerate(lines) if s.startswith(ORCA_COORDINATES)]
+        first, end, fields = 2, (lambda s: not s.strip()), slice(1, 4)
+    else:
+        kind = ("Standard orientation:",) if any(
+            s.strip() == "Standard orientation:" for s in lines) else GAUSSIAN_COORDINATES
+        starts = [i for i, s in enumerate(lines) if s.strip() in kind]
+        first, end, fields = 5, (lambda s: s.startswith(" ---")), slice(3, 6)
+    rows = []
+    for s in lines[starts[-1] + first:]:
+        if end(s):
+            break
+        t = s.split()
+        if name == "Gaussian" and t[1] == "-1":  # a dummy atom, which cclib leaves out
+            continue
+        rows.append(t[fields])
+    if len(rows) != len(xyz) or any(
+            abs(float(p) - float(v)) > 0.5 * 10.0 ** -len(p.partition(".")[2]) + 1e-12
+            for printed, value in zip(rows, xyz, strict=True)
+            for p, v in zip(printed, value, strict=True)):
+        raise StructureError(f"{path}: the last geometry the reader keeps is not the last "
+                             "geometry printed, so the charges after it cannot be paired")
+
+
+def _gaussian_esp(lines: list[str], route: str, symbols: tuple[str, ...], last_geometry: int,
+                  found: dict, charges: dict, unpaired: dict) -> None:
+    """The ESP fits, read from the text: the last block of each scheme that follows the last
+    geometry, the scheme named from the radii line printed before the block and checked against
+    the route's Pop= options. ReadRadii, a dipole-constrained fit and the schemes without a
+    test file are refused; where cclib read the same fit (a log printed at #P), they agree."""
+    asked = {ESP_POP[o] for m in _POP.finditer(route)
+             for o in re.split(r"[,()\s]+", m[1].lower()) if o in ESP_POP}
+    read_radii = "readradii" in route.lower().replace(" ", "")
+    last, scheme, replaced, dipole = {}, None, False, False
+    for i, line in enumerate(lines):
+        if line.startswith(" Read replacement radii"):
+            replaced = True
+        elif line.rstrip().endswith("radii used.") or (
+                scheme is None and "Potential Derived Charges using" in line):
+            scheme = next((k for r, k in ESP_RADII.items() if r in line), scheme)
+        elif "dipole moment will be constrained" in line or "and point dipoles" in line:
+            dipole = True
+        elif line.rstrip() == GAUSSIAN_ESP or (line.startswith(GAUSSIAN_ESP[:-1])
+                                                and "Point Dipoles" in line):
+            key = scheme or (next(iter(asked)) if len(asked) == 1 else "esp")
+            last[key] = (i, scheme, replaced or read_radii, dipole, line.rstrip() == GAUSSIAN_ESP)
+            scheme, replaced, dipole = None, False, False
+    for key, (i, scheme, replaced, dipole, plain) in last.items():
+        q, why = [], None
+        for s in lines[i + 2:i + 2 + len(symbols)]:
+            m = _ESP_ROW.match(s)
+            if not m:
+                break
+            q.append((m[2], float(m[3])))
+        if i < last_geometry:
+            why = ("its last block is printed before the last geometry, so it belongs to an "
+                   "earlier one")
+        elif replaced:
+            why = "the fit used radii read from the input (ReadRadii), which the import refuses"
+        elif dipole or not plain:
+            why = ("the fit constrains the dipole moment or fits point dipoles, which the import "
+                   "refuses")
+        elif scheme is None:
+            why = "no radii line before the block names the ESP scheme"
+        elif scheme not in asked:
+            why = (f"the radii line names {scheme}, and the route asks for "
+                   f"{', '.join(sorted(asked)) or 'no ESP fit'}")
+        elif scheme in ESP_UNTESTED:
+            why = f"{ESP_UNTESTED[scheme]} fits are not among the import's tested outputs"
+        elif len(q) != len(symbols) or [s for s, _ in q] != list(symbols):
+            why = f"the import read {len(q)} rows for {len(symbols)} atoms in the geometry's order"
+        else:
+            theirs = found.get({"mk": "esp", "chelpg": "chelpg"}[scheme])
+            ours = tuple(v for _, v in q)
+            if theirs is not None and (len(theirs) != len(ours) or max(
+                    abs(a - b) for a, b in zip(theirs, ours, strict=True)) > 5e-7):
+                why = "cclib reads other values for the same fit"
+            else:
+                charges[key] = ours
+        if why:
+            unpaired[key] = why
 
 
 def element_keys(symbols: tuple[str, ...] | list[str],

@@ -1,12 +1,15 @@
-"""The inputs: ``.mfj`` files, or ORCA outputs and ``.xyz`` files the window imports.
+"""The inputs: ``.mfj`` files, or ORCA and Gaussian outputs and ``.xyz`` files the window
+imports.
 
 Every file is read on the thread pool as it is added: an ``.mfj`` for its atom and set counts
-(the estimate's), anything else through ``mobcal.io.structure.read`` (cclib for an ORCA output,
-whose first import takes seconds). An import's row shows its charge choice: CHELPG preselected
-when the file holds it, otherwise nothing until the user picks, and ``uniform`` (Q/N, written
-as ``calc``) offered last and never preselected. An ``.xyz`` asks for the ion's net charge. At
-Run the import is written as ``mobcal import`` writes it, ``.mfj`` and ``.import.json``, into
-``imported/`` in the results folder, so the study folder holds what was run.
+(the estimate's), anything else through ``mobcal.io.structure.read`` (cclib for an ORCA or
+Gaussian output, whose first import takes seconds). An import's row shows its charge choice:
+CHELPG preselected when the file holds it, otherwise nothing until the user picks, and
+``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for
+the ion's net charge; an output of a version the import is not tested on reads "ready (untested
+version)", with the warning in its tooltip. At Run the import is written as ``mobcal import``
+writes it, ``.mfj`` and ``.import.json``, into ``imported/`` in the results folder, so the study
+folder holds what was run.
 """
 
 from __future__ import annotations
@@ -37,14 +40,14 @@ from mobcal.io.mfj import Mfj, MfjError
 PRESELECT = "chelpg"
 IMPORTED = "imported"
 FILTER = ("Structures (*.mfj *.xyz *.out *.log);;MOBCAL inputs (*.mfj);;"
-          "ORCA outputs (*.out *.log);;XYZ files (*.xyz);;All files (*)")
+          "ORCA and Gaussian outputs (*.out *.log);;XYZ files (*.xyz);;All files (*)")
 COLUMNS = ("File", "Atoms", "Sets", "Charges", "Net charge", "Status")
 
 
 @dataclass
 class Input:
     path: Path
-    kind: str  # "mfj", or "import" for an ORCA output or an .xyz
+    kind: str  # "mfj", or "import" for an ORCA or Gaussian output or an .xyz
     state: str = "reading"  # reading | ready | error
     error: str = ""
     atoms: int | None = None
@@ -229,10 +232,12 @@ class InputsPanel(QWidget):
                                                       str(item.sets)))
             self.table.setCellWidget(r, 3, self._charges_widget(item))
             self.table.setCellWidget(r, 4, self._net_charge_widget(item))
+            warned = " ".join(item.structure.warnings) if item.structure else ""
             status = {"reading": "reading…", "error": item.error}.get(item.state, "") \
-                or item.problem().split(": ", 1)[-1] or "ready"
+                or item.problem().split(": ", 1)[-1] \
+                or ("ready (untested version)" if warned else "ready")
             cell = QTableWidgetItem(status)
-            cell.setToolTip(item.error or item.problem())
+            cell.setToolTip(item.error or item.problem() or warned)
             self.table.setItem(r, 5, cell)
 
     def _charges_widget(self, item: Input) -> QWidget | None:

@@ -70,7 +70,8 @@ SHARED = {
     "inputs": Description(
         "The ions to run, one calculation for each input and seed.",
         cli="Paths to .mfj files, or globs.",
-        window=".mfj files run as they are; ORCA outputs and .xyz files are imported at Run, "
+        window=".mfj files run as they are; ORCA and Gaussian outputs and .xyz files are "
+               "imported at Run, "
                "into imported/ in the results folder. Add files, or drop them here."),
     "method": Description(
         "A preset of the gas, the element table, the random number generator and the six run "
@@ -128,7 +129,8 @@ SHARED = {
         "Which atomic charges the .mfj carries: a set the file holds, such as CHELPG or "
         "Mulliken, or uniform, the net charge spread evenly over the atoms.",
         cli="The keys are mulliken, lowdin, chelpg and hirshfeld for an ORCA output's "
-            "blocks, column for an .xyz file's fifth column, and uniform. Without it, the "
+            "blocks; mulliken, hirshfeld, cm5, natural, mk and chelpg for a Gaussian "
+            "output's; column for an .xyz file's fifth column; and uniform. Without it, the "
             "import lists what the file holds.",
         window="CHELPG is chosen when the file holds it; otherwise choose before the batch can "
                "run."),
@@ -156,8 +158,8 @@ WINDOW = {
                 "processors.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "
                   "it.",
-    "add_files": "Adds .mfj files or imports ORCA outputs and .xyz files. Files can also be "
-                 "dropped on the list.",
+    "add_files": "Adds .mfj files or imports ORCA and Gaussian outputs and .xyz files. Files "
+                 "can also be dropped on the list.",
     "remove_inputs": "Removes the selected inputs.",
     "choose_folder": "Chooses the results folder.",
     "net_charge_read": "Read from the output, which was computed at this charge.",

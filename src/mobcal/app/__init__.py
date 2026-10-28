@@ -7,7 +7,7 @@ lives under the seam: the methods (``mobcal.methods``), the batch and the result
 between launches), a worker thread that hands one to ``run_many`` and reports back through
 signals, and a table of what came back. Nothing runs or blocks on the UI thread: the runs are
 the driver's subprocesses, supervised from the worker thread, and reading an input (cclib for
-an ORCA output) happens on a thread pool.
+an ORCA or Gaussian output) happens on a thread pool.
 
     uv run mobcal gui
 """
