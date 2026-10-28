@@ -7,15 +7,15 @@ results folder, one per study, remembered. The method shown is the one the field
 *Custom (from …)* once a field moves off the method picked; the runs' records say the same.
 Under the form, the estimate for the batch as it stands.
 
-Above, a menu bar: File ▸ Exit, Batch ▸ Run and Stop (each one ``QAction`` that owns its text
-and enabled state), Help ▸ About. Right, the queue, the progress and the results. Run starts
-the batch, or appends it to the queue while one is running; the queue is reorderable, starts
-its next batch when the running one ends, and is saved on every change and offered back at the
-next launch. Stop asks, then ends every process of the running batch. Progress is runs done
-of N, each running run's elapsed time (and blocks written, for a split run), against the
-estimate. Results are one row per ion and gas, TM headline, mean ± s.d. over seeds, with Copy,
-Save CSV, Show in folder, Open output and Copy methods text. Closing asks, then stops the
-running batch; the queue stays saved.
+Above, a menu bar: File ▸ Exit, Batch ▸ Run, Stop and Resume queue (each one ``QAction`` that
+owns its text and enabled state), Help ▸ About; the queue's Add batch button is Run. Right, the
+queue, the progress and the results. Run starts the batch, or appends it to the queue while one
+is running; the queue is reorderable, starts its next batch when the running one ends, and is
+saved on every change and offered back at the next launch. Stop asks, then ends every process
+of the running batch. Progress is runs done of N, each running run's elapsed time (and blocks
+written, for a split run), against the estimate. Results are one row per ion and gas, TM
+headline, mean ± s.d. over seeds, with Copy, Save CSV, Show in folder, Open output and Copy
+methods text. Closing asks, then stops the running batch; the queue stays saved.
 
 Every control and column header has a tooltip from ``mobcal.options``; a control that an
 option of ``mobcal run`` also sets shows that option's description, so the two cannot drift.
@@ -662,9 +662,18 @@ class MainWindow(QMainWindow):
         self.queue.setMaximumHeight(120)
         set_tip("queue", self.queue)
         row = QHBoxLayout()
+        # Run, as a button where the queue is: it keeps its own text while Run's says "Add to
+        # queue", and follows Run's enabled state, so it is greyed out when the form cannot
+        # make a batch.
+        self.add_batch_button = QPushButton("Add batch")
+        set_tip("add_batch", self.add_batch_button)
+        self.add_batch_button.setEnabled(self.run_action.isEnabled())
+        self.run_action.enabledChanged.connect(self.add_batch_button.setEnabled)
+        self.add_batch_button.clicked.connect(self.run_action.trigger)
         remove = QPushButton("Remove")
         set_tip("remove_queued", remove)
         remove.clicked.connect(self._remove_queued)
+        row.addWidget(self.add_batch_button)
         row.addWidget(remove)
         row.addStretch(1)
         lay.addWidget(self.queue)

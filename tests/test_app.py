@@ -249,6 +249,22 @@ def test_the_run_and_stop_actions_track_the_batch(window, qtbot, tmp_path):
     assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
 
 
+def test_add_batch_is_run_where_the_queue_is(window, qtbot, tmp_path):
+    w = window
+    b = w.add_batch_button
+    assert not b.isEnabled() and not w.run_action.isEnabled()  # no input yet
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    assert b.isEnabled()
+    b.click()  # nothing running: it starts
+    assert w.worker is not None and w.queue.count() == 0
+    b.click()  # running: it queues
+    assert w.queue.count() == 1 and b.text() == "Add batch"
+    w.queue.clear()
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w.stop_action.trigger()  # answered yes
+    wait_idle(qtbot, w)
+
+
 # --- the menus and the colours -------------------------------------------------------------
 
 def test_the_menus_hold_the_actions(window):

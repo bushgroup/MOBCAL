@@ -154,6 +154,8 @@ WINDOW = {
     "net_charge_read": "Read from the output, which was computed at this charge.",
     "queue": "Batches waiting to run, in the order they start; each starts when the one before "
              "it ends. Drag a batch to move it.",
+    "add_batch": "Makes a batch of the inputs and the fields to the left, as Batch, Run does. "
+                 "It starts at once when nothing is running, and otherwise waits in the queue.",
     "remove_queued": "Removes the selected batches from the queue.",
     "progress": "Runs done of the batch.",
     "running": "Each running run and its time so far, and for a divided run, its blocks of "
