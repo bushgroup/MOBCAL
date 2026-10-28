@@ -63,9 +63,10 @@ to check an installation with `mobcal self-check`.
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
   ([`docs/settings.md`](docs/settings.md)), the methods and the method-file format
   ([`docs/methods.md`](docs/methods.md)), writing an input from an ORCA or Gaussian output or
-  an `.xyz` file ([`docs/import.md`](docs/import.md)), and how to reproduce a calculation of the
-  2012 release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
-  ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
+  an `.xyz` file ([`docs/import.md`](docs/import.md)), running the quantum chemistry for an
+  import and how much the charges move the cross section ([`docs/qm.md`](docs/qm.md)), and how
+  to reproduce a calculation of the 2012 release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md))
+  and of the 2000 helium release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
 
 ## Building the Fortran
 

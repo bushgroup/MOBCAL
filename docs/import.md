@@ -9,7 +9,10 @@ record of where every number came from. The written file has one coordinate set,
 form both 2012 programs read the same way.
 
 This page describes what the import reads, how the charges are chosen, and what it refuses. It
-does not choose a level of theory or a charge scheme for you.
+does not choose a level of theory or a charge scheme for you;
+[Running the quantum chemistry for an import](qm.md) gives inputs for both programs, the
+calculation behind the 2012 choline charges, and how much the choice of charges moves the cross
+section.
 
 ## The command
 
@@ -77,7 +80,8 @@ The 2012 choline input carries a charge column labelled `Choline_631G++dp_pop` a
 about where it came from. `--charges mk` on `choline_2012_mk.log`, a B3LYP/6-31++G(d,p) single
 point at the 2012 coordinates, reproduces that column to within 0.005 e on every atom (root mean
 square 0.002 e), whereas the CHELPG fit at the same geometry and level is 0.17 e away on one atom.
-The 2012 column is therefore a Merz-Kollman fit.
+The 2012 column is therefore a Merz-Kollman fit
+([The 2012 choline charges](qm.md#the-2012-choline-charges)).
 
 The net charge Q is the charge the calculation was run at. `--net-charge Q` may be given as
 well, and the import refuses when the two disagree. An `.xyz` file carries no net charge, so

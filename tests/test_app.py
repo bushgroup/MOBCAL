@@ -466,10 +466,10 @@ def test_a_link_outside_the_guide_opens_on_github_at_the_version(window, monkeyp
     h.open("mobcal-2012.md")
     h.follow(QUrl("../fortran/README.md"))
     h.follow(QUrl("https://github.com/bushgroup/MOBCAL-2012"))
-    h.follow(QUrl("qm.md#orca"))  # a page this copy does not carry
+    h.follow(QUrl("later.md#orca"))  # a page this copy does not carry
     blob = f"{methods.REPOSITORY}/blob/{docs.ref()}"
     assert opened == [f"{blob}/fortran/README.md", "https://github.com/bushgroup/MOBCAL-2012",
-                      f"{blob}/docs/qm.md#orca"]
+                      f"{blob}/docs/later.md#orca"]
     assert h.current == "mobcal-2012.md"
 
 
