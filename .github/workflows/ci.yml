@@ -307,8 +307,13 @@ jobs:
           if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
             echo "tag ${GITHUB_REF_NAME} does not name the version in pyproject.toml, ${version}"; exit 1
           fi
-          ls -l release/
+          # The Windows artifact keeps its installer/ folder: take the files, wherever they sit.
+          mapfile -t packages < <(find release -type f | sort)
+          ls -l "${packages[@]}"
+          if [ "${#packages[@]}" -ne 3 ]; then
+            echo "expected three packages, found ${#packages[@]}"; exit 1
+          fi
           pre=$(python3 -c "import re, sys; print('--prerelease' if re.search(r'(a|b|rc|dev)[0-9]+', sys.argv[1]) else '')" "$version")
-          gh release create "${GITHUB_REF_NAME}" release/* --draft $pre \
+          gh release create "${GITHUB_REF_NAME}" "${packages[@]}" --draft $pre \
             --title "MOBCAL ${version}" \
             --notes "Installers for Windows, macOS (Apple silicon) and Linux (x86-64). How to install and check them: docs/install.md."
