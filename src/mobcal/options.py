@@ -132,8 +132,8 @@ SHARED = {
             "blocks; mulliken, hirshfeld, cm5, natural, mk and chelpg for a Gaussian "
             "output's; column for an .xyz file's fifth column; and uniform. Without it, the "
             "import lists what the file holds.",
-        window="CHELPG is chosen when the file holds it; otherwise choose before the batch can "
-               "run."),
+        window="An ESP fit is chosen when the file holds one, Merz-Kollman (mk) before CHELPG; "
+               "otherwise choose before the batch can run."),
     "net_charge": Description(
         "The ion's net charge, in elementary charges.",
         cli="An .xyz file needs it; for an output it must agree with the charge the output was "

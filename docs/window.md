@@ -23,11 +23,12 @@ mobcal gui
 Add files with Add files, or drop them on the list. An `.mfj` file runs as it is. An ORCA or
 Gaussian output or an `.xyz` file is imported as `mobcal import` imports it ([Importing a structure
 and its charges](import.md)), and its row shows the charges the import will use. When an output
-holds CHELPG charges they are selected; otherwise the row asks for a choice before the batch can
-run. `uniform`, the net charge spread evenly over the atoms, is always offered and never selected
-for you. An `.xyz` file does not carry the ion's net charge, so its row asks for it. At Run each
-import is written, `.mfj` and `.import.json`, into `imported/` in the results folder, so the folder
-holds the file each run read.
+holds an ESP fit it is selected, the Merz-Kollman fit (`mk`, the scheme of the 2012 choline charges)
+before CHELPG; otherwise the row asks for a choice before the batch can run. `uniform`, the net
+charge spread evenly over the atoms, is always offered and never selected for you. An `.xyz` file
+does not carry the ion's net charge, so its row asks for it. At Run each import is written, `.mfj`
+and `.import.json`, into `imported/` in the results folder, so the folder holds the file each run
+read.
 
 ## Method, Basics and Advanced
 

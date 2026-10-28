@@ -1,15 +1,15 @@
 """The inputs: ``.mfj`` files, or ORCA and Gaussian outputs and ``.xyz`` files the window
 imports.
 
-Every file is read on the thread pool as it is added: an ``.mfj`` for its atom and set counts
-(the estimate's), anything else through ``mobcal.io.structure.read`` (cclib for an ORCA or
-Gaussian output, whose first import takes seconds). An import's row shows its charge choice:
-CHELPG preselected when the file holds it, otherwise nothing until the user picks, and
-``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for
-the ion's net charge; an output of a version the import is not tested on reads "ready (untested
-version)", with the warning in its tooltip. At Run the import is written as ``mobcal import``
-writes it, ``.mfj`` and ``.import.json``, into ``imported/`` in the results folder, so the study
-folder holds what was run.
+Every file is read on the thread pool as it is added: an ``.mfj`` for its atom and set counts (the
+estimate's), anything else through ``mobcal.io.structure.read`` (cclib for an ORCA or Gaussian
+output, whose first import takes seconds). An import's row shows its charge choice: an ESP fit
+preselected when the file holds one (``PRESELECT``), otherwise nothing until the user picks, and
+``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for the
+ion's net charge; an output of a version the import is not tested on reads "ready (untested
+version)", with the warning in its tooltip. At Run the import is written as ``mobcal import`` writes
+it, ``.mfj`` and ``.import.json``, into ``imported/`` in the results folder, so the study folder
+holds what was run.
 """
 
 from __future__ import annotations
@@ -37,7 +37,9 @@ from mobcal.app import tip
 from mobcal.io import structure
 from mobcal.io.mfj import Mfj, MfjError
 
-PRESELECT = "chelpg"
+# The ESP fit preselected when the file holds it, first found: Merz-Kollman, the scheme of the
+# 2012 choline column, then CHELPG.
+PRESELECT = ("mk", "chelpg")
 IMPORTED = "imported"
 FILTER = ("Structures (*.mfj *.xyz *.out *.log);;MOBCAL inputs (*.mfj);;"
           "ORCA and Gaussian outputs (*.out *.log);;XYZ files (*.xyz);;All files (*)")
@@ -199,8 +201,7 @@ class InputsPanel(QWidget):
         else:
             item.state, item.structure = "ready", got
             item.atoms, item.sets = len(got.symbols), 1
-            if PRESELECT in got.charges:
-                item.charges = PRESELECT
+            item.charges = next((k for k in PRESELECT if k in got.charges), None)
         self._redraw()
         self.changed.emit()
 

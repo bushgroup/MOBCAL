@@ -640,6 +640,22 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     assert rec["charges"]["choice"] == "chelpg"
 
 
+def test_a_gaussian_log_preselects_mk_then_chelpg_and_shows_an_untested_version(window, qtbot,
+                                                                                tmp_path):
+    w = window
+    g16 = ORCA.parent / "gaussian"
+    log = g16 / "choline_2012_mk" / "choline_2012_mk.log"
+    g09 = tmp_path / "g09.log"
+    g09.write_text(log.read_text(encoding="ascii").replace("ES64L-G16RevB.01", "ES64L-G09RevD.01"),
+                   encoding="ascii", newline="\n")
+    add(qtbot, w, log, g16 / "choline_optfreq" / "choline_optfreq.log", g09)
+    mk, optfreq, old = w.inputs.items
+    assert (mk.charges, optfreq.charges, old.charges) == ("mk", "chelpg", "mk")
+    assert w.inputs.table.item(0, 5).text() == "ready"
+    assert w.inputs.table.item(2, 5).text() == "ready (untested version)"
+    assert "tested on Gaussian 16" in w.inputs.table.item(2, 5).toolTip()
+
+
 def test_an_xyz_asks_for_its_net_charge(window, qtbot):
     w = window
     add(qtbot, w, ORCA / "choline_opt" / "choline_opt.xyz")
