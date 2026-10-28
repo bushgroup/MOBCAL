@@ -1,5 +1,5 @@
-"""What the window remembers between launches: the results folder, the method, the geometry,
-and the queue file's place.
+"""What the window remembers between launches: the results folder, the method, the method files
+in the Method list (by path and SHA-256), the geometry, and the queue file's place.
 
 ``QSettings`` under an explicit organisation and application name, so the key does not move
 when the executable is renamed. Everything here is a convenience: a window that has forgotten
@@ -9,6 +9,7 @@ that the command line could read it too.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QStandardPaths
@@ -38,6 +39,19 @@ class Store:
     @method.setter
     def method(self, value: str) -> None:
         self._s.setValue("method", value)
+
+    @property
+    def methods(self) -> list[tuple[str, str]]:
+        """The method files in the Method list, as (path, SHA-256) when each was added."""
+        try:
+            doc = json.loads(str(self._s.value("methods", "") or "[]"))
+            return [(str(p), str(s)) for p, s in doc]
+        except (ValueError, TypeError):
+            return []
+
+    @methods.setter
+    def methods(self, value: list[tuple[str, str]]) -> None:
+        self._s.setValue("methods", json.dumps([list(v) for v in value]))
 
     @property
     def input_dir(self) -> str:

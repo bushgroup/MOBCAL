@@ -21,8 +21,8 @@ voice of ``docs/``: whole sentences, numbers where an adjective would go, no das
 punctuation.
 
     from mobcal import options
-    options.cli_help("gas", default="he")
-    options.tooltip("gas")
+    options.cli_help("seeds", default="5013489")
+    options.tooltip("seeds")
 """
 
 from __future__ import annotations
@@ -47,13 +47,17 @@ def set_names() -> str:
                      for n in parameters.names())
 
 
-# What each method is, for the --method help.
+# What each shipped method is, for the --method help.
 _METHOD = {
-    methods.CURRENT: "the 2012 element tables and settings under Philox4x32-10",
-    "2012": "the 2012 release's calculation, the same under RANLUX",
-    "2000": "the 2000 helium release's, its table at 298 K and 25 trajectories per block under "
-            "RANLUX, for helium only",
+    "2012-he": "the 2012 release's calculation in helium, its element table and settings under "
+               "RANLUX",
+    "2012-n2": "the same in nitrogen",
+    "2012-philox-he": "the 2012 helium table and settings under Philox4x32-10",
+    "2012-philox-n2": "the same in nitrogen",
+    "2000-he": "the 2000 helium release's calculation, its table at 298 K and 25 trajectories "
+               "per block under RANLUX",
 }
+assert set(_METHOD) == set(methods.METHODS)
 
 # How the batch divides the processors when it chooses (mobcal.estimate.allocate), shared by
 # --split auto and the window's check box.
@@ -64,27 +68,26 @@ AUTO_RULE = ("chooses the runs in flight and the processes per run from the run 
 
 SHARED = {
     "inputs": Description(
-        "The ions to run, one calculation for each input, gas and seed.",
+        "The ions to run, one calculation for each input and seed.",
         cli="Paths to .mfj files, or globs.",
         window=".mfj files run as they are; ORCA outputs and .xyz files are imported at Run, "
                "into imported/ in the results folder. Add files, or drop them here."),
     "method": Description(
-        "A preset of the element table, the random number generator and the six run settings.",
+        "A preset of the gas, the element table, the random number generator and the six run "
+        "settings.",
         cli="The methods are " + "; ".join(f"{k}, {v}" for k, v in _METHOD.items())
-            + ". A table, generator or setting given beside it overrides it, and the run "
-            "records custom.",
+            + "; or the path of a method file. A table, generator or setting given beside it "
+            "overrides it, and the run records custom.",
         window="A field changed afterwards makes the method Custom."),
-    "gas": Description(
-        "The buffer gas, helium or nitrogen.",
-        cli="With both, every ion runs in each."),
     "parameters": Description(
         "The element table, which gives each atom of the ion its mass and its Lennard-Jones "
         "and hard-sphere parameters in the gas: a table the package ships, or a TOML file of "
         "one's own for one gas.",
-        cli=f"A path, or a shipped table by name: {set_names()}.",
-        window="Other file… opens a table of one's own when one gas is chosen."),
+        cli=f"A path to a table for the method's gas, or a shipped table by name: "
+            f"{set_names()}.",
+        window="Other file… opens a table of one's own for the gas chosen."),
     "seeds": Description(
-        f"One run of each ion in each gas for every seed; the 2012 seed is {DEFAULT_SEED}.",
+        f"One run of each ion for every seed; the 2012 seed is {DEFAULT_SEED}.",
         cli="A list of integers separated by commas.",
         window=f"The seeds are {DEFAULT_SEED} and each integer after it. With more than one, "
                "each cross section is the mean ± s.d. over them."),
@@ -143,6 +146,12 @@ SHARED = {
 }
 
 WINDOW = {
+    "gas": "The buffer gas, helium or nitrogen. It is part of the method, so changing it "
+           "changes the method.",
+    "load_method": "Adds a method file to the Method list, remembered at the next launch, and "
+                   "fills the fields from it.",
+    "save_method": "Writes the gas, the element table, the generator and the six run settings "
+                   "to a method file, and adds it to the Method list.",
     "advanced": "Shows the generator, the five sampling counts and how the batch uses the "
                 "processors.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "

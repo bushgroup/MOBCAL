@@ -23,8 +23,9 @@ To calculate a cross section as the 2000 release would have, run the helium prog
 uv run mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
 ```
 
-`--method 2000 --seeds 5013486` is the same command in fewer words, and the window's MOBCAL 2000
-method is the same again; the run records its method as `2000` whichever way it was asked for.
+`--method 2000-he --seeds 5013486` is the same command in fewer words, and the window's MOBCAL
+2000 (He) method is the same again; the run records its method as `2000-he` whichever way it was
+asked for ([methods.md](methods.md)).
 
 Each option sets one thing to its value in the release's example run, where the default run
 would use the 2012 value:

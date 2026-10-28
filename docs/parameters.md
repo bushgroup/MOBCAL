@@ -209,12 +209,12 @@ your own by path, pass `--parameters`:
 
 ```
 uv run mobcal run ion.mfj --parameters 2000
-uv run mobcal run choline.mfj --gas n2 --parameters my_nitrogen.toml
+uv run mobcal run choline.mfj --method 2012-philox-n2 --parameters my_nitrogen.toml
 ```
 
 The shipped sets are `2012`, for both gases and the default, and `2000`, for helium. A set's name
-stands for each gas's set of that name, so `--gas both --parameters 2000` is refused, because
-nitrogen has no `2000` set. Anything that is not a set's name is read as a path; a file of your
+stands for the set of that name in the method's gas, so `--method 2012-n2 --parameters 2000` is
+refused, because nitrogen has no `2000` set. Anything that is not a set's name is read as a path; a file of your
 own called `2000` is named with its directory, as `./2000`. A file is checked the same way as the
 shipped ones, and a file for the other gas is refused. `mobcal render-parameters` takes the same
 names and paths. The run's record names the table it used, by path, name and hash, and says

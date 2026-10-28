@@ -1,0 +1,15 @@
+# MOBCAL 2012 with Philox (He): the 2012 element table and run settings in helium, with random
+# numbers from Philox4x32-10, whose divided runs give the serial result exactly. The default
+# method of mobcal run and of the window. docs/methods.md describes the format.
+
+format = 1
+name = "MOBCAL 2012 with Philox (He)"
+gas = "he"
+parameters = "2012"
+generator = "philox"
+temperature = 301
+imp = 1000
+itn = 10
+inp = 40
+inum = 250000
+inor = 30

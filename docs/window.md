@@ -2,7 +2,8 @@
 
 `mobcal gui` opens a window that runs the same calculations as `mobcal run`, for anyone who
 would rather not use a terminal. It takes `.mfj` files, or ORCA outputs and `.xyz` files that it
-imports, runs them in helium, nitrogen or both under one of three named methods, shows how long
+imports, runs them in helium or nitrogen under one of five shipped methods or a method file of
+one's own, shows how long
 the batch will take and how far it has got, and gives a table of cross sections with the run
 folders, the records and a methods paragraph one click away. Everything the window does, the
 command line does too, with the same rules and the same records; this page says where, and
@@ -26,17 +27,26 @@ each run read.
 
 ## Method, Basics and Advanced
 
-Method fills every other field. **Current** is what `mobcal run` does without options: the 2012
-element tables and settings, under the Philox4x32-10 random number generator. **MOBCAL 2012** is
-the calculation of the 2012 release, the same under RANLUX ([mobcal-2012.md](mobcal-2012.md)).
-**MOBCAL 2000** is the calculation of the Jarrold group's 2000 helium release: its element
-table, 298 K and 25 trajectories per block, under RANLUX ([mobcal-2000.md](mobcal-2000.md)). It
-has no nitrogen form, so choosing nitrogen leaves it. A field changed after a method is chosen
-shows the method as *Custom (from MOBCAL 2012)*, say, and the runs record `custom`; changing it
-back restores the name. Each method equals the command line its page gives, run for run.
+Method fills every other field, the gas among them ([methods.md](methods.md)). The list holds
+the five shipped methods, **MOBCAL 2012 (He)** and **(N2)**, the calculation of the 2012 release
+under RANLUX ([mobcal-2012.md](mobcal-2012.md)); **MOBCAL 2012 with Philox (He)** and **(N2)**,
+the same tables and settings under Philox4x32-10, the helium one chosen at the first launch; and
+**MOBCAL 2000 (He)**, the calculation of the Jarrold group's 2000 helium release
+([mobcal-2000.md](mobcal-2000.md)). Below them are the method files loaded or saved, by name. A
+field changed after a method is chosen shows the method as *Custom (from MOBCAL 2012 (He))*,
+say, and the runs record `custom`; changing it back restores the name, and fields that make
+another method show that one. Changing the gas of MOBCAL 2012 (He) to N2 shows MOBCAL 2012
+(N2), whereas MOBCAL 2000 (He), which has no nitrogen form, becomes Custom. Each shipped method
+equals the command line its page gives, run for run.
 
-Basics holds the gas (He, N2, or both), the element table (the tables shipped for the gas, or a
-file of one's own for one gas, [parameters.md](parameters.md)), the number of seeds per ion, and
+File, Save method… writes the gas, element table, generator and six settings the form holds to
+a method file, asks for the name the list will show, and adds the file to the list. File, Load
+method… adds a file saved here or elsewhere and fills the fields from it. The list remembers its
+files at the next launch, and removes one that has been moved, deleted or edited since it was
+added, with a message that says which and why. `mobcal run --method PATH` runs the same file.
+
+Basics holds the gas (He or N2), the element table (the tables shipped for the gas, or a file of
+one's own for the gas, [parameters.md](parameters.md)), the number of seeds per ion, and
 the temperature. The first seed is the 2012 seed, 5013489, under every method, and each further
 seed is the next integer; with several seeds, each cross section is shown as the mean and sample
 standard deviation over them. Advanced holds the generator, the five sampling counts
@@ -64,7 +74,7 @@ first trajectory.
 
 Choose one results folder for a study. Every batch adds its run directories to it, named for the
 input, the gas, the seed and anything that differs from the default method, so that runs of
-different methods never share a directory, and `summary.csv` and `summary.json` are rewritten
+different methods never share a directory and both gases of a study can share a folder, and `summary.csv` and `summary.json` are rewritten
 after each batch to cover every run in the folder. The window remembers the folder for next
 time. When some runs of a new batch are already in the folder, complete, the window asks whether
 to skip them or run them again. It refuses to run an input whose name another input's run

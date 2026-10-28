@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None, check: bool = False) -> int:
         return rc
     w = MainWindow()
     w.show()
+    w.report_dropped_methods()
     w.offer_saved_queue()
     return app.exec()
 

@@ -25,9 +25,10 @@ method never share a directory, and one results folder can hold a whole study.
 complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
 account of itself: the package, the binary and its build, the input and its hash, the seed, the
 parameter set and its hash, the settings and where they came from, the method they make
-(``mobcal.methods``: ``current``, ``2012``, ``2000`` or ``custom``), the times, the verdict and
-the cross sections. ``run_many`` runs a list of jobs with a cap on how many are in flight,
-calls back as each lands, and returns a ``Summary`` that writes ``summary.csv`` and
+(``mobcal.methods``: a shipped method's key such as ``2012-philox-he``, the name of the method
+file the job was made from with that file's path and SHA-256, or ``custom``), the times, the
+verdict and the cross sections. ``run_many`` runs a list of jobs with a cap on how many are in
+flight, calls back as each lands, and returns a ``Summary`` that writes ``summary.csv`` and
 ``summary.json`` beside the run directories, covering every run the folder holds: the batch's
 own results and every earlier run's ``record.json``. A ``Stop`` handed to ``run_many`` ends the
 batch from another thread: no run starts after it, every process running is killed with its
@@ -97,6 +98,7 @@ POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
 # The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
 # word is the 2012 run (ranlux), so a file written by hand or shipped means what it meant in
 # 2012; a job the driver writes draws from Philox, whose split runs are exact by construction.
+# The default method, 2012-philox-he (mobcal.methods.DEFAULT), carries the same choice.
 DEFAULT_RNG = "philox"
 
 Launcher = Callable[["Job"], Sequence[str]]
@@ -116,9 +118,13 @@ class Job:
     parameters: Path | None = None  # the element table; None is the package's for the gas
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
-    # the shipped set the table is by its pin (None for any other file) and the label's part
-    # for it, both from the file's bytes when the job is made
+    # the method the job was made from, which its record names while the job's fields are the
+    # method's; None: the record names the shipped method the fields make, or custom
+    method_from: methods.Method | None = field(default=None, compare=False, repr=False)
+    # the shipped set the table is by its pin (None for any other file), its SHA-256 and the
+    # label's part for it, all from the file's bytes when the job is made
     set_name: str | None = field(default=None, init=False, compare=False, repr=False)
+    table_sha256: str | None = field(default=None, init=False, compare=False, repr=False)
     table_tag: str = field(default="", init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -138,14 +144,34 @@ class Job:
         object.__setattr__(self, "out_dir", Path(self.out_dir))
         if self.parameters is not None:
             object.__setattr__(self, "parameters", Path(self.parameters))
-        set_name, tag = _table(self.gas, self.parameters)
+        set_name, sha, tag = _table(self.gas, self.parameters)
         object.__setattr__(self, "set_name", set_name)
+        object.__setattr__(self, "table_sha256", sha)
         object.__setattr__(self, "table_tag", tag)
+
+    def _from_file(self) -> methods.Method | None:
+        """The method file the job was made from, while its fields are the file's."""
+        m = self.method_from
+        if m is None or m.shipped or not m.matches(self.gas, self.set_name, self.table_sha256,
+                                                   self.generator, self.settings):
+            return None
+        return m
 
     @property
     def method(self) -> str:
-        """The method the job's table, generator and settings make (``mobcal.methods``)."""
+        """The method the record names (``mobcal.methods``): the method file's name while the
+        job's gas, table, generator and settings are the file's, else the shipped method they
+        make, else custom."""
+        m = self._from_file()
+        if m is not None:
+            return m.key
         return methods.identify(self.gas, self.set_name, self.generator, self.settings)
+
+    @property
+    def method_file(self) -> dict | None:
+        """The method file's path and SHA-256 when the record names one, else None."""
+        m = self._from_file()
+        return m.record() if m is not None else None
 
     @property
     def label(self) -> str:
@@ -194,7 +220,8 @@ class Result:
     def record(self) -> dict:
         j = self.job
         return {"name": j.label, "input": str(j.input), "gas": j.gas, "seed": j.seed,
-                "rng": j.generator, "method": j.method, "split": j.split,
+                "rng": j.generator, "method": j.method, "method_file": j.method_file,
+                "split": j.split,
                 "settings": j.settings.record(),
                 "status": self.status,
                 "message": self.message, "returncode": self.returncode,
@@ -215,20 +242,21 @@ class Result:
         return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}"
 
 
-def _table(gas: str, path: Path | None) -> tuple[str | None, str]:
-    """The shipped set a table file is by its pin, and the label's part for it: ``""`` for the
-    gas's default set, ``-lj2000`` for another shipped set, ``-lj`` and eight hex digits of the
-    SHA-256 for any other file, ``-lj-<stem>`` for one that cannot be read (the run says why)."""
+def _table(gas: str, path: Path | None) -> tuple[str | None, str | None, str]:
+    """The shipped set a table file is by its pin, its SHA-256, and the label's part for it:
+    ``""`` for the gas's default set, ``-lj2000`` for another shipped set, ``-lj`` and eight hex
+    digits of the SHA-256 for any other file, ``-lj-<stem>`` for one that cannot be read (the
+    run says why)."""
     if path is None:
-        return parameters.DEFAULT, ""
+        return parameters.DEFAULT, parameters.SHA256[parameters.FILES[gas]], ""
     try:
         sha = hashlib.sha256(path.read_bytes()).hexdigest()
     except OSError:
-        return None, f"-lj-{path.stem}"
+        return None, None, f"-lj-{path.stem}"
     name = next((n for n, f in parameters.SETS[gas].items() if parameters.SHA256[f] == sha), None)
     if name == parameters.DEFAULT:
-        return name, ""
-    return name, f"-lj{name}" if name else f"-lj{sha[:8]}"
+        return name, sha, ""
+    return name, sha, f"-lj{name}" if name else f"-lj{sha[:8]}"
 
 
 def row(run: dict) -> dict[str, object]:
@@ -252,7 +280,8 @@ def from_record(doc: dict, run_dir: Path) -> dict:
     p = doc.get("parameters") or {}
     return {"name": doc["name"], "input": doc["input"]["path"], "gas": doc["binary"]["gas"],
             "seed": doc["mobcal_in"]["seed"], "rng": doc["mobcal_in"]["generator"],
-            "method": methods.record_method(doc), "split": doc["mobcal_in"]["split"],
+            "method": methods.record_method(doc), "method_file": doc.get("method_file"),
+            "split": doc["mobcal_in"]["split"],
             "settings": doc["settings"], "status": doc["status"], "message": doc["message"],
             "returncode": doc["returncode"], "seconds": doc["seconds"],
             "output": str(out) if out.is_file() else "",
@@ -569,6 +598,7 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
                   "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
         "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split},
         "method": j.method,
+        "method_file": j.method_file,
         "parameters": r.parameters,
         "settings": j.settings.record(),
         "started": started.isoformat(timespec="seconds"),

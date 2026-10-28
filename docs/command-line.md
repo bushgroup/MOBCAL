@@ -48,28 +48,26 @@ usage: mobcal build [-h] [--gas {he,n2}] [--out DIR]
 Run calculations in parallel, one process per run.
 
 ```
-usage: mobcal run [-h] [--gas {he,n2,both}] [--seeds N[,N...]]
-                  [--method {current,2012,2000}] [--rng {philox,ranlux}] [--workers N]
-                  [--split W|auto] [--parameters PATH|NAME] [--out DIR] [--skip-done]
-                  [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N]
-                  [--inum N] [--inor N]
+usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
+                  [--workers N] [--split W|auto] [--parameters PATH|NAME] [--out DIR]
+                  [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N]
+                  [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
-- `INPUT`: The ions to run, one calculation for each input, gas and seed. Paths to .mfj files, or globs.
-- `--gas {he,n2,both}`: The buffer gas, helium or nitrogen. With both, every ion runs in each. Default: he.
-- `--seeds N[,N...]`: One run of each ion in each gas for every seed; the 2012 seed is 5013489. A list of integers separated by commas. Default: 5013489.
-- `--method {current,2012,2000}`: A preset of the element table, the random number generator and the six run settings. The methods are current, the 2012 element tables and settings under Philox4x32-10; 2012, the 2012 release's calculation, the same under RANLUX; 2000, the 2000 helium release's, its table at 298 K and 25 trajectories per block under RANLUX, for helium only. A table, generator or setting given beside it overrides it, and the run records custom. Default: current.
-- `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under current.
+- `INPUT`: The ions to run, one calculation for each input and seed. Paths to .mfj files, or globs.
+- `--method KEY|PATH`: A preset of the gas, the element table, the random number generator and the six run settings. The methods are 2012-he, the 2012 release's calculation in helium, its element table and settings under RANLUX; 2012-n2, the same in nitrogen; 2012-philox-he, the 2012 helium table and settings under Philox4x32-10; 2012-philox-n2, the same in nitrogen; 2000-he, the 2000 helium release's calculation, its table at 298 K and 25 trajectories per block under RANLUX; or the path of a method file. A table, generator or setting given beside it overrides it, and the run records custom. Default: 2012-philox-he.
+- `--seeds N[,N...]`: One run of each ion for every seed; the 2012 seed is 5013489. A list of integers separated by commas. Default: 5013489.
+- `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under 2012-philox-he.
 - `--workers N`: How many runs are in flight at once. Default: the number of processors divided by the processes per run, or under `--split` auto, the number it chooses.
 - `--split W|auto`: How many processes each calculation is divided among. A divided run gives the serial result exactly. W processes, or auto, which chooses the runs in flight and the processes per run from the run count, the processors and the ion sizes, dividing a run among at most 40 processes and only when that saves at least 20% of its time. Default: 1, one process per calculation.
-- `--parameters PATH|NAME`: The element table, which gives each atom of the ion its mass and its Lennard-Jones and hard-sphere parameters in the gas: a table the package ships, or a TOML file of one's own for one gas. A path, or a shipped table by name: 2012 (He, N2), 2000 (He). Default: the method's, 2012 under current.
+- `--parameters PATH|NAME`: The element table, which gives each atom of the ion its mass and its Lennard-Jones and hard-sphere parameters in the gas: a table the package ships, or a TOML file of one's own for one gas. A path to a table for the method's gas, or a shipped table by name: 2012 (He, N2), 2000 (He). Default: the method's, 2012 under 2012-philox-he.
 - `--out DIR`: The folder for a study: each batch adds its run directories here, and summary.csv and summary.json are rewritten to cover every run it holds. Default: runs/.
 - `--skip-done`: Leave out the runs the output folder already holds complete.
 
 ### Run settings
 
-The temperature and the five sampling counts the 2012 programs compiled in. Without these, every run uses its method's values: the 2012 values (temperature 301 K, imp 1000, itn 10, inp 40, inum 250000, inor 30), or under 2000, 298 K and imp 25.
+The temperature and the five sampling counts the 2012 programs compiled in. Without these, every run uses its method's values: the 2012 values (temperature 301 K, imp 1000, itn 10, inp 40, inum 250000, inor 30), or under 2000-he, 298 K and imp 25.
 
 - `--settings PATH`: A settings file (TOML) for every run, which replaces the method's settings; a key it leaves out keeps the 2012 value.
 - `--temperature T`: The buffer gas temperature in kelvin, 301 K in 2012 and 298 K in 2000. It sets the trajectory method's velocity grid and the conversion of each cross section to a mobility.

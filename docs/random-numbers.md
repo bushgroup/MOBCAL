@@ -70,7 +70,7 @@ computed with, 5013489 for the choline references and for any calculation run fr
 run file:
 
 ```
-uv run mobcal run Choline.mfj --gas he --rng ranlux
+uv run mobcal run Choline.mfj --method 2012-he
 ```
 
 reports 61.075, 63.473 and 55.402 Å² by the projection approximation, exact hard spheres and the

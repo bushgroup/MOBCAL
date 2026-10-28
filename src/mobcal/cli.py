@@ -3,8 +3,8 @@
     mobcal version
     mobcal self-check [--choline] [--report PATH]
     mobcal build [--gas he|n2] [--out DIR]
-    mobcal run INPUT [INPUT ...] [--gas he|n2|both] [--seeds N[,N...]]
-               [--method current|2012|2000] [--rng philox|ranlux] [--parameters PATH|NAME]
+    mobcal run INPUT [INPUT ...] [--method KEY|PATH] [--seeds N[,N...]]
+               [--rng philox|ranlux] [--parameters PATH|NAME]
                [--workers N] [--split W|auto] [--out DIR] [--skip-done]
                [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
                [--inor N]
@@ -14,7 +14,7 @@
     mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
                   [-o OUT.mfj] [--force]
 
-``run`` takes input files (paths or globs), makes one job per input, gas and seed, prints
+``run`` takes input files (paths or globs), makes one job per input and seed, prints
 how they will use the cores and about how long they will take (``mobcal.estimate``), runs them
 ``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
 ``summary.csv`` and ``summary.json`` covering every run in the output folder, which can hold a
@@ -22,19 +22,19 @@ whole study. It refuses a run whose directory holds a different input of the sam
 with ``--skip-done`` leaves out the runs the folder already holds complete. With ``--split W``
 each calculation runs across W processes and reports the serial result exactly; ``--split
 auto`` lets ``mobcal.estimate.allocate`` choose the runs in flight and each run's split.
-``--method`` picks a preset (``mobcal.methods``): ``current``, the default; ``2012``, the 2012
-release's calculation; ``2000``, the 2000 release's, helium only. A table, generator or setting
-given beside it overrides it, and the run records ``custom``. ``--rng`` picks the
-random number generator: Philox4x32-10 by default, or ``ranlux``, the 2012 generator, which
-with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
-default is not the run file's). With
-``--parameters PATH`` every run uses that element table instead of the package's own, checked
-the same way and recorded the same way; ``--parameters NAME`` picks a shipped set by name
-(``2000``, the Jarrold group's 2000 helium table; ``2012``, the default for each gas,
-``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the
-temperature and the five sampling counts, ``mobcal.settings``) and the six single-value
-options override it value by value; without them every run uses the 2012 values. Its exit
-status is 1 if any run failed.
+``--method`` picks the method (``mobcal.methods``), which carries the gas: a shipped one by its
+key, ``2012-philox-he`` by default, ``2012-he``, ``2012-n2``, ``2012-philox-n2`` or ``2000-he``,
+or a method file by its path. Both gases is two commands. A table, generator or setting given
+beside it overrides it, and the run records ``custom``, or the shipped method the fields make.
+``--rng`` picks the random number generator: Philox4x32-10, or ``ranlux``, the 2012 generator,
+which with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
+driver's default is not the run file's). With ``--parameters PATH`` every run uses that element
+table instead of the method's, checked the same way and recorded the same way; it must be a
+table for the method's gas. ``--parameters NAME`` picks a shipped set by name (``2000``, the
+Jarrold group's 2000 helium table; ``2012``, the default for each gas,
+``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the temperature and the
+five sampling counts, ``mobcal.settings``), which replaces the method's settings, and the six
+single-value options override either value by value. Its exit status is 1 if any run failed.
 ``import`` writes a single-set ``.mfj`` from an ORCA output or an ``.xyz`` with the charges
 named by ``--charges`` (refused, listing what the file holds, until one is named), and its
 provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads and
@@ -100,10 +100,10 @@ def expand_inputs(patterns: list[str]) -> list[Path]:
 def _settings_default() -> str:
     """The run settings without options, for the group's description."""
     d = settings.DEFAULTS
-    two = methods.get("2000").overrides()
+    two = methods.get("2000-he").overrides()
     return (f"temperature {d.temperature:g} K, "
             + ", ".join(f"{k} {getattr(d, k)}" for k in settings.COUNTS)
-            + "), or under 2000, "
+            + "), or under 2000-he, "
             + " and ".join(f"{v:g} K" if k == "temperature" else f"{k} {v}"
                            for k, v in two.items()))
 
@@ -134,15 +134,14 @@ def parser() -> argparse.ArgumentParser:
 
     r = command("run", "Run calculations in parallel, one process per run.")
     r.add_argument("inputs", nargs="+", metavar="INPUT", help=options.cli_help("inputs"))
-    r.add_argument("--gas", choices=(*fortran.GASES, "both"), default="he",
-                   help=options.cli_help("gas", "he"))
+    r.add_argument("--method", default=methods.DEFAULT, metavar="KEY|PATH",
+                   help=options.cli_help("method", methods.DEFAULT))
     r.add_argument("--seeds", type=_seeds, default=[DEFAULT_SEED], metavar="N[,N...]",
                    help=options.cli_help("seeds", str(DEFAULT_SEED)))
-    r.add_argument("--method", choices=tuple(methods.METHODS), default=methods.CURRENT,
-                   help=options.cli_help("method", methods.CURRENT))
     r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
                    default=None,
-                   help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under current"))
+                   help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under "
+                                         f"{methods.DEFAULT}"))
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help=options.cli_help("workers", "the number of processors divided by the "
                                          "processes per run, or under --split auto, the "
@@ -151,7 +150,8 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("split", "1, one process per calculation"))
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help=options.cli_help("parameters",
-                                         f"the method's, {parameters.DEFAULT} under current"))
+                                         f"the method's, {parameters.DEFAULT} under "
+                                         f"{methods.DEFAULT}"))
     r.add_argument("--out", type=Path, default=DEFAULT_OUT, metavar="DIR",
                    help=options.cli_help("out", f"{DEFAULT_OUT}/"))
     r.add_argument("--skip-done", action="store_true",
@@ -362,17 +362,14 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
         inputs = expand_inputs(args.inputs)
     except FileNotFoundError as e:
         raise UsageError(str(e)) from None
-    gases = list(fortran.GASES) if args.gas == "both" else [args.gas]
-    method = methods.get(args.method)
     try:
-        for gas in gases:
-            method.check_gas(gas)
+        method = methods.get(args.method)
     except methods.MethodError as e:
-        raise UsageError(f"{e}; run it with --gas he") from None
-    # A shipped set's name stands for each gas's set of that name; a path, for one gas's table.
+        raise UsageError(str(e)) from None
+    gas = method.gas
+    # A shipped set's name stands for the gas's set of that name; a path, for one gas's table.
     try:
-        for gas in gases:
-            parameters.path_for(args.parameters, gas)
+        parameters.path_for(args.parameters, gas)
     except parameters.ParameterError as e:
         raise UsageError(str(e)) from None
     if args.parameters is not None and args.parameters not in parameters.names():
@@ -380,9 +377,10 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
             ps = parameters.load(args.parameters)
         except parameters.ParameterError as e:
             raise UsageError(str(e)) from None
-        if gases != [ps.gas]:
-            raise UsageError(f"{args.parameters} is a table for {parameters.GAS[ps.gas]}; "
-                             f"run it with --gas {ps.gas}")
+        if ps.gas != gas:
+            raise UsageError(f"{args.parameters} is a table for {parameters.GAS[ps.gas]} and "
+                             f"{method.title} is a method for {parameters.GAS[gas]}; run it "
+                             f"with a {parameters.GAS[ps.gas]} method")
     # The method's settings, then a settings file over them whole, then single values.
     given = {k: getattr(args, k) for k in settings.NAMES}
     try:
@@ -400,7 +398,7 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
         raise UsageError(f"--split takes a worker count from 1 to {s.blocks_per_set} "
                          f"(itn {s.itn} * inp {s.inp} blocks per coordinate set) or {AUTO}")
     try:
-        batch = Batch(tuple(inputs), args.out, tuple(gases), tuple(args.seeds), method.key,
+        batch = Batch(tuple(inputs), args.out, method.ref, seeds=tuple(args.seeds),
                       parameters=args.parameters, generator=args.rng, settings=st,
                       split=args.split, workers=args.workers)
         batch.jobs()
@@ -412,8 +410,7 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
 def _run(args: argparse.Namespace) -> int:
     try:
         batch = batch_from_args(args)
-        for gas in batch.gases:
-            fortran.find_binary(gas)
+        fortran.find_binary(batch.resolved_gas)
     except (UsageError, FileNotFoundError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2

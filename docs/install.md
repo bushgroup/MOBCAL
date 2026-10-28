@@ -108,7 +108,7 @@ describes, without the `uv run` in front of it. The choline input is in the `exa
 of the installation, which on macOS is `MOBCAL.app/Contents/Resources/examples`:
 
 ```
-mobcal run <installation>/examples/Choline.mfj --gas he --out runs
+mobcal run <installation>/examples/Choline.mfj --out runs
 ```
 
 writes its run directory and `summary.csv` under `runs` in the current directory. Adding

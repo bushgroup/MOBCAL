@@ -96,45 +96,130 @@ def wait_idle(qtbot, w: MainWindow, timeout: int = 30_000) -> None:
 
 # --- the form ------------------------------------------------------------------------------
 
+def combo_items(c: QComboBox) -> list[str]:
+    return [c.itemText(i) for i in range(c.count())]
+
+
 def test_a_method_fills_every_field_and_an_edit_makes_it_custom(window):
     w = window
-    assert w.method_combo.currentText() == "Current" and w.gases == ("he",)
-    w.apply_method("2000")
+    assert w.method_combo.currentText() == "MOBCAL 2012 with Philox (He)" and w.gas == "he"
+    assert combo_items(w.method_combo) == [m.title for m in methods.METHODS.values()]
+    assert combo_items(w.gas_combo) == ["He", "N2"]
+    w.apply_method("2000-he")
     assert w.table_value() == "2000" and w.generator_combo.currentData() == "ranlux"
     assert w.temperature.value() == 298.0 and w.counts["imp"].value() == 25
-    assert w.method_combo.currentText() == "MOBCAL 2000"
+    assert w.method_combo.currentText() == "MOBCAL 2000 (He)"
     w.counts["imp"].setValue(50)
-    assert w.method_combo.currentText() == "Custom (from MOBCAL 2000)"
+    assert w.method_combo.currentText() == "Custom (from MOBCAL 2000 (He))"
     w.counts["imp"].setValue(25)
-    assert w.method_combo.currentText() == "MOBCAL 2000"
-    w.apply_method("2012")
+    assert w.method_combo.currentText() == "MOBCAL 2000 (He)"
+    w.apply_method("2012-he")
     assert w.table_value() == "2012" and w.temperature.value() == 301.0
     w.generator_combo.setCurrentIndex(w.generator_combo.findData("philox"))
-    assert w.method_combo.currentText() == "Current"
+    assert w.method_combo.currentText() == "MOBCAL 2012 with Philox (He)"
 
 
-def test_both_gases_offer_only_the_tables_both_have(window):
+def test_the_gas_is_a_field_of_the_method(window):
     w = window
-    w.apply_method("2000")
-    w.gas_combo.setCurrentIndex(2)
-    assert w.gases == ("he", "n2") and w.table_value() == "2012"
-    assert [w.table_combo.itemData(i) for i in range(w.table_combo.count())] == ["2012"]
-    assert w.method_combo.currentText() == "Custom (from MOBCAL 2000)"
-    w.apply_method("2000")
-    assert w.gases == ("he",)
+    w.apply_method("2012-he")
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
+    assert w.method_combo.currentText() == "MOBCAL 2012 (N2)"
+    assert [w.table_combo.itemData(i) for i in range(w.table_combo.count())] == \
+        ["2012", win.OTHER_TABLE]
+    w.apply_method("2000-he")
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
+    assert w.table_value() == "2012"  # nitrogen has no 2000 table
+    assert w.method_combo.currentText() == "Custom (from MOBCAL 2000 (He))"
+    w.apply_method("2012-philox-n2")
+    assert w.gas == "n2" and w.method_combo.currentText() == "MOBCAL 2012 with Philox (N2)"
 
 
 def test_the_form_makes_the_batch_the_command_line_makes(window, tmp_path):
     w = window
     add_paths = [CHOLINE]
     w.inputs.add_paths(add_paths)
-    w.apply_method("2000")
+    w.apply_method("2000-he")
     w.seeds_spin.setValue(3)
     b = w.form_batch()
     by_cli = cli.batch_from_args(cli.parser().parse_args(
-        ["run", str(CHOLINE), "--method", "2000", "--seeds", "5013489,5013490,5013491",
+        ["run", str(CHOLINE), "--method", "2000-he", "--seeds", "5013489,5013490,5013491",
          "--out", w.out_edit.text()]))
-    assert b.jobs() == by_cli.jobs() and b.title() == "MOBCAL 2000"
+    assert b.jobs() == by_cli.jobs() and b.title() == "MOBCAL 2000 (He)"
+
+
+# --- method files -------------------------------------------------------------------------
+
+def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtbot, tmp_path):
+    w = window
+    w.inputs.add_paths([CHOLINE])
+    w.apply_method("2012-n2")
+    w.counts["itn"].setValue(5)
+    fields = w.form_batch()
+    m = w.save_method(tmp_path / "five cycles.toml", "Five cycles (N2)")
+    assert m is not None and (m.gas, m.generator, m.settings.itn) == ("n2", "ranlux", 5)
+    assert w.method_combo.currentText() == "Five cycles (N2)"
+    assert combo_items(w.method_combo)[-1] == "Five cycles (N2)"
+    saved = w.form_batch()
+    assert saved.jobs() == fields.jobs() and saved.title() == "Five cycles (N2)"
+    assert {j.method for j in saved.jobs()} == {"Five cycles (N2)"}
+    assert w.store.methods == [(m.ref, m.sha256)]
+    # An edit makes it Custom, and picking it fills the fields again.
+    w.counts["itn"].setValue(6)
+    assert w.method_combo.currentText() == "Custom (from Five cycles (N2))"
+    w.apply_method(m.ref)
+    assert w.counts["itn"].value() == 5
+    # The next launch lists it; loading another file of the same name is refused.
+    w2 = MainWindow(w.store, launcher=launcher, cpus=8)
+    qtbot.addWidget(w2)
+    assert combo_items(w2.method_combo)[-1] == "Five cycles (N2)" and not w2.dropped
+    assert w2.method_combo.currentText() == "Five cycles (N2)"  # the method last picked
+    twin = tmp_path / "twin.toml"
+    twin.write_bytes(m.path.read_bytes())
+    assert w2.load_method(twin) is None
+    assert "already holds 'Five cycles (N2)'" in w._warnings[-1]  # the patch is the class's
+    assert w.save_method(tmp_path / "x.toml", "MOBCAL 2012 (He)") is None
+    assert "is the name of a shipped method" in w._warnings[-1]
+
+
+def test_a_method_file_with_its_own_table_fills_the_table(window, tmp_path):
+    w = window
+    table = tmp_path / "mine_he.toml"
+    table.write_bytes(win.parameters.default_path("he").read_bytes().replace(
+        b'name = "MOBCAL 2012 helium"', b'name = "my helium"'))
+    f = tmp_path / "own.toml"
+    methods.save(f, "Own table", "he", table, "philox", win.settings.DEFAULTS)
+    m = w.load_method(f)
+    assert m is not None and w.table_value() == str(table.resolve())
+    assert w.table_combo.currentText() == "mine_he.toml"
+    assert w.method_combo.currentText() == "Own table"
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
+    assert w.table_value() == "2012"  # a helium table does not follow the gas to nitrogen
+    assert w.method_combo.currentText() == "MOBCAL 2012 with Philox (N2)"
+
+
+def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
+        window, qtbot, tmp_path, monkeypatch):
+    w = window
+    kept, changed, gone = (tmp_path / f"{n}.toml" for n in ("kept", "changed", "gone"))
+    for f, name in ((kept, "Kept"), (changed, "Changed"), (gone, "Gone")):
+        w.load_method(methods.save(f, name, "he", "2012", "ranlux", win.settings.DEFAULTS).path)
+    assert len(w.store.methods) == 3
+    changed.write_text(changed.read_text(encoding="utf-8").replace("itn = 10", "itn = 9"),
+                       encoding="utf-8")
+    gone.unlink()
+    w2 = MainWindow(w.store, launcher=launcher, cpus=8)
+    qtbot.addWidget(w2)
+    assert combo_items(w2.method_combo)[5:] == ["Kept"]
+    assert [ref for ref, _ in w2.store.methods] == [str(kept.resolve())]
+    shown = []
+    monkeypatch.setattr(QMessageBox, "information", lambda _, title, text: shown.append(text))
+    w2.report_dropped_methods()
+    assert len(shown) == 1 and shown[0].startswith("2 method files were removed")
+    assert "changed.toml: the file has changed since it was added" in shown[0]
+    assert "gone.toml: the file is no longer there." in shown[0]
+    assert w2.method_combo.currentText() == "MOBCAL 2012 with Philox (He)"  # Gone was picked
+    w2.report_dropped_methods()
+    assert len(shown) == 1
 
 
 def test_the_estimate_and_the_run_action(window, qtbot):
@@ -142,8 +227,8 @@ def test_the_estimate_and_the_run_action(window, qtbot):
     assert not w.run_action.isEnabled() and "add an input" in w.estimate_label.text()
     add(qtbot, w, CHOLINE)
     assert w.run_action.isEnabled()
-    assert w.estimate_label.text().startswith("Current: 1 run on 1 worker, each across 8 "
-                                              "processes; about")
+    assert w.estimate_label.text().startswith("MOBCAL 2012 with Philox (He): 1 run on 1 "
+                                              "worker, each across 8 processes; about")
     w.counts["itn"].setValue(100)
     w.counts["inp"].setValue(100)  # 100 * 100 * 1000 points: over the program's 9,999,999
     assert not w.run_action.isEnabled() and "points per coordinate set" in \
@@ -158,24 +243,32 @@ def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     bad = write_input(tmp_path / "bad.mfj", "refuse")
     add(qtbot, w, a, bad)
     w.seeds_spin.setValue(3)
-    w.gas_combo.setCurrentIndex(2)
     w.run_clicked()
     wait_idle(qtbot, w)
     rows = w.result_rows()
-    assert [(r.input.stem, r.gas) for r in rows] == [("a", "he"), ("a", "n2"), ("bad", "he"),
-                                                       ("bad", "n2")]
+    assert [(r.input.stem, r.gas) for r in rows] == [("a", "he"), ("bad", "he")]
     tm = [50 + s % 7 + 0.5 for s in (5013489, 5013490, 5013491)]
     assert rows[0].value("TM") == methods.summary_line(tm)
-    assert rows[0].status == "ok (3 seeds)" and rows[2].status == "failed 3 of 3"
+    assert rows[0].status == "ok (3 seeds)" and rows[1].status == "failed 3 of 3"
     assert w.results_table.item(0, 2).text() == methods.summary_line(tm)
-    assert w.results_table.item(1, 3).text() == ""  # no PA in nitrogen
-    summary = json.loads((tmp_path / "results" / "summary.json").read_text(encoding="utf-8"))
-    assert len(summary["runs"]) == 12 and {r["method"] for r in summary["runs"]} == {"current"}
+    assert w.results_table.item(0, 3).text() != ""
     assert w.methods_button.isEnabled()
     w.copy_methods_text()
     text = QGuiApplication.clipboard().text()
     assert text.startswith("Collision cross sections were calculated by the trajectory method")
     assert "at 3 seeds per structure" in text
+    # Nitrogen is another batch, under its own method, into the same folder.
+    w.apply_method("2012-philox-n2")
+    w.seeds_spin.setValue(1)
+    w.run_clicked()
+    wait_idle(qtbot, w)
+    assert [(r.input.stem, r.gas) for r in w.result_rows()] == [("a", "n2"), ("bad", "n2")]
+    assert w.results_table.item(0, 3).text() == ""  # no PA in nitrogen
+    summary = json.loads((tmp_path / "results" / "summary.json").read_text(encoding="utf-8"))
+    assert len(summary["runs"]) == 8
+    assert {r["method"] for r in summary["runs"]} == {"2012-philox-he", "2012-philox-n2"}
+    w.copy_methods_text()
+    assert "in nitrogen with MOBCAL" in QGuiApplication.clipboard().text()  # this batch's runs
     w.copy_results()
     assert QGuiApplication.clipboard().text().splitlines()[0].startswith("ion\tinput\tgas\tTM")
 
@@ -187,18 +280,21 @@ def test_run_while_running_queues_and_the_queue_survives(window, qtbot, tmp_path
     assert w.worker is not None and w.run_action.iconText() == "Add to queue"
     w.seeds_spin.setValue(2)
     w.run_clicked()
-    w.apply_method("2012")
+    w.apply_method("2012-n2")
     w.run_clicked()
     assert w.queue.count() == 2
+    assert w.queue.item(1).text().startswith("MOBCAL 2012 (N2): 1 input, N2, 2 seeds")
     saved, problems = batches.load(w.store.queue_path)
-    assert [b.title() for b in saved] == ["Current", "MOBCAL 2012"] and not problems
+    assert [b.title() for b in saved] == ["MOBCAL 2012 with Philox (He)",
+                                          "MOBCAL 2012 (N2)"] and not problems
     assert saved[0].seeds == (5013489, 5013490)
     # The second launch offers them back.
     w2 = MainWindow(w.store, launcher=launcher, cpus=8)
     qtbot.addWidget(w2)
     assert not w2.resume_action.isEnabled()
     w2.offer_saved_queue()
-    assert [b.title() for b in w2.queued()] == ["Current", "MOBCAL 2012"]
+    assert [b.title() for b in w2.queued()] == ["MOBCAL 2012 with Philox (He)",
+                                               "MOBCAL 2012 (N2)"]
     assert w2.resume_action.isEnabled() and not w.resume_action.isEnabled()
     w2.resume_action.trigger()  # the first queued batch starts, the second waits
     assert w2.worker is not None and w2.queue.count() == 1 and not w2.resume_action.isEnabled()
@@ -272,7 +368,9 @@ def test_the_menus_hold_the_actions(window):
     menus = {m.text(): [a for a in m.menu().actions() if not a.isSeparator()]
              for m in w.menuBar().actions()}
     assert list(menus) == ["&File", "&Batch", "&Help"]
-    assert menus["&File"] == [w.exit_action]
+    assert menus["&File"] == [w.load_method_action, w.save_method_action, w.exit_action]
+    assert [a.toolTip() for a in menus["&File"][:2]] == [options.tooltip("load_method"),
+                                                         options.tooltip("save_method")]
     assert menus["&Batch"] == [w.run_action, w.stop_action, w.resume_action]
     assert menus["&Help"] == [w.about_action]
     roles = [a.menuRole() for a in (w.exit_action, w.about_action)]
@@ -433,7 +531,7 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     assert [p.name for p in b.inputs] == ["choline_sp_chelpg.mfj", "choline_opt_mulliken.mfj"]
     w.launcher = launcher
     for item in w.inputs.items:
-        item.write(w.out_dir, w.gases)
+        item.write(w.out_dir, (w.gas,))
     rec = json.loads((w.out_dir / "imported" / "choline_sp_chelpg.import.json").read_text(
         encoding="utf-8"))
     assert rec["charges"]["choice"] == "chelpg"
@@ -491,7 +589,7 @@ def test_the_tooltips_are_the_command_lines_descriptions(window):
     """A control the command line also sets carries the option's shared text, and the window's
     own addition; nothing in the window restates or rewords it."""
     w = window
-    by_key = {"method": w.method_combo, "gas": w.gas_combo, "parameters": w.table_combo,
+    by_key = {"method": w.method_combo, "parameters": w.table_combo,
               "seeds": w.seeds_spin, "temperature": w.temperature, "rng": w.generator_combo,
               "workers": w.workers_spin, "split": w.split_spin, "out": w.out_edit,
               "methods_text": w.methods_button, "inputs": w.inputs.table,

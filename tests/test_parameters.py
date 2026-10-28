@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from mobcal import ROOT, cli, fortran, parameters
+from mobcal import ROOT, cli, fortran, methods, parameters
 from mobcal.parameters import ParameterError
 
 # --- the files' literals and the rendered tokens --------------------------------------------
@@ -104,9 +104,9 @@ def test_path_for_takes_a_set_name_or_a_path(tmp_path):
 
 def test_the_installer_bundles_every_shipped_file():
     spec = (ROOT / "packaging" / "mobcal.spec").read_text(encoding="utf-8")
-    want = re.search(r"^_want = \{(.*)\}$", spec, re.M).group(1)
-    assert {s.strip().strip('"') for s in want.split(",")} == {*parameters.SHA256,
-                                                               "mobcal_2012.toml"}
+    want = re.search(r"^_want = \{(.*?)\}$", spec, re.M | re.S).group(1)
+    assert {s.strip().strip('"') for s in want.split(",")} == {
+        *parameters.SHA256, "mobcal_2012.toml", *(f"{k}.toml" for k in methods.SHA256)}
 
 
 def test_verify_catches_a_changed_or_missing_file(tmp_path):
@@ -289,7 +289,7 @@ def test_render_parameters_takes_a_set_by_name(tmp_path, capsys):
 
 
 def test_run_refuses_a_set_name_the_gas_does_not_ship(tmp_path, capsys):
-    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--gas", "both",
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--method", "2012-n2",
                    "--parameters", "2000", "--out", str(tmp_path / "runs")])
     assert rc == 2 and "no shipped N2 set is named '2000'" in capsys.readouterr().err
     assert not (tmp_path / "runs").exists()
@@ -310,9 +310,9 @@ def test_run_refuses_a_bad_table_before_anything_runs(tmp_path, capsys):
     assert not (tmp_path / "runs").exists()
 
 
-@pytest.mark.parametrize("gas", ["he", "both"])
-def test_run_refuses_a_table_for_another_gas(tmp_path, capsys, gas):
-    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--gas", gas,
+@pytest.mark.parametrize("method", ["2012-philox-he", "2000-he"])
+def test_run_refuses_a_table_for_another_gas(tmp_path, capsys, method):
+    rc = cli.main(["run", str(fortran.FORTRAN_DIR / "Choline.mfj"), "--method", method,
                    "--parameters", str(parameters.default_path("n2")),
                    "--out", str(tmp_path / "runs")])
-    assert rc == 2 and "is a table for N2; run it with --gas n2" in capsys.readouterr().err
+    assert rc == 2 and "is a table for N2 and MOBCAL 20" in capsys.readouterr().err

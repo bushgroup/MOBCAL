@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Each shared description, and the option of the command line that carries it.
 OPTIONS = {
-    "inputs": ("run", "inputs"), "method": ("run", "method"), "gas": ("run", "gas"),
+    "inputs": ("run", "inputs"), "method": ("run", "method"),
     "parameters": ("run", "parameters"), "seeds": ("run", "seeds"),
     "temperature": ("run", "temperature"), "rng": ("run", "rng"), "imp": ("run", "imp"),
     "itn": ("run", "itn"), "inp": ("run", "inp"), "inum": ("run", "inum"),

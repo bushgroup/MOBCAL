@@ -1,11 +1,14 @@
-"""A batch: inputs, gases, seeds, a method and its fields, and a results folder, as data.
+"""A batch: inputs, one method and its fields, seeds, and a results folder, as data.
 
 What the window's form makes, its queue holds and saves between launches, and the command
 line builds from its options: a frozen, Qt-free description that turns into the driver's jobs.
-Each field left as None takes the method's value (``mobcal.methods``), so a batch saved as
-"MOBCAL 2000, these inputs" stays that, and a field set over the method makes the runs
-``custom``, as their records will say. ``to_dict``/``from_dict`` are the queue file's form,
-``format = 1``, paths as strings.
+A batch runs one method (``mobcal.methods``), a shipped one by its key or a method file by its
+path, and so one gas; both gases is two batches. Each field left as None takes the method's
+value, so a batch saved as "MOBCAL 2000 (He), these inputs" stays that, and a field set over the
+method (the gas among them) makes the runs ``custom``, or the shipped method the fields make,
+as their records will say. ``to_dict``/``from_dict`` are the queue file's form, ``format = 2``,
+paths as strings; ``load`` reads a ``format = 1`` file too, whose batch named a method of
+both gases and a list of gases, as one batch per gas (``mobcal.methods.ALIASES``).
 
 The results folder is a study's: every batch adds its run directories to it, and the summary
 covers them all (``mobcal.run.Summary.write``). ``prior`` says, before a batch starts, which of
@@ -14,7 +17,7 @@ done (a failed or stopped record), or a clash (a record of another input under t
 which this batch would overwrite).
 
     from mobcal.batch import Batch
-    b = Batch((Path("choline.mfj"),), Path("results"), gases=("he", "n2"), method="2012")
+    b = Batch((Path("choline.mfj"),), Path("results"), method="2012-n2")
     plan = b.plan()
     summary = run_many(plan.jobs, plan.workers)
 """
@@ -33,45 +36,45 @@ from mobcal import estimate, fortran, methods, parameters, settings
 from mobcal.run import RECORD_JSON, Job
 from mobcal.settings import Settings, Source
 
-FORMAT = 1
+FORMAT = 2
+FORMATS = (1, 2)  # what load reads; 1 is the queue file of the version before one method a batch
 DEFAULT_SEED = 5013489  # the seed the shipped mobcal.in carries, at which 2012 was run
 AUTO = "auto"
 
 
 class BatchError(ValueError):
-    """A batch that cannot become runs: a method for another gas, an unknown table name."""
+    """A batch that cannot become runs: an unknown method or table, a table for another gas."""
 
 
 @dataclass(frozen=True)
 class Batch:
     inputs: tuple[Path, ...]
     out_dir: Path
-    gases: tuple[str, ...] = ("he",)
+    method: str = methods.DEFAULT  # a shipped method's key or a method file's path
+    gas: str | None = None  # None: the method's
     seeds: tuple[int, ...] = (DEFAULT_SEED,)
-    method: str = methods.CURRENT  # the method the fields start from
     parameters: str | None = None  # a shipped set's name or a file; None: the method's
     generator: str | None = None  # None: the method's
     settings: Settings | None = None  # None: the method's
     split: int | str | None = AUTO  # W, "auto" (mobcal.estimate.allocate), or None: serial
     workers: int | None = None  # runs in flight; None: the allocation's, or the CPU count
     skip_done: bool = False  # leave out, when the batch starts, runs the folder holds complete
+    # the method, read once when the batch is made
+    loaded: methods.Method = field(default=None, init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "inputs", tuple(Path(p) for p in self.inputs))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
-        object.__setattr__(self, "gases", tuple(self.gases))
+        object.__setattr__(self, "method", str(self.method))
         object.__setattr__(self, "seeds", tuple(int(s) for s in self.seeds))
-        m = methods.get(self.method)
-        bad = [g for g in self.gases if g not in fortran.GASES]
-        if bad or not self.gases:
-            raise BatchError(f"gases must be among {fortran.GASES}, not {self.gases!r}")
-        if not self.seeds:
-            raise BatchError("a batch needs at least one seed")
         try:
-            for g in self.gases:
-                m.check_gas(g)
+            object.__setattr__(self, "loaded", methods.get(self.method))
         except methods.MethodError as e:
             raise BatchError(str(e)) from None
+        if self.gas is not None and self.gas not in fortran.GASES:
+            raise BatchError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
+        if not self.seeds:
+            raise BatchError("a batch needs at least one seed")
         if not (self.split in (None, AUTO) or (isinstance(self.split, int) and self.split >= 1)):
             raise BatchError(f"split must be a worker count, {AUTO!r} or None, not "
                              f"{self.split!r}")
@@ -79,20 +82,31 @@ class Batch:
     # --- what the runs use ---------------------------------------------------------------
 
     @property
+    def resolved_gas(self) -> str:
+        return self.gas or self.loaded.gas
+
+    @property
     def resolved_generator(self) -> str:
-        return self.generator or methods.get(self.method).generator
+        return self.generator or self.loaded.generator
 
     @property
     def resolved_settings(self) -> Settings:
         if self.settings is not None:
             return self.settings
-        m = methods.get(self.method)
-        return settings.resolve(None, **m.overrides())
+        return settings.resolve(None, **self.loaded.overrides())
 
-    def table(self, gas: str) -> Path | None:
-        """The element table file for a gas, None for the gas's default set."""
-        name = self.parameters if self.parameters is not None else methods.get(
-            self.method).parameters
+    def table(self) -> Path | None:
+        """The element table file, None for the gas's default set. A method's own table goes
+        with its gas: the gas changed over it, the runs take that gas's default set."""
+        gas, m = self.resolved_gas, self.loaded
+        if self.parameters is not None:
+            name: str | Path = self.parameters
+        elif gas != m.gas:
+            name = m.parameters if m.parameters in parameters.SETS[gas] else parameters.DEFAULT
+        elif m.table is not None:
+            return m.table
+        else:
+            name = m.parameters
         if name == parameters.DEFAULT and self.parameters is None:
             return None
         try:
@@ -101,11 +115,12 @@ class Batch:
             raise BatchError(str(e)) from None
 
     def jobs(self) -> list[Job]:
-        """One job per input, gas and seed in that order, serial (``plan`` sets the split)."""
-        gen, st = self.resolved_generator, self.resolved_settings
-        tables = {g: self.table(g) for g in self.gases}
-        return [Job(p, g, s, self.out_dir, parameters=tables[g], generator=gen, settings=st)
-                for p in self.inputs for g in self.gases for s in self.seeds]
+        """One job per input and seed in that order, serial (``plan`` sets the split)."""
+        gas, gen, st, table = (self.resolved_gas, self.resolved_generator,
+                               self.resolved_settings, self.table())
+        return [Job(p, gas, s, self.out_dir, parameters=table, generator=gen, settings=st,
+                    method_from=self.loaded)
+                for p in self.inputs for s in self.seeds]
 
     def to_run(self) -> list[Job]:
         """The jobs, less those the folder holds complete when ``skip_done``."""
@@ -132,19 +147,20 @@ class Batch:
 
     @property
     def method_now(self) -> str:
-        """The method the runs will record: the method's own key while no field is set over
-        it, and whatever the fields make otherwise (``custom`` unless they happen to make
-        another method)."""
+        """The method the runs will record: the method's own while no field is set over it,
+        and whatever the fields make otherwise (``custom`` unless they happen to make a shipped
+        method)."""
         names = {j.method for j in self.jobs()}
         return names.pop() if len(names) == 1 else methods.CUSTOM
 
     def title(self) -> str:
-        """``MOBCAL 2012``, or ``Custom (from MOBCAL 2012)``: what the window shows."""
+        """``MOBCAL 2012 (He)``, a method file's name, or ``Custom (from MOBCAL 2012 (He))``:
+        what the window shows."""
         now = self.method_now
-        if now == self.method:
-            return methods.TITLES[now]
+        if now == self.loaded.key:
+            return self.loaded.title
         if now == methods.CUSTOM:
-            return f"Custom (from {methods.TITLES[self.method]})"
+            return f"Custom (from {self.loaded.title})"
         return methods.TITLES[now]
 
     # --- the queue file's form -----------------------------------------------------------
@@ -152,30 +168,51 @@ class Batch:
     def to_dict(self) -> dict:
         st = self.settings
         return {"format": FORMAT, "inputs": [str(p) for p in self.inputs],
-                "out_dir": str(self.out_dir), "gases": list(self.gases),
-                "seeds": list(self.seeds), "method": self.method,
-                "parameters": self.parameters, "generator": self.generator,
+                "out_dir": str(self.out_dir), "method": self.method, "gas": self.gas,
+                "seeds": list(self.seeds), "parameters": self.parameters,
+                "generator": self.generator,
                 "settings": None if st is None else st.values(),
                 "split": self.split, "workers": self.workers, "skip_done": self.skip_done}
 
     @classmethod
     def from_dict(cls, doc: dict) -> Batch:
+        """A ``format = 2`` entry. Raises BatchError."""
         if doc.get("format") != FORMAT:
-            raise BatchError(f"batch format {doc.get('format')!r}; this version reads "
-                             f"{FORMAT}")
+            raise BatchError(f"batch format {doc.get('format')!r}; from_dict reads {FORMAT}")
+        return from_entry(doc)[0]
+
+
+def from_entry(doc: dict) -> list[Batch]:
+    """A queue file's batch entry as batches: one, or for a ``format = 1`` entry, one for each
+    gas it listed, under the shipped method its method was in that gas. Raises BatchError."""
+    fmt = doc.get("format")
+    if fmt not in FORMATS:
+        raise BatchError(f"batch format {fmt!r}; this version reads "
+                         + ", ".join(map(str, FORMATS)))
+    try:
         st = doc.get("settings")
         if st is not None:
             given = {k: v for k, v in st.items() if v != getattr(settings.DEFAULTS, k)}
             st = Settings(**st, source=Source(overrides=given))
-        try:
-            return cls(inputs=tuple(doc["inputs"]), out_dir=Path(doc["out_dir"]),
-                       gases=tuple(doc["gases"]), seeds=tuple(doc["seeds"]),
-                       method=doc["method"], parameters=doc.get("parameters"),
-                       generator=doc.get("generator"), settings=st,
-                       split=doc.get("split", AUTO), workers=doc.get("workers"),
-                       skip_done=bool(doc.get("skip_done", False)))
-        except (KeyError, TypeError, settings.SettingsError, methods.MethodError) as e:
-            raise BatchError(f"not a batch: {e}") from None
+        common = dict(inputs=tuple(doc["inputs"]), out_dir=Path(doc["out_dir"]),
+                      seeds=tuple(doc["seeds"]), parameters=doc.get("parameters"),
+                      generator=doc.get("generator"), settings=st,
+                      split=doc.get("split", AUTO), workers=doc.get("workers"),
+                      skip_done=bool(doc.get("skip_done", False)))
+        if fmt == 2:
+            return [Batch(method=doc["method"], gas=doc.get("gas"), **common)]
+        old = doc["method"]
+        if old not in methods.ALIASES:
+            raise BatchError(f"no method was named {old!r}; the methods were "
+                             + ", ".join(methods.ALIASES))
+        out = []
+        for gas in doc["gases"]:
+            key = methods.ALIASES[old].format(gas=gas)
+            out.append(Batch(method=key, gas=None if methods.METHODS[key].gas == gas else gas,
+                             **common))
+        return out
+    except (KeyError, TypeError, settings.SettingsError, methods.MethodError) as e:
+        raise BatchError(f"not a batch: {e}") from None
 
 
 def save(batches: Sequence[Batch], path: Path) -> Path:
@@ -196,7 +233,7 @@ def load(path: Path) -> tuple[list[Batch], list[str]]:
     batches, problems = [], []
     for i, d in enumerate(doc.get("batches", []), 1):
         try:
-            batches.append(Batch.from_dict(d))
+            batches += from_entry(d)
         except BatchError as e:
             problems.append(f"queued batch {i}: {e}")
     return batches, problems

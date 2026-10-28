@@ -1,21 +1,27 @@
 """The main window: the form, the queue, the progress and the results.
 
 Left, the form makes a ``mobcal.batch.Batch``: the inputs, a Method that fills every field
-(Current, MOBCAL 2012, MOBCAL 2000), Basics (gas, element table, seeds, temperature), an
-Advanced fold (generator, the five sampling counts, how the batch uses the cores), and the
-results folder, one per study, remembered. The method shown is the one the fields make, or
-*Custom (from …)* once a field moves off the method picked; the runs' records say the same.
-Under the form, the estimate for the batch as it stands.
+(the five shipped methods, then the method files loaded or saved, remembered), Basics (gas,
+element table, seeds, temperature), an Advanced fold (generator, the five sampling counts, how
+the batch uses the cores), and the results folder, one per study, remembered. The method shown
+is the one the fields make, or *Custom (from …)* once a field moves off every method; the runs'
+records say the same. The gas is a method's field like any other: changing it shows the same
+method in the other gas when there is one. Under the form, the estimate for the batch as it
+stands.
 
-Above, a menu bar: File ▸ Exit, Batch ▸ Run, Stop and Resume queue (each one ``QAction`` that
-owns its text and enabled state), Help ▸ About; the queue's Add batch button is Run. Right, the
-queue, the progress and the results. Run starts the batch, or appends it to the queue while one
-is running; the queue is reorderable, starts its next batch when the running one ends, and is
-saved on every change and offered back at the next launch. Stop asks, then ends every process
-of the running batch. Progress is runs done of N, each running run's elapsed time (and blocks
-written, for a split run), against the estimate. Results are one row per ion and gas, TM
-headline, mean ± s.d. over seeds, with Copy, Save CSV, Show in folder, Open output and Copy
-methods text. Closing asks, then stops the running batch; the queue stays saved.
+Above, a menu bar: File ▸ Load method…, Save method… and Exit, Batch ▸ Run, Stop and Resume
+queue (each one ``QAction`` that owns its text and enabled state), Help ▸ About; the queue's Add
+batch button is Run. Load method adds a method file to the Method list and Save method writes
+the form's method fields to one and adds it; the list is remembered by path and SHA-256, and a
+file that has gone or changed is dropped at the next launch with a message
+(``report_dropped_methods``). Right, the queue, the progress and the results. Run starts the
+batch, or appends it to the queue while one is running; the queue is reorderable, starts its
+next batch when the running one ends, and is saved on every change and offered back at the next
+launch. Stop asks, then ends every process of the running batch. Progress is runs done of N,
+each running run's elapsed time (and blocks written, for a split run), against the estimate.
+Results are one row per ion and gas, TM headline, mean ± s.d. over seeds, with Copy, Save CSV,
+Show in folder, Open output and Copy methods text. Closing asks, then stops the running batch;
+the queue stays saved.
 
 Every control and column header has a tooltip from ``mobcal.options``; a control that an
 option of ``mobcal run`` also sets shows that option's description, so the two cannot drift.
@@ -45,6 +51,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -75,7 +82,7 @@ from mobcal.io.structure import StructureError
 from mobcal.run import Job, Launcher, Result, Summary
 from mobcal.settings import Settings, Source
 
-GASES = (("He", ("he",)), ("N2", ("n2",)), ("He and N2", ("he", "n2")))
+GASES = (("He", "he"), ("N2", "n2"))
 GENERATORS = (("Philox4x32-10", "philox"), ("RANLUX (the 2012 generator)", "ranlux"))
 OTHER_TABLE = "Other file…"
 RESULT_COLUMNS = ("Ion", "Gas", "TM (Å²)", "PA (Å²)", "EHS (Å²)", "Status", "Time")
@@ -131,8 +138,11 @@ class MainWindow(QMainWindow):
         self.blocks: dict[str, tuple[int, int]] = {}
         self.plan: estimate.Plan | None = None
         self.batch_started = 0.0
-        self._from = methods.CURRENT  # the method the fields were last filled from
-        self._other_table: Path | None = None
+        self._from = methods.DEFAULT  # the method the fields were last filled from, by ref
+        self._other_table: tuple[Path, str] | None = None  # a table of one's own and its gas
+        self.loaded: dict[str, methods.Method] = {}  # the method files in the list, by path
+        self.dropped: list[str] = []  # remembered method files that no longer load, and why
+        self._read_remembered_methods()
         self._filling = False
         self._closing = False
         self.setWindowTitle(f"MOBCAL {mobcal.__version__}")
@@ -175,17 +185,17 @@ class MainWindow(QMainWindow):
         self.tick = QTimer(self)
         self.tick.setInterval(1000)
         self.tick.timeout.connect(self._draw_progress)
-        self.apply_method(self.store.method if self.store.method in methods.METHODS
-                          else methods.CURRENT)
+        self.apply_method(self.store.method if self.method(self.store.method) is not None
+                          else methods.DEFAULT)
 
     # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
-        """Run, Stop and Resume queue as actions, in the Batch menu; File ▸ Exit, which closes
-        the window by the same path as its close button; Help ▸ About. The roles put Exit and
-        About in the application menu on macOS. Resume queue is enabled only while the queue
-        holds batches and nothing runs, which is a queue put back at launch: otherwise the queue
-        starts its next batch itself when one ends."""
+        """Run, Stop and Resume queue as actions, in the Batch menu; File ▸ Load method…, Save
+        method… and Exit, which closes the window by the same path as its close button; Help ▸
+        About. The roles put Exit and About in the application menu on macOS. Resume queue is
+        enabled only while the queue holds batches and nothing runs, which is a queue put back at
+        launch: otherwise the queue starts its next batch itself when one ends."""
         self.run_action = QAction("&Run", self)
         self.run_action.setShortcuts([QKeySequence("Ctrl+R"), QKeySequence("F5")])
         self.run_action.triggered.connect(self.run_clicked)
@@ -196,6 +206,12 @@ class MainWindow(QMainWindow):
         self.resume_action = QAction("Res&ume queue", self)
         self.resume_action.setEnabled(False)
         self.resume_action.triggered.connect(self.resume_queue)
+        self.load_method_action = QAction("&Load method…", self)
+        self.load_method_action.setToolTip(options.tooltip("load_method"))
+        self.load_method_action.triggered.connect(lambda: self.load_method())
+        self.save_method_action = QAction("&Save method…", self)
+        self.save_method_action.setToolTip(options.tooltip("save_method"))
+        self.save_method_action.triggered.connect(lambda: self.save_method())
         self.exit_action = QAction("E&xit", self)
         self.exit_action.setShortcuts(QKeySequence.StandardKey.Quit)
         self.exit_action.setMenuRole(QAction.MenuRole.QuitRole)
@@ -205,7 +221,12 @@ class MainWindow(QMainWindow):
         self.about_action.triggered.connect(self.show_about)
 
         bar = self.menuBar()
-        bar.addMenu("&File").addAction(self.exit_action)
+        file = bar.addMenu("&File")
+        file.setToolTipsVisible(True)
+        file.addAction(self.load_method_action)
+        file.addAction(self.save_method_action)
+        file.addSeparator()
+        file.addAction(self.exit_action)
         batch = bar.addMenu("&Batch")
         batch.addAction(self.run_action)
         batch.addAction(self.stop_action)
@@ -229,8 +250,7 @@ class MainWindow(QMainWindow):
         box = QGroupBox("Method")
         lay = QFormLayout(box)
         self.method_combo = QComboBox()
-        for key, m in methods.METHODS.items():
-            self.method_combo.addItem(m.title, key)
+        self._fill_methods()
         self.method_combo.activated.connect(self._method_picked)
         form_row(lay, "Method", self.method_combo, "method")
         return box
@@ -239,8 +259,8 @@ class MainWindow(QMainWindow):
         box = QGroupBox("Basics")
         lay = QFormLayout(box)
         self.gas_combo = QComboBox()
-        for label, gases in GASES:
-            self.gas_combo.addItem(label, gases)
+        for label, gas in GASES:
+            self.gas_combo.addItem(label, gas)
         self.table_combo = QComboBox()
         self.seeds_spin = QSpinBox()
         self.seeds_spin.setRange(1, 1000)
@@ -346,46 +366,161 @@ class MainWindow(QMainWindow):
             self.update_estimate()
 
     @property
-    def gases(self) -> tuple[str, ...]:
+    def gas(self) -> str:
         return self.gas_combo.currentData()
 
     def _fill_tables(self, keep: str | Path | None) -> None:
-        names = [n for n in parameters.names() if all(n in parameters.names(g)
-                                                       for g in self.gases)]
         self.table_combo.clear()
-        for n in names:
-            label = (n if len(self.gases) > 1
-                     else f"{n} ({parameters.shipped(self.gases[0], n).name})")
-            self.table_combo.addItem(label, n)
-        if len(self.gases) == 1:
-            if self._other_table is not None:
-                self.table_combo.addItem(self._other_table.name, str(self._other_table))
-            self.table_combo.addItem(OTHER_TABLE, OTHER_TABLE)
+        for n in parameters.names(self.gas):
+            self.table_combo.addItem(f"{n} ({parameters.shipped(self.gas, n).name})", n)
+        if self._other_table is not None and self._other_table[1] == self.gas:
+            self.table_combo.addItem(self._other_table[0].name, str(self._other_table[0]))
+        self.table_combo.addItem(OTHER_TABLE, OTHER_TABLE)
         i = self.table_combo.findData(str(keep) if keep is not None else parameters.DEFAULT)
         self.table_combo.setCurrentIndex(i if i >= 0 else 0)
 
-    def apply_method(self, key: str) -> None:
+    # --- the methods ------------------------------------------------------------------------
+
+    def method(self, ref: str) -> methods.Method | None:
+        """A shipped method by its key, or a method file in the list by its path."""
+        return methods.METHODS.get(ref) or self.loaded.get(ref)
+
+    def _fill_methods(self) -> None:
+        """The Method list: the shipped methods, then the method files; ``fields_changed``
+        adds Custom when the fields are none of them."""
+        self.method_combo.clear()
+        for m in [*methods.METHODS.values(), *self.loaded.values()]:
+            self.method_combo.addItem(m.title, m.ref)
+
+    def _read_remembered_methods(self) -> None:
+        """Load the method files the list held at the last close. One that has gone, changed
+        since it was added, or no longer loads is dropped, and ``dropped`` says why."""
+        kept = []
+        for path, sha in self.store.methods:
+            if not Path(path).is_file():
+                self.dropped.append(f"{path}: the file is no longer there.")
+                continue
+            try:
+                m = methods.load(path)
+            except methods.MethodError as e:
+                self.dropped.append(f"{e}.")
+                continue
+            if m.sha256 != sha:
+                self.dropped.append(f"{path}: the file has changed since it was added; load it "
+                                    "again to use it as it is now.")
+                continue
+            clash = self._name_clash(m)
+            if clash:
+                self.dropped.append(clash)
+                continue
+            self.loaded[m.ref] = m
+            kept.append((m.ref, m.sha256))
+        if self.dropped:
+            self.store.methods = kept
+
+    def report_dropped_methods(self) -> None:
+        """At launch: say which remembered method files were dropped, and why."""
+        if self.dropped:
+            n = len(self.dropped)
+            QMessageBox.information(
+                self, "Methods", f"{n} method file{'s were' if n != 1 else ' was'} removed from "
+                "the Method list:\n\n" + "\n".join(self.dropped))
+            self.dropped = []
+
+    def _name_clash(self, m: methods.Method) -> str:
+        """Why a method file cannot join the list under its name, or empty."""
+        if any(b.name == m.name for b in methods.METHODS.values()):
+            return f"{m.path}: {m.name!r} is the name of a shipped method; give the file another."
+        other = next((o for o in self.loaded.values()
+                      if o.name == m.name and o.ref != m.ref), None)
+        if other is not None:
+            return (f"{m.path}: the Method list already holds {m.name!r}, from {other.path}; "
+                    "give one of them another name.")
+        return ""
+
+    def _add_method(self, m: methods.Method) -> None:
+        self.loaded[m.ref] = m
+        self.store.methods = [(o.ref, o.sha256) for o in self.loaded.values()]
+        self._fill_methods()
+        self.apply_method(m.ref)
+
+    def load_method(self, path: str | Path | None = None) -> methods.Method | None:
+        """File ▸ Load method…: add a method file to the list and fill the fields from it."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Load method", self.store.input_dir,
+                                                  "Method (*.toml)")
+            if not path:
+                return None
+        try:
+            m = methods.load(Path(path).resolve())
+        except methods.MethodError as e:
+            QMessageBox.warning(self, "Load method", str(e))
+            return None
+        clash = self._name_clash(m)
+        if clash:
+            QMessageBox.warning(self, "Load method", clash)
+            return None
+        self._add_method(m)
+        return m
+
+    def save_method(self, path: str | Path | None = None,
+                    name: str | None = None) -> methods.Method | None:
+        """File ▸ Save method…: write the gas, table, generator and settings to a method file,
+        add it to the list and select it."""
+        try:
+            st = self.form_settings()
+        except settings.SettingsError as e:
+            QMessageBox.warning(self, "Save method", str(e))
+            return None
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(self, "Save method", self.store.input_dir,
+                                                  "Method (*.toml)")
+            if not path:
+                return None
+        path = Path(path).resolve()
+        if name is None:
+            name, ok = QInputDialog.getText(self, "Save method", "Name in the Method list:",
+                                            text=path.stem)
+            if not ok:
+                return None
+        name = name.strip()
+        clash = self._name_clash(dataclasses.replace(
+            methods.METHODS[methods.DEFAULT], name=name, path=path, shipped=False))
+        if clash:
+            QMessageBox.warning(self, "Save method", clash)
+            return None
+        try:
+            m = methods.save(path, name, self.gas, self.table_value() or parameters.DEFAULT,
+                             self.generator_combo.currentData(), st)
+        except methods.MethodError as e:
+            QMessageBox.warning(self, "Save method", str(e))
+            return None
+        self._add_method(m)
+        return m
+
+    def apply_method(self, ref: str) -> None:
         """Fill every field from a method, as picking it in the dropdown does."""
-        m = methods.get(key)
+        m = self.method(ref)
         self._filling = True
         try:
-            if not all(g in m.gases for g in self.gases):
-                self.gas_combo.setCurrentIndex(0)
-            self._fill_tables(m.parameters)
+            self.gas_combo.setCurrentIndex(self.gas_combo.findData(m.gas))
+            if m.table is not None:
+                self._other_table = (m.table, m.gas)
+            self._fill_tables(m.table if m.table is not None else m.parameters)
             self.generator_combo.setCurrentIndex(self.generator_combo.findData(m.generator))
             self.temperature.setValue(m.settings.temperature)
             for name, spin in self.counts.items():
                 spin.setValue(getattr(m.settings, name))
-            self._from = key
+            self._from = ref
         finally:
             self._filling = False
-        self.store.method = key
+        self.store.method = ref
         self.fields_changed()
 
     def _method_picked(self, index: int) -> None:
-        key = self.method_combo.itemData(index)
-        if key in methods.METHODS:
-            self.apply_method(key)
+        ref = self.method_combo.itemData(index)
+        if self.method(ref) is not None:
+            self.apply_method(ref)
 
     def _gas_changed(self) -> None:
         if self._filling:
@@ -399,13 +534,13 @@ class MainWindow(QMainWindow):
             path, _ = QFileDialog.getOpenFileName(self, "Element table", "", "TOML (*.toml)")
             if path:
                 try:
-                    ps = parameters.load(path, gas=self.gases[0])
+                    ps = parameters.load(path, gas=self.gas)
                 except parameters.ParameterError as e:
                     QMessageBox.warning(self, "Element table", str(e))
                     path = ""
                 else:
-                    self._other_table = ps.path
-            self._fill_tables(self._other_table if path else parameters.DEFAULT)
+                    self._other_table = (ps.path, self.gas)
+            self._fill_tables(self._other_table[0] if path else parameters.DEFAULT)
         self.fields_changed()
 
     def table_value(self) -> str | None:
@@ -419,36 +554,39 @@ class MainWindow(QMainWindow):
         return Settings(**values, source=Source(overrides=given))
 
     def method_now(self) -> str:
-        """The method the fields make, for every gas chosen, else custom."""
+        """The method the fields make, by ref: the one they were filled from while they are
+        its fields, else the first shipped method or method file they are, else custom."""
         gen = self.generator_combo.currentData()
         try:
             st = self.form_settings()
         except settings.SettingsError:
             return methods.CUSTOM
-        table = self.table_value()
-        found = set()
-        for gas in self.gases:
-            if table in parameters.names(gas):
-                set_name = table
-            else:
-                try:
-                    set_name = parameters.load(table, gas=gas).set_name if table else None
-                except parameters.ParameterError:
-                    set_name = None
-            found.add(methods.identify(gas, set_name, gen, st))
-        return found.pop() if len(found) == 1 else methods.CUSTOM
+        gas, table = self.gas, self.table_value()
+        if table in parameters.names(gas):
+            set_name, sha = table, parameters.SHA256[parameters.SETS[gas][table]]
+        else:
+            try:
+                ps = parameters.load(table, gas=gas)
+                set_name, sha = ps.set_name, ps.sha256
+            except (parameters.ParameterError, TypeError):
+                return methods.CUSTOM
+        for ref in (self._from, *methods.METHODS, *self.loaded):
+            m = self.method(ref)
+            if m is not None and m.matches(gas, set_name, sha, gen, st):
+                return ref
+        return methods.CUSTOM
 
     def method_title(self) -> str:
         now = self.method_now()
         if now != methods.CUSTOM:
-            return methods.TITLES[now]
-        return f"Custom (from {methods.TITLES[self._from]})"
+            return self.method(now).title
+        return f"Custom (from {self.method(self._from).title})"
 
     def fields_changed(self) -> None:
         if self._filling:
             return
         now = self.method_now()
-        while self.method_combo.count() > len(methods.METHODS):
+        while self.method_combo.count() > len(methods.METHODS) + len(self.loaded):
             self.method_combo.removeItem(self.method_combo.count() - 1)
         if now == methods.CUSTOM:
             self.method_combo.addItem(self.method_title(), methods.CUSTOM)
@@ -469,15 +607,14 @@ class MainWindow(QMainWindow):
         """The batch the form describes, with each import's ``.mfj`` where it will be
         written. Raises BatchError or SettingsError."""
         out = self.out_dir
-        base = self._from if all(g in methods.get(self._from).gases for g in self.gases) \
-            else methods.CURRENT
         split: int | str | None = AUTO
         workers = None
         if not self.auto_cores.isChecked():
             split = self.split_spin.value() if self.split_spin.value() > 1 else None
             workers = self.workers_spin.value()
-        return Batch(tuple(i.mfj_path(out) for i in self.inputs.items), out, self.gases,
-                     seeds(self.seeds_spin.value()), base, parameters=self.table_value(),
+        return Batch(tuple(i.mfj_path(out) for i in self.inputs.items), out, self._from,
+                     gas=self.gas, seeds=seeds(self.seeds_spin.value()),
+                     parameters=self.table_value(),
                      generator=self.generator_combo.currentData(),
                      settings=self.form_settings(), split=split, workers=workers)
 
@@ -514,7 +651,7 @@ class MainWindow(QMainWindow):
             b = self.form_batch()
             self.out_dir.mkdir(parents=True, exist_ok=True)
             for item in self.inputs.items:
-                item.write(self.out_dir, self.gases)
+                item.write(self.out_dir, (self.gas,))
         except (BatchError, settings.SettingsError, StructureError, OSError, ValueError) as e:
             QMessageBox.warning(self, "Run", str(e))
             return
@@ -687,7 +824,7 @@ class MainWindow(QMainWindow):
     def enqueue(self, b: Batch) -> None:
         n = len(b.inputs)
         text = (f"{b.title()}: {n} input{'s' if n != 1 else ''}, "
-                f"{' and '.join(parameters.GAS[g] for g in b.gases)}, {len(b.seeds)} "
+                f"{parameters.GAS[b.resolved_gas]}, {len(b.seeds)} "
                 f"seed{'s' if len(b.seeds) != 1 else ''}, to {b.out_dir}")
         item = QListWidgetItem(text)
         item.setData(Qt.ItemDataRole.UserRole, b)

@@ -54,14 +54,15 @@ to check an installation with `mobcal self-check`.
   [`fortran/README.md`](fortran/README.md) lists every change since 2012, records the hashes,
   and says what the 2012 release said about compiling them. The reference outputs are unchanged.
 - `src/mobcal/`: the Python package, with the two 2012 element tables and the 2000 helium table
-  in `src/mobcal/parameters/`.
+  in `src/mobcal/parameters/` and the five shipped methods in `src/mobcal/methods/`.
 - `tools/check_public.py`: the self-check a fresh clone runs.
 - `packaging/`: how the installers are built ([`packaging/README.md`](packaging/README.md)).
 - `docs/`: the installation guide, every command and option
   ([`docs/command-line.md`](docs/command-line.md)), the element-table format
   ([`docs/parameters.md`](docs/parameters.md)), the two random number generators
   ([`docs/random-numbers.md`](docs/random-numbers.md)), the run settings
-  ([`docs/settings.md`](docs/settings.md)), writing an input from an ORCA output or an `.xyz`
+  ([`docs/settings.md`](docs/settings.md)), the methods and the method-file format
+  ([`docs/methods.md`](docs/methods.md)), writing an input from an ORCA output or an `.xyz`
   file ([`docs/import.md`](docs/import.md)), and how to reproduce a calculation of the 2012
   release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and of the 2000 helium release
   ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)).
@@ -112,13 +113,13 @@ and several at once ([`docs/command-line.md`](docs/command-line.md) lists every 
 option):
 
 ```
-uv run mobcal run choline.mfj --gas both --seeds 5013489,1234567 --workers 4 --out runs
+uv run mobcal run choline.mfj --seeds 5013489,1234567 --workers 4 --out runs
 ```
 
 A calculation is one input file, one gas, one seed and one random number generator. The
-command makes one job for every combination of the inputs given (paths or globs), the gas
-(`he`, `n2` or `both`; helium by default) and the seeds (the 2012 seed, 5013489, by default),
-under the generator `--rng` names (Philox4x32-10 by default, or `ranlux`), prints how the runs
+command makes one job for every combination of the inputs given (paths or globs) and the seeds
+(the 2012 seed, 5013489, by default), under the method `--method` names, which carries the gas,
+the element table, the generator and the run settings (`2012-philox-he` by default), prints how the runs
 will use the processors and about how long they will take, runs them `--workers` at a time (by
 default, as many as the machine has processors), and prints each result as it lands. Each run
 gets a directory of its own under `--out`, named for the input, the gas and the seed, with
@@ -128,8 +129,9 @@ holding a copy of the input, the `mobcal.in` the program read, the element table
 `parameters.tab`, the run settings rendered as `settings.tab`, the output it wrote as
 `mobcal.out`, whatever it printed to the console as `stdout.log`, and `record.json`, which
 records the program and its build, the input and its hash, the seed and the generator, the
-element table and its hash, the settings and where they came from, the method they make
-(`current`, `2012`, `2000` or `custom`), the times and the result.
+element table and its hash, the settings and where they came from, the method they make (a
+shipped method's key, a method file's name with its path and hash, or `custom`), the times and
+the result.
 The directory is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
@@ -143,19 +145,22 @@ whose name another input's run directory already carries. `mobcal methods-text r
 methods paragraph for the runs in a folder, with the program, version, method, gas, element
 table, temperature, trajectory counts, generator and seeds, and the papers to cite.
 
-`--method` names a calculation as a whole. `--method 2012` is the calculation of the 2012
-release ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and `--method 2000` that of the 2000
-helium release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)), each equal to the command lines
-those pages give, and the default, `current`, is the 2012 tables and settings under Philox. An
-option given beside a method overrides that one value, and the run records the method as
-`custom`. The seed is not part of a method. The window, `mobcal gui`, offers the same three
-methods ([`docs/window.md`](docs/window.md)).
+`--method` names a calculation as a whole, its gas included, so helium and nitrogen are two
+commands. `--method 2012-he` and `--method 2012-n2` are the calculation of the 2012 release
+([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and `--method 2000-he` that of the 2000 helium
+release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)), each equal to the command lines those
+pages give; the default, `2012-philox-he`, and `2012-philox-n2` are the 2012 tables and
+settings under Philox. `--method PATH` runs a method file of one's own, which names its gas,
+table, generator and settings ([`docs/methods.md`](docs/methods.md)). An option given beside a
+method overrides that one value, and the run records the method as `custom`. The seed is not
+part of a method. The window, `mobcal gui`, offers the same methods and saves and loads method
+files ([`docs/window.md`](docs/window.md)).
 
 A number published from MOBCAL 2012 reproduces only under the generator it was computed with,
 RANLUX, and at its seed:
 
 ```
-uv run mobcal run choline.mfj --rng ranlux
+uv run mobcal run choline.mfj --method 2012-he
 ```
 
 reports the 2012 choline cross sections in helium to every printed digit, whereas the default,
@@ -194,7 +199,7 @@ The Fortran is single-threaded, so the speedup above comes from running independ
 on separate processors. One calculation can also run across them:
 
 ```
-uv run mobcal run choline.mfj --gas n2 --split 8 --out runs
+uv run mobcal run choline.mfj --method 2012-philox-n2 --split 8 --out runs
 ```
 
 runs the choline calculation in nitrogen as eight processes and reports the serial result

@@ -146,6 +146,21 @@ def main() -> int:
                and settings.DEFAULTS.values() == {"temperature": 301.0, "imp": 1000, "itn": 10,
                                                   "inp": 40, "inum": 250000, "inor": 30})
 
+    section("the shipped methods")
+    from mobcal import methods
+    problems = methods.verify()
+    for p in problems:
+        print("     " + p)
+    check_true(f"all {len(methods.SHA256)} method files present, byte-identical to their pins, "
+               "loading, and named once", not problems)
+    shipped = {p.stem for p in methods.METHODS_DIR.glob("*.toml")}
+    check_true(f"the method files beside mobcal.methods are the pinned ones ({sorted(shipped)})",
+               shipped == set(methods.SHA256))
+    check_true(f"the default method {methods.DEFAULT} is a shipped one, under Philox, at the 2012 "
+               "settings", methods.DEFAULT in methods.METHODS
+               and methods.METHODS[methods.DEFAULT].generator == "philox"
+               and methods.METHODS[methods.DEFAULT].settings == settings.DEFAULTS)
+
     section("layers")
     lower = []
     for dirpath, _, files in os.walk(os.path.join(ROOT, "src", "mobcal")):

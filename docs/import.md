@@ -27,10 +27,11 @@ wrote choline_sp_chelpg.import.json
 
 `-o NAME.mfj` names the file instead, and its record goes beside it as `NAME.import.json`. The
 import never replaces an existing file unless given `--force`. The written file runs like any
-other input:
+other input, in helium under the default method and in nitrogen under its nitrogen form:
 
 ```
-mobcal run choline_sp_chelpg.mfj --gas both
+mobcal run choline_sp_chelpg.mfj
+mobcal run choline_sp_chelpg.mfj --method 2012-philox-n2
 ```
 
 The installed program carries this ORCA output as `examples/choline_sp.out`. In a source

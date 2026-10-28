@@ -1,0 +1,16 @@
+# MOBCAL 2012 (He): the calculation of the 2012 release in helium, its element table and
+# run settings with RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012
+# seed. A method file names the gas, the element table, the generator and the six run
+# settings; docs/methods.md describes the format.
+
+format = 1
+name = "MOBCAL 2012 (He)"
+gas = "he"
+parameters = "2012"
+generator = "ranlux"
+temperature = 301
+imp = 1000
+itn = 10
+inp = 40
+inum = 250000
+inor = 30

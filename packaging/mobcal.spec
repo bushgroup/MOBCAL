@@ -53,12 +53,14 @@ def _analysis(script):
         pathex=[os.path.join(ROOT, "src")],
         binaries=_binaries,
         # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks,
-        # the 2012 settings file beside mobcal/settings/__init__, and the window's icon where
-        # mobcal.app.ICONS looks.
+        # the 2012 settings file beside mobcal/settings/__init__, the shipped methods beside
+        # mobcal/methods/__init__, and the window's icon where mobcal.app.ICONS looks.
         datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
                 os.path.join("mobcal", "parameters")),
                (os.path.join(ROOT, "src", "mobcal", "settings", "*.toml"),
                 os.path.join("mobcal", "settings")),
+               (os.path.join(ROOT, "src", "mobcal", "methods", "*.toml"),
+                os.path.join("mobcal", "methods")),
                (os.path.join(ROOT, "src", "mobcal", "app", "icons", "*.png"),
                 os.path.join("mobcal", "app", "icons"))] + collect_data_files("periodictable"),
         hiddenimports=[],
@@ -144,12 +146,14 @@ if _missing:
 
 _tables = {os.path.basename(dest) for dest, *_ in a.datas
            if dest.endswith(".toml") and dest.startswith("mobcal")}
-_want = {"mobcal_He.toml", "mobcal_He_2000.toml", "mobcal_N2.toml", "mobcal_2012.toml"}
+_want = {"mobcal_He.toml", "mobcal_He_2000.toml", "mobcal_N2.toml", "mobcal_2012.toml",
+         "2012-he.toml", "2012-n2.toml", "2012-philox-he.toml", "2012-philox-n2.toml",
+         "2000-he.toml"}
 if _tables != _want:
     raise RuntimeError(f"Refusing to build: the data files in the bundle are {_tables}, not "
-                       f"{_want}; no run could start without the tables, a named set "
-                       "missing would be refused, and the settings file is what the window "
-                       "reads.")
+                       f"{_want}; no run could start without the tables or the methods, a "
+                       "named set missing would be refused, and the settings file is what the "
+                       "window reads.")
 
 _icons = {os.path.basename(dest) for dest, *_ in g.datas
           if dest.replace("\\", "/").startswith("mobcal/app/icons/")}

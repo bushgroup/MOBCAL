@@ -1,0 +1,16 @@
+# MOBCAL 2012 with Philox (N2): the 2012 element table and run settings in nitrogen, with
+# random numbers from Philox4x32-10, whose divided runs give the serial result exactly. inum
+# and inor set the helium program's projection and hard-sphere pass, which the nitrogen program
+# does not make. docs/methods.md describes the format.
+
+format = 1
+name = "MOBCAL 2012 with Philox (N2)"
+gas = "n2"
+parameters = "2012"
+generator = "philox"
+temperature = 301
+imp = 1000
+itn = 10
+inp = 40
+inum = 250000
+inor = 30
