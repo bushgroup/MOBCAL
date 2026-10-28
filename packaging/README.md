@@ -12,8 +12,9 @@ mobcal/
   mobcal(.exe)        the command, frozen with its own Python; `mobcal gui` opens the window
   mobcal-gui(.exe)    the window alone, without a console: the Start-menu shortcut's target
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
-                      in mobcal/parameters/, the 2012 settings file in mobcal/settings/ and
-                      the window's icon in mobcal/app/icons/,
+                      in mobcal/parameters/, the 2012 settings file in mobcal/settings/,
+                      the window's icon in mobcal/app/icons/, the user's guide (docs/*.md,
+                      which Help, MOBCAL Help shows) in docs/,
                       cclib with numpy, scipy and periodictable for `mobcal import`, and
                       PySide6-Essentials (QtCore, QtGui, QtWidgets and their plugins) for the
                       window; on Linux, libxcb-cursor.so.0, which Qt's xcb plugin needs
@@ -97,8 +98,9 @@ uv run tools/build_bundle.py --archive
 `examples/` and `LICENSE`, and runs the built program's `self-check` with `PATH` cut to the
 operating system's own directories, so a program that works only because something on the
 build machine's `PATH` helps it fails here. The report is also written to
-`build/self-check.log`. It also opens and closes the built window (`mobcal gui --check`, on Qt's
-offscreen platform), so a bundle missing Qt or a plugin it needs fails here. It then times two starts of `mobcal version`, and has the built program
+`build/self-check.log`. It also opens and closes the built window and its Help viewer (`mobcal
+gui --check`, on Qt's offscreen platform), so a bundle missing Qt, a plugin it needs or the
+guide's pages fails here; `mobcal.spec` refuses to build without every page of `docs/`. It then times two starts of `mobcal version`, and has the built program
 import `examples/choline_sp.out` with its CHELPG charges, which must write the file the source
 tree's import writes, so a bundle missing any part of cclib fails here and not on a user's
 first import.

@@ -21,9 +21,11 @@
 # Qt plugins QtCore, QtGui and QtWidgets need. On Linux, Qt >= 6.5's xcb platform plugin needs
 # libxcb-cursor.so.0, which many desktops lack; the build machine's copy is collected beside
 # the plugin. The package's data files are the element tables (each gas's default set and the
-# named alternates) and the settings file, which the self-check verifies by SHA-256, and the
-# window's icon as PNGs. The executables carry packaging/icon/mobcal.ico on Windows, MOBCAL.app
-# carries mobcal.icns; tools/make_icon.py draws all of them.
+# named alternates) and the settings file, which the self-check verifies by SHA-256, the
+# window's icon as PNGs, and the user's guide, docs/*.md, which Help > MOBCAL Help shows
+# (mobcal.docs.docs_dir looks for it in docs/ under sys._MEIPASS). The executables carry
+# packaging/icon/mobcal.ico on Windows, MOBCAL.app carries mobcal.icns; tools/make_icon.py
+# draws all of them.
 
 import os
 import sys
@@ -54,7 +56,8 @@ def _analysis(script):
         binaries=_binaries,
         # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks,
         # the 2012 settings file beside mobcal/settings/__init__, the shipped methods beside
-        # mobcal/methods/__init__, and the window's icon where mobcal.app.ICONS looks.
+        # mobcal/methods/__init__, the window's icon where mobcal.app.ICONS looks, and the
+        # guide's pages in docs/ at the top of the bundle, where mobcal.docs looks.
         datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
                 os.path.join("mobcal", "parameters")),
                (os.path.join(ROOT, "src", "mobcal", "settings", "*.toml"),
@@ -62,7 +65,8 @@ def _analysis(script):
                (os.path.join(ROOT, "src", "mobcal", "methods", "*.toml"),
                 os.path.join("mobcal", "methods")),
                (os.path.join(ROOT, "src", "mobcal", "app", "icons", "*.png"),
-                os.path.join("mobcal", "app", "icons"))] + collect_data_files("periodictable"),
+                os.path.join("mobcal", "app", "icons")),
+               (os.path.join(ROOT, "docs", "*.md"), "docs")] + collect_data_files("periodictable"),
         hiddenimports=[],
         hookspath=[],
         hooksconfig={},
@@ -160,6 +164,14 @@ _icons = {os.path.basename(dest) for dest, *_ in g.datas
 if not _icons:
     raise RuntimeError("Refusing to build: no window icon in the bundle (src/mobcal/app/icons/, "
                        "which tools/make_icon.py writes), so the window would open without one.")
+
+_pages = {os.path.basename(dest) for dest, *_ in g.datas
+          if os.path.dirname(dest.replace("\\", "/")) == "docs"}
+_want_pages = {f for f in os.listdir(os.path.join(ROOT, "docs")) if f.endswith(".md")}
+if _pages != _want_pages:
+    raise RuntimeError(f"Refusing to build: the help pages in the bundle are {sorted(_pages)}, "
+                       f"not every page of docs/ ({sorted(_want_pages)}), so Help > MOBCAL Help "
+                       "would show a guide with pages missing.")
 
 # --- Provenance guard (Windows) -------------------------------------------------------------
 # PyInstaller resolves a collected binary's DLL dependencies through the binary's own directory,

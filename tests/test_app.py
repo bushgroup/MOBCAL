@@ -19,8 +19,16 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QRect, QSettings, Qt  # noqa: E402
-from PySide6.QtGui import QAction, QColor, QFont, QGuiApplication, QPalette  # noqa: E402
+from PySide6.QtCore import QRect, QSettings, Qt, QUrl  # noqa: E402
+from PySide6.QtGui import (  # noqa: E402
+    QAction,
+    QColor,
+    QDesktopServices,
+    QFont,
+    QGuiApplication,
+    QKeySequence,
+    QPalette,
+)
 from PySide6.QtGui import Qt as QtGui_Qt  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QAbstractButton,
@@ -43,7 +51,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
-from mobcal import cli, fortran, methods, options  # noqa: E402
+from mobcal import cli, docs, fortran, methods, options  # noqa: E402
 from mobcal.app import theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
@@ -372,7 +380,9 @@ def test_the_menus_hold_the_actions(window):
     assert [a.toolTip() for a in menus["&File"][:2]] == [options.tooltip("load_method"),
                                                          options.tooltip("save_method")]
     assert menus["&Batch"] == [w.run_action, w.stop_action, w.resume_action]
-    assert menus["&Help"] == [w.about_action]
+    assert menus["&Help"] == [w.help_action, w.about_action]
+    assert w.help_action.shortcuts() == QKeySequence.keyBindings(
+        QKeySequence.StandardKey.HelpContents)
     roles = [a.menuRole() for a in (w.exit_action, w.about_action)]
     assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole]
     assert not w.findChildren(QToolBar)
@@ -406,6 +416,99 @@ def test_about_opens_and_closes(window):
     d.close()
     assert not d.isVisible()
 
+
+# --- the help viewer -----------------------------------------------------------------------
+
+def test_help_opens_one_viewer_and_a_second_call_raises_it(window, qtbot):
+    w = window
+    w.show()
+    assert w.help is None
+    w.help_action.trigger()
+    h = w.help
+    assert h is not None and h.isVisible() and not h.isModal()
+    assert h.current == "window.md" and h.windowTitle() == "The window - MOBCAL Help"
+    h.open("settings.md")
+    h.close()
+    w.help_action.trigger()
+    assert w.help is h and h.isVisible() and h.current == "settings.md"
+    assert len([c for c in w.findChildren(type(h))]) == 1
+
+
+def test_every_page_loads_with_githubs_anchors_on_its_headings(window):
+    h = window.show_help()
+    pages = docs.pages()
+    assert list(h.pages) == [p.name for p in pages]
+    for p in pages:
+        loaded = h.pages[p.name]
+        assert loaded.doc.toPlainText().startswith(p.title)
+        want = [(lvl, a) for lvl, _, a in docs.anchors(p.path.read_text(encoding="utf-8"))]
+        assert [(lvl, a) for _, lvl, _, a in loaded.sections] == want, p.name
+    top = [h.contents.topLevelItem(i).text(0) for i in range(h.contents.topLevelItemCount())]
+    assert top == [p.title for p in pages]
+
+
+def test_a_link_to_a_section_of_another_page_is_followed(window, qtbot):
+    h = window.show_help()
+    h.resize(900, 500)
+    qtbot.waitExposed(h)
+    h.follow(QUrl("parameters.md#the-2000-helium-set"))
+    assert h.current == "parameters.md"
+    assert h.view.verticalScrollBar().value() > 0
+    assert h.contents.currentItem().text(0) == "The 2000 helium set"
+    h.follow(QUrl("#the-file"))
+    assert h.current == "parameters.md" and h.contents.currentItem().text(0) == "The file"
+
+
+def test_a_link_outside_the_guide_opens_on_github_at_the_version(window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    h = window.show_help()
+    h.open("mobcal-2012.md")
+    h.follow(QUrl("../fortran/README.md"))
+    h.follow(QUrl("https://github.com/bushgroup/MOBCAL-2012"))
+    h.follow(QUrl("qm.md#orca"))  # a page this copy does not carry
+    blob = f"{methods.REPOSITORY}/blob/{docs.ref()}"
+    assert opened == [f"{blob}/fortran/README.md", "https://github.com/bushgroup/MOBCAL-2012",
+                      f"{blob}/docs/qm.md#orca"]
+    assert h.current == "mobcal-2012.md"
+
+
+def test_a_search_finds_a_term_on_every_page_that_holds_it(window, qtbot):
+    h = window.show_help()
+    h.search.setText("Philox4x32-10")
+    h.find()
+    assert h.lists.currentWidget() is h.results
+    found = {h.results.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole)
+             for i in range(h.results.topLevelItemCount())}
+    holds = {p.name for p in docs.pages()
+             if "philox4x32-10" in p.path.read_text(encoding="utf-8").lower()}
+    assert found == holds and "random-numbers.md" in found
+    page = next(h.results.topLevelItem(i) for i in range(h.results.topLevelItemCount())
+                if h.results.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole)
+                == "random-numbers.md")
+    section = page.child(0)
+    assert section.text(0) in {s for *_, s, _ in [(0, 0, t, a) for _, _, t, a in
+                                                  h.pages["random-numbers.md"].sections]}
+    h._go(section.child(0))
+    assert h.current == "random-numbers.md"
+    assert h.view.textCursor().selectedText().lower() == "philox4x32-10"
+    h.search.setText("no such words anywhere")
+    h.find()
+    assert h.results.topLevelItem(0).text(0).startswith("No page holds")
+    h.search.clear()
+    h.find()
+    assert h.lists.currentWidget() is h.contents
+
+
+def test_the_help_reads_its_pages_again_when_the_palette_changes(window, qtbot):
+    h = window.show_help()
+    h.open("settings.md")
+    before = h.pages["settings.md"].doc
+    pal = QPalette(h.palette())
+    pal.setColor(QPalette.ColorRole.Base, QColor("#202020"))
+    h.setPalette(pal)
+    assert h.pages["settings.md"].doc is not before and h.current == "settings.md"
+    assert h.view.document() is h.pages["settings.md"].doc
 
 def contrast(a: str, b: str) -> float:
     def lum(h):

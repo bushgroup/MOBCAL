@@ -10,7 +10,8 @@ method in the other gas when there is one. Under the form, the estimate for the 
 stands.
 
 Above, a menu bar: File ▸ Load method…, Save method… and Exit, Batch ▸ Run, Stop and Resume
-queue (each one ``QAction`` that owns its text and enabled state), Help ▸ About; the queue's Add
+queue (each one ``QAction`` that owns its text and enabled state), Help ▸ MOBCAL Help (F1, the
+guide in a window of its own, ``mobcal.app.help``) and About; the queue's Add
 batch button is Run. Load method adds a method file to the Method list and Save method writes
 the form's method fields to one and adds it; the list is remembered by path and SHA-256, and a
 file that has gone or changed is dropped at the next launch with a message
@@ -74,6 +75,7 @@ from mobcal import batch as batches
 from mobcal import estimate, methods, options, parameters, settings
 from mobcal.app import tip
 from mobcal.app.about import AboutDialog
+from mobcal.app.help import HelpWindow
 from mobcal.app.inputs import InputsPanel
 from mobcal.app.store import Store
 from mobcal.app.worker import BatchWorker
@@ -133,6 +135,7 @@ class MainWindow(QMainWindow):
         self.launcher = launcher  # tests run a stand-in binary
         self.cpus = cpus or os.cpu_count() or 1
         self.worker: BatchWorker | None = None
+        self.help: HelpWindow | None = None
         self.results: list[Result] = []
         self.running: dict[str, tuple[Job, float]] = {}  # label -> job, start time
         self.blocks: dict[str, tuple[int, int]] = {}
@@ -193,7 +196,8 @@ class MainWindow(QMainWindow):
     def _actions(self) -> None:
         """Run, Stop and Resume queue as actions, in the Batch menu; File ▸ Load method…, Save
         method… and Exit, which closes the window by the same path as its close button; Help ▸
-        About. The roles put Exit and About in the application menu on macOS. Resume queue is
+        MOBCAL Help, at the platform's help key, and About. The roles put Exit and About in the
+        application menu on macOS. Resume queue is
         enabled only while the queue holds batches and nothing runs, which is a queue put back at
         launch: otherwise the queue starts its next batch itself when one ends."""
         self.run_action = QAction("&Run", self)
@@ -216,6 +220,9 @@ class MainWindow(QMainWindow):
         self.exit_action.setShortcuts(QKeySequence.StandardKey.Quit)
         self.exit_action.setMenuRole(QAction.MenuRole.QuitRole)
         self.exit_action.triggered.connect(self.close)
+        self.help_action = QAction("MOBCAL &Help", self)
+        self.help_action.setShortcuts(QKeySequence.StandardKey.HelpContents)
+        self.help_action.triggered.connect(self.show_help)
         self.about_action = QAction("&About MOBCAL", self)
         self.about_action.setMenuRole(QAction.MenuRole.AboutRole)
         self.about_action.triggered.connect(self.show_about)
@@ -232,11 +239,22 @@ class MainWindow(QMainWindow):
         batch.addAction(self.stop_action)
         batch.addSeparator()
         batch.addAction(self.resume_action)
-        bar.addMenu("&Help").addAction(self.about_action)
+        help_menu = bar.addMenu("&Help")
+        help_menu.addAction(self.help_action)
+        help_menu.addAction(self.about_action)
 
     def resume_queue(self) -> None:
         if self.worker is None and self.queue.count():
             self.start(self._take_queued(0))
+
+    def show_help(self) -> HelpWindow:
+        """Show the guide, made at the first call and brought forward at every later one."""
+        if self.help is None:
+            self.help = HelpWindow(self)
+        self.help.show()
+        self.help.raise_()
+        self.help.activateWindow()
+        return self.help
 
     def show_about(self) -> AboutDialog:
         """Open the About box, window-modal, and return it."""

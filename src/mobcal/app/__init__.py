@@ -50,8 +50,9 @@ def missing_platform_library() -> str | None:
 
 
 def main(argv: list[str] | None = None, check: bool = False) -> int:
-    """Open the window and run until it closes. With ``check``, open it, let it draw, close
-    it and return 0: the installers' test that the window starts on a clean machine."""
+    """Open the window and run until it closes. With ``check``, open it and the help viewer,
+    let them draw, close them and return 0, or 1 without a help page: the installers' test that
+    the window starts on a clean machine and the bundle carries the guide."""
     lib = missing_platform_library()
     if lib:
         print(f"error: the window needs {lib}, which Qt's X11 platform plugin loads; install it "
@@ -78,15 +79,20 @@ def main(argv: list[str] | None = None, check: bool = False) -> int:
 
         from PySide6.QtCore import QSettings, QTimer
 
+        from mobcal import docs
         from mobcal.app.store import Store
         with tempfile.TemporaryDirectory() as d:
             w = MainWindow(Store(QSettings(str(Path(d) / "check.ini"),
                                            QSettings.Format.IniFormat), data_dir=Path(d)))
             w.show()
+            guide = w.show_help()
             QTimer.singleShot(500, w.close)
             rc = app.exec()
+        if not guide.pages:
+            print(f"error: no help pages in {docs.docs_dir()}", file=sys.stderr)
+            return 1
         print(f"window opened and closed on {app.platformName()}, Qt {qt_version()}, icon at "
-              f"{len(icon.availableSizes())} sizes")
+              f"{len(icon.availableSizes())} sizes, {len(guide.pages)} help pages")
         return rc
     w = MainWindow()
     w.show()
