@@ -18,11 +18,14 @@ the bounds, what a split run does at other settings, and what the run's record c
 
 ## Setting them
 
-`mobcal run` takes a settings file and single values:
+In the window, the temperature is a field under Basics and the five counts are fields under
+Advanced, each filled by the method chosen; a value changed there makes the method *Custom*
+([The window](window.md#method-basics-and-advanced)). From a terminal, `mobcal run` takes a
+settings file and single values:
 
 ```
-uv run mobcal run choline.mfj --temperature 298 --imp 25
-uv run mobcal run choline.mfj --settings mine.toml --inp 20
+mobcal run choline.mfj --temperature 298 --imp 25
+mobcal run choline.mfj --settings mine.toml --inp 20
 ```
 
 A settings file is TOML with `format = 1` and any of the six keys. A key left out keeps the 2012
@@ -33,11 +36,11 @@ format = 1
 imp = 25
 ```
 
-The six keys are `temperature` (K; an integer or a float greater than zero), `imp`, `itn`,
-`inp`, `inum` and `inor` (integers). The shipped file, `src/mobcal/settings/mobcal_2012.toml`,
-holds all six at their 2012 values with a line on what each one is. The precedence is the 2012
-values, then the file named by `--settings`, then the single-value options, so
-`--settings mine.toml --imp 1000` runs the file's settings with `imp` put back.
+The six keys are `temperature` (K; an integer or a float greater than zero), `imp`, `itn`, `inp`,
+`inum` and `inor` (integers). The shipped file, `mobcal_2012.toml` (in the source code, under
+`src/mobcal/settings/`), holds all six at their 2012 values with a line on what each one is. The
+precedence is the 2012 values, then the file named by `--settings`, then the single-value options,
+so `--settings mine.toml --imp 1000` runs the file's settings with `imp` put back.
 
 The run directory's name carries each value that differs from 2012, in the order above, so two
 runs of one input and seed at different settings never share a directory:
@@ -105,12 +108,13 @@ To prepare a directory for running a program by hand, render the settings there 
 element table:
 
 ```
-uv run mobcal render-parameters he path/to/run --settings mine.toml
+mobcal render-parameters he path/to/run --settings mine.toml
 ```
 
 ## Split runs
 
-A calculation split across processes ([the README](../README.md#running-calculations)) deals
+A calculation split across processes (by the window's choice,
+[The window](window.md#how-a-batch-uses-the-processors-and-the-estimate), or by `--split`) deals
 `itn` × `inp` blocks per coordinate set among its workers, 400 at the 2012 values and up to
 10,000 at the bounds, so `--split` takes any worker count up to that product. Each block file
 carries the settings its block was integrated under, after the seed and the generator, and the
@@ -130,16 +134,17 @@ and requires the two outputs to be byte-identical; nitrogen is held the same way
 
 ## The 2000 reference
 
-The settings reach back past 2012. The Jarrold group's 2000 helium release, kept as distributed
-at [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), ran at 298 K with
-`imp = 25` and shipped an example, a sodiated alanine decamer over 50 coordinate sets, with its
-reference output at seed 5013486. The shipped helium program, given that release's element
-table, which the package ships as the helium set `2000` ([parameters.md](parameters.md)), and
-run with `--parameters 2000 --temperature 298 --imp 25 --rng ranlux` at that seed, prints that reference output line for line (gfortran 16.2.0, Windows, 2026-10-24),
-apart from the three lines whose format changed after 2012: the `mass of ion` exponent letter,
-the width of the atom count, and the q1st column. The same holds split 40 ways. Reproducing a
-number calculated with the 2000 release is therefore a table and two settings, not a
-different program; [mobcal-2000.md](mobcal-2000.md) gives the command and the comparison.
+The settings reach back past 2012. The Jarrold group's 2000 helium release, kept as distributed at
+[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), ran at 298 K with `imp = 25` and
+shipped an example, a sodiated alanine decamer over 50 coordinate sets, with its reference output at
+seed 5013486. The shipped helium program, given that release's element table, which the package
+ships as the helium set `2000` ([The element tables](parameters.md)), and run with `--parameters
+2000 --temperature 298 --imp 25 --rng ranlux` at that seed, prints that reference output line for
+line (gfortran 16.2.0, Windows, 2026-10-24), apart from the three lines whose format changed after
+2012: the `mass of ion` exponent letter, the width of the atom count, and the q1st column. The same
+holds split 40 ways. Reproducing a number calculated with the 2000 release is therefore a table and
+two settings, not a different program; [Reproducing MOBCAL 2000](mobcal-2000.md) gives the command
+and the comparison.
 
 ## The record
 

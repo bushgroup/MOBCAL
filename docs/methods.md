@@ -1,11 +1,11 @@
 # Methods
 
-A method is everything a calculation depends on except its input and its seed: the buffer gas,
-the element table, the random number generator and the six run settings (the temperature and
-the five sampling counts, [settings.md](settings.md)). `mobcal run --method` and the window's
-Method list choose one, and every run records the method it used, so a cross section can be
-traced to the calculation that gave it. A batch runs one method, and so one gas; helium and
-nitrogen are two batches, which the window's queue or two commands run one after the other.
+A method is everything a calculation depends on except its input and its seed: the buffer gas, the
+element table, the random number generator and the six run settings (the temperature and the five
+sampling counts, [The run settings](settings.md)). The window's Method list and `mobcal run
+--method` choose one, and every run records the method it used, so a cross section can be traced to
+the calculation that gave it. A batch runs one method, and so one gas; helium and nitrogen are two
+batches, which the window's queue or two commands run one after the other.
 
 ## The five shipped methods
 
@@ -19,22 +19,25 @@ nitrogen are two batches, which the window's queue or two commands run one after
 
 The 2012 settings are 301 K, `imp` 1,000, `itn` 10, `inp` 40, `inum` 250,000 and `inor` 30.
 `2012-he` and `2012-n2` are the calculation of the 2012 release, which at the 2012 seed
-reproduces its outputs ([mobcal-2012.md](mobcal-2012.md)). `2012-philox-he` and
+reproduces its outputs ([Reproducing MOBCAL 2012](mobcal-2012.md)). `2012-philox-he` and
 `2012-philox-n2` are the same tables and settings under Philox4x32-10, whose divided runs give
-the serial result exactly ([random-numbers.md](random-numbers.md)); `2012-philox-he` is the
+the serial result exactly ([Random numbers](random-numbers.md)); `2012-philox-he` is the
 default of `mobcal run` and of the window's first launch. `2000-he` is the calculation of the
-Jarrold group's 2000 helium release ([mobcal-2000.md](mobcal-2000.md)), which has no nitrogen
-form.
+Jarrold group's 2000 helium release ([Reproducing MOBCAL 2000](mobcal-2000.md)), which has no
+nitrogen form.
+
+In the window, choosing a method fills every field of the form, and a field changed afterwards
+makes the method *Custom* ([The window](window.md#method-basics-and-advanced)). From a terminal,
 
 ```
-uv run mobcal run choline.mfj
-uv run mobcal run choline.mfj --method 2012-n2
+mobcal run choline.mfj
+mobcal run choline.mfj --method 2012-n2
 ```
 
-The first runs choline under `2012-philox-he`, the second under the 2012 release's nitrogen
-calculation. A table, generator or setting given beside `--method` replaces that one value, and
-the run records `custom`, or the shipped method its values make:
-`--method 2012-he --rng philox` is a `2012-philox-he` run. The seed is not part of a method, and the first seed is the
+runs choline under `2012-philox-he`, then under the 2012 release's nitrogen calculation. A
+table, generator or setting given beside `--method` replaces that one value, and the run records
+`custom`, or the shipped method its values make: `--method 2012-he --rng philox` is a
+`2012-philox-he` run. The seed is not part of a method, and the first seed is the
 2012 seed, 5013489, under every method.
 
 ## Method files
@@ -64,7 +67,7 @@ required, and a key the file does not know is refused by name. The six settings 
 and a setting left out takes its 2012 value, as in a settings file. The name is 1 to 60
 characters and must differ from the shipped methods' names and from every other file in the
 list. `parameters` is the name of a shipped table for the gas (`2012`, or `2000` in helium), or
-a table of one's own ([parameters.md](parameters.md)) named by its path and its SHA-256:
+a table of one's own ([The element tables](parameters.md)) named by its path and its SHA-256:
 
 ```toml
 [parameters]

@@ -2,10 +2,10 @@
 
 MOBCAL is distributed as a program that runs without a Fortran compiler and without Python: an
 installer for Windows, and an archive for macOS on Apple silicon and for Linux on x86-64. Each
-holds the window ([window.md](window.md)), the `mobcal` command, the two 2012 Fortran programs
-(helium and nitrogen) compiled for that platform, and the 2012 choline input with its two
-reference outputs. To build from source
-instead, see the [README](../README.md).
+holds the window ([The window](window.md)), the `mobcal` command, the two 2012 Fortran
+programs (helium and nitrogen) compiled for that platform, the 2012 choline input with its two
+reference outputs, and these pages, which the window shows under Help, MOBCAL Help. To run
+MOBCAL from its source code instead, see [From source](#from-source).
 
 Released versions are on the repository's
 [Releases page](https://github.com/bushgroup/MOBCAL/releases). Between releases, every change to
@@ -78,17 +78,16 @@ On a machine without a display, `mobcal run` does everything the window does.
 mobcal self-check
 ```
 
-checks, in under a second, that the installed copy can compute a cross section. It prints one
-line per stage, with the time each took: the version; that the two element tables and the
-settings file are the files this package shipped, by their checksums, and pass the checks a
-run puts them through ([parameters.md](parameters.md), [settings.md](settings.md)); that both
-Fortran programs are present,
-are the files that were built for this package, and were built from this package's Fortran sources with the
-recorded compiler flags (the folder `fortran` beside `mobcal` holds the programs and a
-`build.json` that records the compiler, the flags, the commit and a checksum of each file); and
-that each program starts and refuses an input naming an element it does not define, which
-exercises everything a calculation does except the trajectories. It ends with
-`self-check passed`, or names the stage that failed.
+checks, in under a second, that the installed copy can compute a cross section. It prints one line
+per stage, with the time each took: the version; that the two element tables and the settings file
+are the files this package shipped, by their checksums, and pass the checks a run puts them through
+([The element tables](parameters.md), [The run settings](settings.md)); that both Fortran programs
+are present, are the files that were built for this package, and were built from this package's
+Fortran sources with the recorded compiler flags (the folder `fortran` beside `mobcal` holds the
+programs and a `build.json` that records the compiler, the flags, the commit and a checksum of each
+file); and that each program starts and refuses an input naming an element it does not define, which
+exercises everything a calculation does except the trajectories. It ends with `self-check passed`,
+or names the stage that failed.
 
 ```
 mobcal self-check --choline
@@ -103,9 +102,11 @@ kept.
 
 ## Running calculations
 
-The installed command is the same `mobcal run` that the [README](../README.md#running-calculations)
-describes, without the `uv run` in front of it. The choline input is in the `examples` folder
-of the installation, which on macOS is `MOBCAL.app/Contents/Resources/examples`:
+The window is the **MOBCAL** entry of the Start menu on Windows and `MOBCAL.app` on macOS, and
+`mobcal gui` opens it on Linux ([The window](window.md)). The same calculations run from a
+terminal with `mobcal run` ([The command line](command-line.md)). The choline input is in the
+`examples` folder of the installation, which on macOS is
+`MOBCAL.app/Contents/Resources/examples`:
 
 ```
 mobcal run <installation>/examples/Choline.mfj --out runs
@@ -115,14 +116,35 @@ writes its run directory and `summary.csv` under `runs` in the current directory
 `--split 8` runs that one calculation as eight processes and reports the serial result exactly,
 which is how a long nitrogen calculation is made short on a machine with cores to spare: on
 one 80-thread workstation choline in nitrogen took 70 minutes serial, 8 minutes across ten
-processes and 4.5 minutes across twenty. The run draws its random numbers from Philox4x32-10
-unless `--rng ranlux` is added, which selects the generator of the 2012 release and, at the
-default seed, reproduces the 2012 choline values above ([random-numbers.md](random-numbers.md)).
-Run calculations from a folder of your own, not from inside the installation, which an upgrade
-replaces.
+processes and 4.5 minutes across twenty. The window makes the same choice by itself
+([The window](window.md#how-a-batch-uses-the-processors-and-the-estimate)). The run draws its
+random numbers from Philox4x32-10 unless `--rng ranlux` is added, which selects the generator of
+the 2012 release and, at the default seed, reproduces the 2012 choline values above
+([Random numbers](random-numbers.md)). Run calculations from a folder of your own, not from
+inside the installation, which an upgrade replaces.
+
+## From source
+
+MOBCAL also runs from a clone of its repository, on any platform with
+[uv](https://docs.astral.sh/uv/) and gfortran (on Windows, gfortran from MSYS2 with
+`C:\msys64\mingw64\bin` on `PATH`). uv provides Python and the packages MOBCAL needs, and
+every command runs through it from the repository's folder:
+
+```
+git clone https://github.com/bushgroup/MOBCAL.git
+cd MOBCAL
+uv run mobcal build
+uv run mobcal gui
+```
+
+`mobcal build` compiles the two Fortran programs into `build/fortran/`, and from then on each
+`mobcal` command on these pages is `uv run mobcal` in that folder. The example input and the
+2012 references are under `fortran/` rather than `examples/`. The [README](../README.md) gives
+the build, the tests and the run in more detail.
 
 ## Source code
 
 MOBCAL is free software under the GNU General Public License, version 3, which the installation
 carries as `LICENSE`. The commit each package was built from is recorded in its
-`fortran/build.json`, and the source code at that commit is in this repository.
+`fortran/build.json`, and the source code at that commit is in the
+[repository](https://github.com/bushgroup/MOBCAL).

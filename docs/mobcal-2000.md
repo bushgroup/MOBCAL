@@ -1,6 +1,6 @@
 # Reproducing MOBCAL 2000
 
-The helium program in this repository descends from the Jarrold group's 2000 release of MOBCAL
+MOBCAL's helium program descends from the Jarrold group's 2000 release of MOBCAL
 (Mesleh et al., *J. Phys. Chem.* 1996, 100, 16082; Shvartsburg and Jarrold, *Chem. Phys. Lett.*
 1996, 261, 86), kept as distributed at
 [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The 2012 helium source
@@ -20,12 +20,14 @@ To calculate a cross section as the 2000 release would have, run the helium prog
 2000 table, the 2000 settings and the 2012 random number generator:
 
 ```
-uv run mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
+mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
 ```
 
-`--method 2000-he --seeds 5013486` is the same command in fewer words, and the window's MOBCAL
-2000 (He) method is the same again; the run records its method as `2000-he` whichever way it was
-asked for ([methods.md](methods.md)).
+`--method 2000-he --seeds 5013486` is the same command in fewer words, and the run records its
+method as `2000-he` whichever way it was asked for ([Methods](methods.md)). The window's MOBCAL
+2000 (He) method is the same calculation at the window's seeds, the 2012 seed and those after
+it, so it reproduces the 2000 method on an ion of one's own, whereas the release's example, run
+at 5013486, reproduces from a terminal only.
 
 Each option sets one thing to its value in the release's example run, where the default run
 would use the 2012 value:
@@ -38,14 +40,14 @@ would use the 2012 value:
 | `--rng ranlux` | RANLUX, luxury level 3 | Philox4x32-10 |
 | `--seeds 5013486` | the seed of the release's example | 5013489, the 2012 seed |
 
-The other four sampling counts are the same in 2000 and 2012 (`itn = 10` cycles, `inp = 40`
-velocity points, `inum = 250,000` hard-sphere trajectories, `inor = 30` reflections), so they
-need no option. Helium is the default gas. The seed is the one choice that belongs to the
-calculation rather than to the release: for an ion of one's own, any seed gives a 2000-release
-calculation, and the seed the 2000 run used gives that run's numbers. The run writes its output
-to `runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out`, and its `record.json` names the table
-as `MOBCAL 2000 helium` with its SHA-256 ([parameters.md](parameters.md)) and records the two
-settings ([settings.md](settings.md)).
+The other four sampling counts are the same in 2000 and 2012 (`itn = 10` cycles, `inp = 40` velocity
+points, `inum = 250,000` hard-sphere trajectories, `inor = 30` reflections), so they need no option.
+Helium is the default gas. The seed is the one choice that belongs to the calculation rather than to
+the release: for an ion of one's own, any seed gives a 2000-release calculation, and the seed the
+2000 run used gives that run's numbers. The run writes its output to
+`runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out`, and its `record.json` names the table
+as `MOBCAL 2000 helium` with its SHA-256 ([The element tables](parameters.md)) and records the two
+settings ([The run settings](settings.md)).
 
 The 2000 table covers eight elements, hydrogen, carbon, nitrogen, oxygen, sodium, silicon,
 sulfur and iron. An ion with any other element, fluorine included, is refused: the program stops
@@ -81,7 +83,7 @@ their diagnostics, and the SUMMARY are the 2000 lines: the averages over the 50 
 the trajectory method, as the reference prints them. This was measured with MSYS2 gfortran
 16.2.0 on Windows on 24 October 2026, serial and split 40 ways (below). The comparison is not
 part of the test suite, which holds the program to the 2012 outputs on every push
-([mobcal-2012.md](mobcal-2012.md)).
+([Reproducing MOBCAL 2012](mobcal-2012.md)).
 
 ## The differences in the output
 
@@ -99,8 +101,8 @@ equals the value this program prints to within the last printed digit, since bot
 to five significant figures (`2.4708E+00` × 4 is `9.8832`, printed `9.8831E+00`). The `gst2` and
 `wgst` columns of that table are the 2000 lines, and with the division corrected the
 `wgst`-weighted sum of the q1st column equals the printed `mean OMEGA*(1,1)`, where before it was a
-quarter of it. [fortran/README.md](../fortran/README.md) records each change, with the lines it
-touched, under Changes since 2012.
+quarter of it. [`fortran/README.md`](../fortran/README.md) in the source code records each
+change, with the lines it touched, under Changes since 2012.
 
 ## Split runs
 
@@ -121,9 +123,10 @@ serial run.
 ## The 2000 program itself
 
 The 2000 source builds and runs today without a change. Built with the gfortran line in the
-[MOBCAL-2000 README](https://github.com/bushgroup/MOBCAL-2000#building-and-running-it-today),
-which asks for the static storage of local variables that this repository's recipe in
-`mobcal.fortran` also asks for, it prints `a10A1.out.orig` byte for byte once carriage returns are stripped, `D` exponent included
-(gfortran 16.2.0, Windows, 23 October 2026). That program is the reference for any question the
-42 lines leave open; for a calculation, the shipped helium program with the five options above
-gives the same numbers with this package's input checks, run records and parallel runs.
+[MOBCAL-2000 README](https://github.com/bushgroup/MOBCAL-2000#building-and-running-it-today), which
+asks for the static storage of local variables that MOBCAL's own build recipe (`mobcal.fortran`)
+also asks for, it prints `a10A1.out.orig` byte for byte once carriage returns are stripped, `D`
+exponent included (gfortran 16.2.0, Windows, 23 October 2026). That program is the reference for any
+question the 42 lines leave open; for a calculation, the shipped helium program with the five
+options above gives the same numbers with this package's input checks, run records and parallel
+runs.

@@ -1,6 +1,6 @@
 # Reproducing MOBCAL 2012
 
-The two programs in this repository, helium and nitrogen, are the 2012 release of MOBCAL
+The two programs MOBCAL runs, helium and nitrogen, are the 2012 release of MOBCAL
 (Campuzano et al., *Anal. Chem.* 2012, 84, 1026), kept as published at
 [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) with its choline input and the
 two reference outputs, choline in helium and in nitrogen. The 2012 element tables, the 2012
@@ -16,16 +16,16 @@ holds, lists the differences, and states that limit.
 ## The commands
 
 To calculate a cross section as the 2012 release would have, run the program for the gas under
-the 2012 random number generator:
+the 2012 random number generator. In the window that is the method MOBCAL 2012 (He) or MOBCAL
+2012 (N2), whose first seed is the 2012 seed; from a terminal,
 
 ```
-uv run mobcal run Choline_pop.mfj --method 2012-he
-uv run mobcal run Choline_pop.mfj --method 2012-n2
+mobcal run Choline_pop.mfj --method 2012-he
+mobcal run Choline_pop.mfj --method 2012-n2
 ```
 
-`--rng ranlux` alone is the same as the first command, and the window's MOBCAL 2012 (He) and
-MOBCAL 2012 (N2) methods are the same again ([methods.md](methods.md)). Everything else a
-calculation depends on is already the 2012 value:
+and `--rng ranlux` alone is the same as the first command ([Methods](methods.md)). Everything
+else a calculation depends on is already the 2012 value:
 
 | What it sets | The 2012 release | A run without options |
 |---|---|---|
@@ -38,14 +38,14 @@ calculation depends on is already the 2012 value:
 A run under Philox is a 2012 calculation in every respect but its random numbers: its cross
 sections differ from the 2012 ones in their last digits, as a run at another seed would, and
 over many seeds the two generators give the same distribution
-([random-numbers.md](random-numbers.md)). The seed belongs to the calculation rather than to
+([Random numbers](random-numbers.md)). The seed belongs to the calculation rather than to
 the release, so for an ion of one's own any seed under either generator gives a 2012
 calculation, whereas a number published from the 2012 program reproduces only under RANLUX at
 the seed it was computed with. The runs write their outputs to
 `runs/Choline_pop-he-5013489-ranlux/mobcal.out` and `runs/Choline_pop-n2-5013489-ranlux/mobcal.out`,
 and each `record.json` names the table, `MOBCAL 2012 helium` or `MOBCAL 2012 nitrogen`, with its
-SHA-256 ([parameters.md](parameters.md)), and records the settings as the 2012 ones
-([settings.md](settings.md)).
+SHA-256 ([The element tables](parameters.md)), and records the settings as the 2012 ones
+([The run settings](settings.md)).
 
 Choline takes about 3 minutes in helium and about an hour in nitrogen on one workstation core.
 `--split` divides the trajectory method among processes and reports the serial result exactly,
@@ -54,24 +54,29 @@ and the README records choline in nitrogen running 15.8 times faster split 20 wa
 
 ## Comparing with the references
 
-The references are [`fortran/sample-output/Choline_He.out`](../fortran/sample-output/Choline_He.out)
-and [`Choline_N2.out`](../fortran/sample-output/Choline_N2.out), the files of the release's
-`sample-output/` at tag `v1.0`. They were written by g77 builds in 2012 from an input then named
-`Choline_pop.mfj`, and each output echoes its input's name twice, in its first lines and in the
-SUMMARY. This repository ships the same coordinates as `fortran/Choline.mfj`, so copy the input
-to the echoed name before running, rather than editing either side:
+For helium, `mobcal self-check --choline` runs this calculation and compares its three cross
+sections with the reference in about three minutes
+([Installing MOBCAL](install.md#checking-an-installation)). To compare whole outputs, take the
+references, `Choline_He.out` and `Choline_N2.out`, the files of the release's `sample-output/`
+at tag `v1.0`, which the installation carries in `examples/sample-output/` beside the input,
+`examples/Choline.mfj` (in the source code, they are
+[`fortran/sample-output/`](../fortran/sample-output/) and `fortran/Choline.mfj`).
+They were written by g77 builds in 2012 from an input then named `Choline_pop.mfj`, and each
+output echoes its input's name twice, in its first lines and in the SUMMARY. `Choline.mfj` holds
+the same coordinates, so copy it to the echoed name before running, rather than editing either
+side:
 
 ```
-cp fortran/Choline.mfj Choline_pop.mfj
+cp <installation>/examples/Choline.mfj Choline_pop.mfj
 ```
 
 Then run the commands above in that directory and compare each output with its reference line by
 line, after stripping end-of-line carriage returns, which a build on Windows writes and the
-references do not carry:
+references do not carry. In a POSIX shell (on Windows, Git Bash):
 
 ```bash
-diff <(tr -d '\r' < fortran/sample-output/Choline_He.out) <(tr -d '\r' < runs/Choline_pop-he-5013489-ranlux/mobcal.out)
-diff <(tr -d '\r' < fortran/sample-output/Choline_N2.out) <(tr -d '\r' < runs/Choline_pop-n2-5013489-ranlux/mobcal.out)
+diff <(tr -d '\r' < <installation>/examples/sample-output/Choline_He.out) <(tr -d '\r' < runs/Choline_pop-he-5013489-ranlux/mobcal.out)
+diff <(tr -d '\r' < <installation>/examples/sample-output/Choline_N2.out) <(tr -d '\r' < runs/Choline_pop-n2-5013489-ranlux/mobcal.out)
 ```
 
 Each diff shows the 41 lines of the next section and nothing else. Every cross section and
@@ -84,18 +89,18 @@ references print them. This was measured with MSYS2 gfortran 16.2.0 on Windows o
 
 ## What the tests hold
 
-Unlike the [2000 comparison](mobcal-2000.md), this one is part of the test suite, and it runs on
-Windows, macOS and Linux in continuous integration. The suite compares with
-[`tests/reference/`](../tests/reference/README.md), which holds what the current programs print
-for choline in both gases, and a test ties those two files to the 2012 originals line by line:
-each differs from its original in exactly the 41 lines below, the atom count changed only in
-width and each q1st value equal to four times the 2012 value within its rounding. Against those
+Unlike the [2000 comparison](mobcal-2000.md), this one is part of the source code's test suite,
+which runs on Windows, macOS and Linux in continuous integration for every change. The suite
+compares with [`tests/reference/`](../tests/reference/README.md), which holds what the current
+programs print for choline in both gases, and a test ties those two files to the 2012 originals line
+by line: each differs from its original in exactly the 41 lines below, the atom count changed only
+in width and each q1st value equal to four times the 2012 value within its rounding. Against those
 references every run of the suite holds the helium output in three tiers, the lines that do not
-depend on the random numbers character for character, the cross sections within 0.1 %, and the
-whole file byte for byte, carriage returns aside, on all three platforms, and holds nitrogen through one of its ten
-cycles. The full nitrogen comparison takes about an hour, so it runs every Monday in continuous
-integration and otherwise only when asked for, with `uv run pytest -m nitrogen`. The
-[README](../README.md#testing-against-the-2012-outputs) describes each test.
+depend on the random numbers character for character, the cross sections within 0.1 %, and the whole
+file byte for byte, carriage returns aside, on all three platforms, and holds nitrogen through one
+of its ten cycles. The full nitrogen comparison takes about an hour, so it runs every Monday in
+continuous integration and otherwise only when asked for. The
+[README](../README.md#testing-against-the-2012-outputs) describes each test and how to run it.
 
 ## The differences in the output
 
@@ -112,8 +117,8 @@ equals the value this program prints to within the last printed digit, since bot
 to five significant figures. The `gst2` and `wgst` columns of that table are the 2012 lines, and
 with the division corrected the `wgst`-weighted sum of the q1st column equals the printed
 `mean OMEGA*(1,1)`, 1.9045 in helium and 3.9847 in nitrogen, where before it was a quarter of
-it. [fortran/README.md](../fortran/README.md) records each change, with the lines it touched,
-under Changes since 2012.
+it. [`fortran/README.md`](../fortran/README.md) in the source code records each change, with
+the lines it touched, under Changes since 2012.
 
 The `mass of ion` line, which the 2000 comparison counts among its differences, is not one here.
 Format 604 was `1pd11.4`, which g77 printed with an `E` exponent, as the 2012 references show,
@@ -162,7 +167,7 @@ serial run, in both gases.
 
 The 2012 sources build and run today without a change. The release's README
 ([Compiling](https://github.com/bushgroup/MOBCAL-2012#compiling)) gives a gfortran line that asks
-for the static storage of local variables, as this repository's recipe in `mobcal.fortran`
+for the static storage of local variables, as MOBCAL's own build recipe (`mobcal.fortran`)
 does, and explains why the 2012 README found that optimized and gfortran builds failed. Built
 from the sources at tag `v1.0` with that recipe and run on `Choline_pop.mfj` at seed 5013489,
 each program prints its reference byte for byte once carriage returns are stripped, but for the

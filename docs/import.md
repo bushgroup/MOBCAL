@@ -13,6 +13,10 @@ does not choose a level of theory or a charge scheme for you.
 
 ## The command
 
+In the window, an ORCA output or an `.xyz` file added to the inputs is imported by the rules on
+this page, and its row offers the charges the file holds
+([The window](window.md#inputs)). From a terminal,
+
 ```
 mobcal import choline_sp.out --charges chelpg
 ```
@@ -34,9 +38,10 @@ mobcal run choline_sp_chelpg.mfj
 mobcal run choline_sp_chelpg.mfj --method 2012-philox-n2
 ```
 
-The installed program carries this ORCA output as `examples/choline_sp.out`. In a source
-checkout it is one of six ORCA jobs on the choline cation under `tests/data/qm/orca/`, whose
-`README.md` gives each job's route and which charge blocks it prints.
+The installed program carries this ORCA output as `examples/choline_sp.out`. It is one of six
+ORCA jobs on the choline cation in the source code's `tests/data/qm/orca/`, and
+[their README](../tests/data/qm/README.md) gives each job's route and which charge blocks it
+prints.
 
 ## Choosing the charges
 
@@ -98,7 +103,7 @@ runs side by side.
 ## Elements
 
 Each atom's key is its element's key in the element table of each gas
-([docs/parameters.md](parameters.md)). By default the import checks both tables, so the file
+([The element tables](parameters.md)). By default the import checks both tables, so the file
 runs in both gases. An element a table lacks is refused, naming the gas and what the table holds.
 The helium table has no phosphorus, so an ion with phosphorus imports only with `--gas n2`. The
 import adds no element to either table.

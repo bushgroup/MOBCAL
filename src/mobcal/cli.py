@@ -211,14 +211,16 @@ def parser() -> argparse.ArgumentParser:
 REFERENCE = Path("docs") / "command-line.md"
 REFERENCE_WIDTH = 88  # the usage lines' wrap, fixed so the page does not follow the terminal
 REFERENCE_OPENING = (
-    "`mobcal` is one command with a subcommand for each task: running calculations, writing an "
-    "input from a quantum chemistry output, writing the methods paragraph for finished runs, "
-    "checking and building the programs, and opening the window. An installed copy puts "
-    "`mobcal` on the `PATH` ([install.md](install.md)); from a source checkout, each command "
-    "is `uv run mobcal ...`. The options of `mobcal run` and `mobcal import` that the window "
-    "also sets carry the same descriptions as its tooltips, from one table in the package, so "
-    "the two say the same thing about every setting they share ([window.md](window.md)). "
-    "`mobcal COMMAND -h` prints a command's section of this page.")
+    "`mobcal` is the program the window runs, typed in a terminal: one command with a "
+    "subcommand for each task, running calculations, writing an input from a quantum chemistry "
+    "output, writing the methods paragraph for finished runs, checking and building the "
+    "programs, and opening the window. `mobcal` runs in any terminal once the installation's "
+    "folder is on the `PATH`, which the Windows installer offers to do, and in the MOBCAL "
+    "command prompt of the Windows Start menu either way ([Installing MOBCAL](install.md)). "
+    "The options of `mobcal run` and `mobcal import` that the "
+    "window also sets carry the same descriptions as its tooltips, from one table in the "
+    "package, so the two say the same thing about every setting they share "
+    "([The window](window.md)). `mobcal COMMAND -h` prints a command's section of this page.")
 
 
 def _code(help: str) -> str:

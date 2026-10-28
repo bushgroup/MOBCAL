@@ -23,7 +23,8 @@ numbers before it. Its uniforms resolve 2^−52, and none is exactly 0 or 1.
 
 ## Why there are two
 
-A calculation split across processes (the [README](../README.md#running-calculations)) gives
+A calculation split across processes (by the window's choice,
+[The window](window.md#how-a-batch-uses-the-processors-and-the-estimate), or by `--split`) gives
 each process a share of the trajectory blocks, and each process must reach its own blocks with
 the random number stream in the state the serial run would have reached. Under RANLUX a process
 gets there by drawing through every block that is not its own, whereas under Philox it moves
@@ -36,10 +37,12 @@ because the draw-through repeats the serial stream exactly, which the test suite
 
 ## Choosing one
 
-`mobcal run` draws from Philox unless asked otherwise:
+Every method names its generator ([Methods](methods.md)), and in the window the Generator field
+under Advanced shows it and changes it. `mobcal run` draws from Philox unless the method or an
+option says otherwise:
 
 ```
-uv run mobcal run choline.mfj --rng ranlux
+mobcal run choline.mfj --rng ranlux
 ```
 
 runs under RANLUX. The run file the program reads, `mobcal.in`, carries the generator after the
@@ -50,27 +53,26 @@ makes ends in `-ranlux`, so the same seed under both generators can share an out
 
 ## How the two compare
 
-To test whether Philox gives the same cross sections as RANLUX, i.e., the same distribution
-over seeds rather than the same digits, we ran the choline input under both generators, each
-run split across 40 processes: 40 seeds per generator in helium and 10 in nitrogen, on one
-workstation (Windows 11, MSYS2 gfortran 16.2.0, October 2026; lab record, task 18). In helium
-the means differ by +0.017 Å² (projection approximation), +0.039 Å² (exact hard spheres) and
-−0.044 Å² (trajectory method), at most 1.7 times their combined standard error, and the
-standard deviations over seeds agree to within 5 %: 0.16 Å² for the trajectory-method value
-under either generator, 0.3 % of the cross section. In nitrogen the trajectory-method means
-differ by −0.10 Å², 0.8 times their combined standard error, and no trajectory failed energy
-conservation in any run under either generator. The two generators therefore give cross sections that are interchangeable
-at the precision a single calculation has. Note that this comparison used one ion, choline, a
-21-atom cation.
+To test whether Philox gives the same cross sections as RANLUX, i.e., the same distribution over
+seeds rather than the same digits, we ran the choline input under both generators, each run split
+across 40 processes: 40 seeds per generator in helium and 10 in nitrogen, on one workstation
+(Windows 11, MSYS2 gfortran 16.2.0, October 2026; lab record, task 18). In helium the means differ
+by +0.017 Å² (projection approximation), +0.039 Å² (exact hard spheres) and −0.044 Å² (trajectory
+method), at most 1.7 times their combined standard error, and the standard deviations over seeds
+agree to within 5 %: 0.16 Å² for the trajectory-method value under either generator, 0.3 % of the
+cross section. In nitrogen the trajectory-method means differ by −0.10 Å², 0.8 times their combined
+standard error, and no trajectory failed energy conservation in any run under either generator. The
+two generators therefore give cross sections that are interchangeable at the precision a single
+calculation has. Note that this comparison used one ion, choline, a 21-atom cation.
 
 ## Reproducing a published number
 
 A cross section published from MOBCAL 2012 reproduces only under RANLUX and at the seed it was
 computed with, 5013489 for the choline references and for any calculation run from the shipped
-run file:
+run file. The window's MOBCAL 2012 (He) method at the first seed, or from a terminal
 
 ```
-uv run mobcal run Choline.mfj --method 2012-he
+mobcal run Choline.mfj --method 2012-he
 ```
 
 reports 61.075, 63.473 and 55.402 Å² by the projection approximation, exact hard spheres and the
@@ -78,5 +80,5 @@ trajectory method, the 2012 values to every printed digit. The same input under 
 cross sections that differ in their last digits, as a run at another seed would: the two
 generators produce different streams, so no line of the output that depends on the random
 numbers matches between them. The regression tests and `mobcal self-check --choline` run under
-RANLUX for this reason. [mobcal-2012.md](mobcal-2012.md) gives the command for each gas and
+RANLUX for this reason. [Reproducing MOBCAL 2012](mobcal-2012.md) gives the command for each gas and
 compares the outputs with the 2012 references line by line.
