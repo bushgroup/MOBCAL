@@ -52,7 +52,8 @@ settings ([The run settings](settings.md)).
 The 2000 table covers eight elements, hydrogen, carbon, nitrogen, oxygen, sodium, silicon,
 sulfur and iron. An ion with any other element, fluorine included, is refused: the program stops
 with status 1 and writes `type not defined for atom number N`, as the 2000 program did. The set
-is for helium only; the nitrogen program has no 2000 ancestor and no 2000 table.
+is for helium only: the 2000 release had no nitrogen program, and the 2012 nitrogen program,
+though it descends from the 2000 source, has its own table.
 
 The release's example, `a10A1.mfj` (a sodiated alanine decamer, the release's test ion: 104
 atoms, 50 coordinate sets, calculated partial charges), takes about 20 minutes on one

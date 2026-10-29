@@ -1,26 +1,30 @@
 # fortran/
 
-The 2012 release of MOBCAL, with two additions and a few corrections. Six of these files are the
-content of [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) at its tag `v1.0`,
-copied from those blobs on 2026-10-21 with LF line endings, plus the changes listed under Changes
-below: statements that let one calculation run as several processes, the reading of the element
-table from a file, a second random number generator the run file can select, the reading of the
-temperature and the sampling counts from a file, and corrections to defects that leave every
-number the 2012 program computed unchanged. The seventh to tenth files are the element-table
-reader, that generator, the declaration of the atom arrays and the settings reader, which both
-sources include.
+The 2012 release of MOBCAL, with the additions and corrections listed under Changes below. Six
+of these files are the content of
+[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) at its tag `v1.0`, copied from
+those blobs on 2026-10-21 with LF line endings, plus those changes: statements that let one
+calculation run as several processes, the reading of the element table from a file, a second
+random number generator the run file can select, the reading of the temperature and the sampling
+counts from a file, the atom bound declared once and raised, and corrections to defects that
+leave every number the 2012 program computed unchanged. The seventh to tenth files are the
+element-table reader, that generator, the declaration of the atom arrays and the settings
+reader, which both sources include.
 
 The helium source descends from the Jarrold group's 2000 release, kept as distributed at
 [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The 2012 `mobcal_He.f` is
 that release's `mobcal.f` with 13 changed regions and nothing else: the run file's name, the
-temperature (301 K from 298 K), `imp` (1,000 trajectories per velocity point per cycle from
-25), the Lennard-Jones well depths and radii of hydrogen, carbon, nitrogen and oxygen in both
+temperature (301 K from 298 K), `imp` (1,000 trajectories per velocity point per cycle from 25),
+the Lennard-Jones well depths and radii of hydrogen, carbon, nitrogen and oxygen in both
 coordinate readers (each 2012 pair is the 2000 pair times one factor per element, 0.95, 0.99,
-1.10 and 0.80, on well depth and radius alike), and a row for fluorine. The nitrogen source has
-no 2000 ancestor. Since the table, the temperature and the sampling counts became files the
-programs read (Changes, below), the shipped helium program reproduces the 2000 release's
-reference output on its own example, given that release's table as a parameter file and
-`--temperature 298 --imp 25` ([docs/settings.md](../docs/settings.md)).
+1.10 and 0.80, on well depth and radius alike), and a row for fluorine. The nitrogen source
+descends from the same file: it keeps that release's 84-line header unchanged and has the 2012
+helium source's run file, temperature and `imp`, with an element table and an ion–nitrogen
+interaction of its own. The 2000 release had no nitrogen program. Since the table, the
+temperature and the sampling counts became files the programs read (Changes, below), the shipped
+helium program reproduces the 2000 release's reference output on its own example, given that
+release's table as a parameter file and `--temperature 298 --imp 25`
+([docs/settings.md](../docs/settings.md)).
 
 The MMFF94/exp-6 programs of 2017 and 2018, kept as distributed at
 [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018), are a branch of this lineage
