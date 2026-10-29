@@ -302,7 +302,10 @@ Any research that uses this code or the included Lennard-Jones parameters should
 The 2012 release is also kept, exactly as published, at
 [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012), and the Jarrold group's 2000
 helium release, from which the 2012 helium program was made, as distributed at
-[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000).
+[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). Calculations made with the
+MMFF94/exp-6 programs of 2017 and 2018, a branch of the same lineage, should reference the two
+papers that their repository, [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018),
+lists.
 
 ## License
 

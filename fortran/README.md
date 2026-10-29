@@ -22,6 +22,14 @@ programs read (Changes, below), the shipped helium program reproduces the 2000 r
 reference output on its own example, given that release's table as a parameter file and
 `--temperature 298 --imp 25` ([docs/settings.md](../docs/settings.md)).
 
+The MMFF94/exp-6 programs of 2017 and 2018, kept as distributed at
+[bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018), are a branch of this lineage
+rather than an ancestor of these sources, and nothing from them is in this directory. Their
+helium program is the 2000 `mobcal.f`, without the 2012 changes, with the 12-6 Lennard-Jones
+term replaced by the exp-6 term of MM3 and with the MMFF94 van der Waals parameters of each atom
+read from the input file. Their nitrogen program adds to it the ion–nitrogen interaction of the
+2012 `mobcal_N2.f`.
+
 `mobcal.fortran.SHA256` pins each file as it is committed, and `tools/check_public.py` and the
 test suite compare. They are not edited casually: a change to any of them is a decision
 recorded elsewhere, lands with new pins and a new row below in the same commit, and counts its
