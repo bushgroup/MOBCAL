@@ -33,6 +33,7 @@ from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleOptionGro
 TILE = "#0D2240"
 HEAVY, LIGHT, BACK = "#3B82D6", "#6FA8EC", "#1E4A86"
 MISS, LONG_RANGE, SCATTERED = "#4E6F9C", "#5FB8D8", "#3FE0D0"
+WORDMARK = "#EAF2FC"  # the banner's MOBCAL, on TILE
 
 
 def mix(a: str, b: str, t: float) -> str:

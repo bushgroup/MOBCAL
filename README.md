@@ -1,3 +1,5 @@
+![MOBCAL: three helium trajectories past a choline ion](packaging/banner/mobcal-banner-2560x1280.png)
+
 # MOBCAL
 
 MOBCAL calculates the collision cross sections of ions in helium and in nitrogen by the

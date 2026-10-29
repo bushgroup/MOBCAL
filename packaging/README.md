@@ -60,6 +60,19 @@ the window sets as its icon. All of them are committed; run the script again aft
 and commit what it writes. `mobcal gui --check` fails when the window finds no icon, so a bundle
 without the PNGs fails its build.
 
+## The banner
+
+The same script draws the icon's scene as a banner, full-bleed on the tile's navy, with the ion
+near the right edge, the trajectories running in from the left edge and the wordmark MOBCAL on
+the open left. It writes `banner/mobcal-banner.svg` (2:1) with PNGs at 1280×640, the
+repository's social preview, and 2560×1280, the README's head, and
+`banner/mobcal-banner-16x9.svg` (16:9) with a PNG at 1920×1080 for slides. The wordmark is IBM
+Plex Sans SemiBold (`fonts/IBMPlexSans-SemiBold.ttf`, under the SIL Open Font License in
+`fonts/OFL.txt`), written into the SVGs as outlines, so they render the same on a machine
+without the font. Neither the banner nor the font is shipped in the installer. GitHub takes the
+social preview only through the repository's Settings, under General, Social preview, so a new
+1280×640 PNG is uploaded there by hand.
+
 ## The Fortran inside is built in CI
 
 The two binaries are the ones the `build` job of the `ci` workflow compiled and ran the
