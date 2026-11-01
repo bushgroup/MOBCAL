@@ -20,7 +20,16 @@ mobcal gui
 
 ## Inputs
 
-Add files with Add files, or drop them on the list. An `.mfj` file runs as it is. An ORCA or
+Add files with Add files, or drop them on the list. An `.mfj` file runs as it is, and its row
+shows what its fifth line makes of the charges, read-only. Charges names the mode: `calc` reads
+"from file", `equal` "uniform", `none` "none". Net charge gives the charge the calculation uses,
+and the two gases read `equal` differently: helium gives the ion +1 whatever the file's fifth
+column sums to, nitrogen gives it that sum, so an `equal` row reads "+1 He / +2 N2" for a column
+summing to 2. A `calc` row shows the column's sum and a `none` row shows 0. A sum within 0.01 of an
+integer is shown as the integer; the tooltip gives it to six decimals, and for a file of several
+sets lists each one's when they differ. The nitrogen program reads a charge on every atom line
+whatever the mode, so a file with four columns is refused when the batch's gas is nitrogen, and
+its row says so ([Reproducing MOBCAL 2012](mobcal-2012.md)). An ORCA or
 Gaussian output or an `.xyz` file is imported as `mobcal import` imports it ([Importing a structure
 and its charges](import.md)), and its row shows the charges the import will use. When an output
 holds an ESP fit it is selected, the Merz-Kollman fit (`mk`, the scheme of the 2012 choline charges)

@@ -45,6 +45,46 @@ FILTER = ("Structures (*.mfj *.xyz *.out *.log);;MOBCAL inputs (*.mfj);;"
           "ORCA and Gaussian outputs (*.out *.log);;XYZ files (*.xyz);;All files (*)")
 COLUMNS = ("File", "Atoms", "Sets", "Charges", "Net charge", "Status")
 
+MINUS = "−"
+NO_COLUMN = "—"
+INTEGER_WITHIN = 0.01  # a sum this close to an integer is shown as the integer, in e
+MODE_WORDS = {"calc": "from file", "equal": "uniform", "none": "none"}
+MODE_TIPS = {
+    "calc": "Line 5 reads calc: the charges are the fifth column as given, in both gases.",
+    "equal": "Line 5 reads equal: helium gives every atom 1/N, so the ion is +1 whatever the "
+             "column sums to; nitrogen gives every atom the column's sum over N.",
+    "none": "Line 5 reads none: no charge enters the potential in either gas, so the ion is 0.",
+}
+
+
+def format_charge(q: float) -> str:
+    """A net charge as the cell shows it: the integer, signed, within 0.01 e of one, else the
+    decimal to three places, signed."""
+    n = round(q)
+    if abs(q - n) <= INTEGER_WITHIN:
+        return "0" if n == 0 else f"{n:+d}".replace("-", MINUS)
+    return f"{q:+.3f}".replace("-", MINUS)
+
+
+def mfj_charge_cells(mode: str, sums: tuple[float, ...]) -> tuple[str, str, str, str]:
+    """An ``.mfj`` row's Charges and Net charge cells, each with its tooltip, as (charges, tip,
+    net charge, tip), from line 5 and each set's column sum (empty when the file has no charge
+    column). The mode decides which charge each gas uses; see ``mobcal.io.mfj``."""
+    q = sums[0] if sums else None
+    if mode == "calc":
+        net = format_charge(q)
+    elif mode == "equal":
+        net = f"+1 He / {format_charge(q) if q is not None else NO_COLUMN} N2"
+    else:
+        net = "0"
+    if q is None:
+        tip = "The file has no charge column."
+    else:
+        tip = f"Σq of set 1 is {q:.6f} e."
+        if any(abs(s - q) > INTEGER_WITHIN for s in sums[1:]):
+            tip += " Σq by set: " + ", ".join(f"{s:.6f}" for s in sums) + "."
+    return MODE_WORDS[mode], MODE_TIPS[mode], net, tip.replace("-", MINUS)
+
 
 @dataclass
 class Input:
@@ -57,13 +97,15 @@ class Input:
     structure: structure.Structure | None = field(default=None, repr=False)
     charges: str | None = None  # an import's choice
     net_charge: int | None = None  # an .xyz's, given by the user
+    charge_mode: str | None = None  # an .mfj's line 5
+    charge_sums: tuple[float, ...] = ()  # an .mfj's column sum of each set; empty without one
 
     @property
     def needs_net_charge(self) -> bool:
         return self.structure is not None and self.structure.net_charge is None
 
-    def problem(self) -> str:
-        """What stops this input from running, or empty."""
+    def problem(self, gas: str = "") -> str:
+        """What stops this input from running in ``gas`` (the batch's), or empty."""
         if self.state == "reading":
             return f"{self.path.name} is still being read"
         if self.state == "error":
@@ -72,6 +114,9 @@ class Input:
             return f"{self.path.name}: choose its charges"
         if self.kind == "import" and self.needs_net_charge and self.net_charge is None:
             return f"{self.path.name}: give the ion's net charge"
+        if self.kind == "mfj" and gas == "n2" and not self.charge_sums:
+            return (f"{self.path.name}: the nitrogen program needs a fifth column, the charge, "
+                    "on every atom line")
         return ""
 
     def mfj_path(self, out_dir: Path) -> Path:
@@ -119,6 +164,7 @@ class InputsPanel(QWidget):
         super().__init__(parent)
         self.items: list[Input] = []
         self.start_dir = ""
+        self.gas = ""
         self._pool = pool or QThreadPool.globalInstance()
         self._signals = _Signals()
         self._signals.read.connect(self._on_read)
@@ -198,6 +244,9 @@ class InputsPanel(QWidget):
             item.state, item.error = "error", error
         elif isinstance(got, Mfj):
             item.state, item.atoms, item.sets = "ready", got.atoms, got.coordinate_sets
+            item.charge_mode = got.charge_mode
+            if got.has_charge_column:
+                item.charge_sums = tuple(got.net_charge(k) for k in range(got.coordinate_sets))
         else:
             item.state, item.structure = "ready", got
             item.atoms, item.sets = len(got.symbols), 1
@@ -212,7 +261,14 @@ class InputsPanel(QWidget):
         return any(i.state == "reading" for i in self.items)
 
     def problems(self) -> list[str]:
-        return [p for p in (i.problem() for i in self.items) if p]
+        return [p for p in (i.problem(self.gas) for i in self.items) if p]
+
+    def set_gas(self, gas: str) -> None:
+        """Give the panel the batch's gas, which a four-column ``.mfj`` is refused in when it is
+        nitrogen, and redraw the rows."""
+        if gas != self.gas:
+            self.gas = gas
+            self._redraw()
 
     def sizes(self, out_dir: Path) -> dict:
         """(atoms, sets) by the path each run will read, for the estimate."""
@@ -231,14 +287,28 @@ class InputsPanel(QWidget):
                                                       f"{item.atoms:,}"))
             self.table.setItem(r, 2, QTableWidgetItem("" if item.sets is None else
                                                       str(item.sets)))
-            self.table.setCellWidget(r, 3, self._charges_widget(item))
-            self.table.setCellWidget(r, 4, self._net_charge_widget(item))
+            self.table.removeCellWidget(r, 3)
+            self.table.removeCellWidget(r, 4)
+            self.table.setItem(r, 3, None)
+            self.table.setItem(r, 4, None)
+            if item.kind == "mfj" and item.charge_mode is not None:
+                words, words_tip, net, net_tip = mfj_charge_cells(item.charge_mode,
+                                                                  item.charge_sums)
+                for c, (text, tooltip) in ((3, (words, words_tip)), (4, (net, net_tip))):
+                    cell = QTableWidgetItem(text)
+                    cell.setToolTip(tip(tooltip))
+                    cell.setTextAlignment(Qt.AlignmentFlag.AlignRight
+                                          | Qt.AlignmentFlag.AlignVCenter)
+                    self.table.setItem(r, c, cell)
+            else:
+                self.table.setCellWidget(r, 3, self._charges_widget(item))
+                self.table.setCellWidget(r, 4, self._net_charge_widget(item))
             warned = " ".join(item.structure.warnings) if item.structure else ""
             status = {"reading": "reading…", "error": item.error}.get(item.state, "") \
-                or item.problem().split(": ", 1)[-1] \
+                or item.problem(self.gas).split(": ", 1)[-1] \
                 or ("ready (untested version)" if warned else "ready")
             cell = QTableWidgetItem(status)
-            cell.setToolTip(item.error or item.problem() or warned)
+            cell.setToolTip(item.error or item.problem(self.gas) or warned)
             self.table.setItem(r, 5, cell)
 
     def _charges_widget(self, item: Input) -> QWidget | None:
@@ -255,7 +325,7 @@ class InputsPanel(QWidget):
         def chosen(i: int) -> None:
             item.charges = combo.itemData(i) if i >= 0 else None
             self.table.item(self.items.index(item), 5).setText(
-                item.problem().split(": ", 1)[-1] or "ready")
+                item.problem(self.gas).split(": ", 1)[-1] or "ready")
             self.changed.emit()
         combo.currentIndexChanged.connect(chosen)
         return combo
@@ -278,7 +348,7 @@ class InputsPanel(QWidget):
         def given(v: int) -> None:
             item.net_charge = None if v == -100 else v
             self.table.item(self.items.index(item), 5).setText(
-                item.problem().split(": ", 1)[-1] or "ready")
+                item.problem(self.gas).split(": ", 1)[-1] or "ready")
             self.changed.emit()
         spin.valueChanged.connect(given)
         spin.setAlignment(Qt.AlignmentFlag.AlignRight)

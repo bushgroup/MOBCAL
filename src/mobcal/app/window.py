@@ -637,6 +637,7 @@ class MainWindow(QMainWindow):
                      settings=self.form_settings(), split=split, workers=workers)
 
     def update_estimate(self) -> None:
+        self.inputs.set_gas(self.gas)
         problems = self.inputs.problems()
         if not self.inputs.items:
             problems = ["add an input"]

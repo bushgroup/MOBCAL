@@ -52,6 +52,8 @@ from PySide6.QtWidgets import (  # noqa: E402
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
 from mobcal import cli, docs, fortran, methods, options  # noqa: E402
+from mobcal.app import inputs  # noqa: E402
+from mobcal.io.mfj import Atom, Mfj  # noqa: E402
 from mobcal.app import theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
@@ -666,6 +668,76 @@ def test_an_xyz_asks_for_its_net_charge(window, qtbot):
     assert item.problem().endswith("give the ion's net charge")
     w.inputs.table.cellWidget(0, 4).setValue(1)
     assert not item.problem() and w.run_action.isEnabled()
+
+
+def mfj_file(tmp_path: Path, name: str, mode: str, charges: list[list[float] | None]) -> Path:
+    """A synthetic ``.mfj``: one set per entry of ``charges``, each a charge per atom or None
+    for a four-column file."""
+    sets = tuple(tuple(Atom(float(i), 0.0, 0.0, 1, None if c is None else c[i])
+                       for i in range(len(c or [0, 0]))) for c in charges)
+    return Mfj("test", "ang", mode, 1.0, sets).write(tmp_path / name)
+
+
+@pytest.mark.parametrize(("q", "shown"), [
+    (1.0, "+1"), (-2.0, "−2"), (0.0, "0"), (-0.004, "0"), (0.873, "+0.873"),
+    (-0.873, "−0.873"), (1.009, "+1"), (1.011, "+1.011"), (0.991, "+1"), (0.989, "+0.989"),
+])
+def test_a_net_charge_is_an_integer_within_a_hundredth_of_one(q, shown):
+    assert inputs.format_charge(q) == shown
+
+
+def test_the_mfj_cells_follow_line_five():
+    assert inputs.mfj_charge_cells("calc", (1.0,))[::2] == ("from file", "+1")
+    assert inputs.mfj_charge_cells("equal", (2.0,))[::2] == ("uniform", "+1 He / +2 N2")
+    assert inputs.mfj_charge_cells("equal", ())[::2] == ("uniform", "+1 He / — N2")
+    assert inputs.mfj_charge_cells("none", (3.0,))[::2] == ("none", "0")
+    assert inputs.mfj_charge_cells("none", ())[::2] == ("none", "0")
+    assert "1.234568" in inputs.mfj_charge_cells("calc", (1.2345678,))[3]
+    assert "by set" not in inputs.mfj_charge_cells("calc", (1.0, 1.005))[3]
+    assert "by set: 1.000000, 2.000000" in inputs.mfj_charge_cells("calc", (1.0, 2.0))[3]
+    assert "−2.000000" in inputs.mfj_charge_cells("calc", (-2.0,))[3]
+
+
+def cells(w: MainWindow, row: int) -> tuple[str, str]:
+    return w.inputs.table.item(row, 3).text(), w.inputs.table.item(row, 4).text()
+
+
+def test_an_mfj_row_shows_its_charges_and_net_charge(window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, CHOLINE)
+    assert cells(w, 0) == ("from file", "+1")
+    assert w.inputs.table.item(0, 5).text() == "ready"
+    two = mfj_file(tmp_path, "two.mfj", "equal", [[1.0, 1.0, 0.0]])
+    four = mfj_file(tmp_path, "four.mfj", "equal", [None])
+    none = mfj_file(tmp_path, "none.mfj", "none", [[1.0, 1.0, 1.0]])
+    add(qtbot, w, two, four, none)
+    assert [cells(w, r) for r in (1, 2, 3)] == [
+        ("uniform", "+1 He / +2 N2"), ("uniform", "+1 He / — N2"), ("none", "0")]
+    assert "equal" in w.inputs.table.item(1, 3).toolTip()
+
+
+def test_a_two_set_file_lists_its_sums_when_they_differ(window, qtbot, tmp_path):
+    w = window
+    same = mfj_file(tmp_path, "same.mfj", "calc", [[1.0, 0.0], [0.0, 1.0]])
+    differ = mfj_file(tmp_path, "differ.mfj", "calc", [[1.0, 0.0], [1.0, 1.0]])
+    add(qtbot, w, same, differ)
+    assert "by set" not in w.inputs.table.item(0, 4).toolTip()
+    assert "by set: 1.000000, 2.000000" in w.inputs.table.item(1, 4).toolTip()
+    assert w.inputs.table.item(1, 4).text() == "+1"
+    assert w.inputs.table.item(1, 5).text() == "ready"
+
+
+def test_a_four_column_file_blocks_nitrogen_and_not_helium(window, qtbot, tmp_path):
+    w = window
+    four = mfj_file(tmp_path, "four.mfj", "equal", [None])
+    add(qtbot, w, four)
+    assert w.gas == "he" and w.run_action.isEnabled()
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
+    assert not w.run_action.isEnabled()
+    assert "fifth column" in w.inputs.table.item(0, 5).text()
+    assert "fifth column" in w.estimate_label.text()
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("he"))
+    assert w.run_action.isEnabled() and w.inputs.table.item(0, 5).text() == "ready"
 
 
 def test_an_unreadable_input_says_why(window, qtbot, tmp_path):

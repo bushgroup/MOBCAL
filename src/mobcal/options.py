@@ -186,8 +186,12 @@ COLUMNS = {
         "File": "The input file; its full path is in the cell's tooltip.",
         "Atoms": "Atoms in the ion.",
         "Sets": "Coordinate sets in the file; a run reports the mean over them.",
-        "Charges": SHARED["charges"].text,
-        "Net charge": SHARED["net_charge"].text,
+        "Charges": "Which atomic charges the run uses. An .mfj file's row names its charge mode, "
+                   "from file, uniform or none, read from line 5 of the file; an imported "
+                   "structure's row is where to choose its charges.",
+        "Net charge": "The ion's net charge, in elementary charges. An .mfj file's row shows the "
+                      "charge its calculation uses, read from the file and by gas where helium "
+                      "and nitrogen read it differently; an .xyz file's row asks for it.",
         "Status": "ready, or what the input needs before the batch can run; an unreadable "
                   "file's reason is in the cell's tooltip.",
     },
