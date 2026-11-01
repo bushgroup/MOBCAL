@@ -3,11 +3,13 @@
 Run as ``python fake_mobcal.py GAS`` in a directory holding ``mobcal.in``, exactly as the driver
 runs the real binary: it reads the records, opens the input file named there, and writes the
 output file named there. Like the program, it refuses, exit 1, a generator word on the seed
-record that is not ``ranlux`` or ``philox``, and it refuses when ``parameters.tab`` is missing
-or rendered for the other gas; at ``philox`` it prints the program's Philox line in place of
-the RANLUX ones; it reads ``settings.tab`` when there is one (the 2012 values otherwise), deals
-``itn * inp`` blocks per set and writes the settings into each block file, and prints the
-temperature in its SUMMARY. What it writes is chosen by the input file's first line, its label:
+record that is not ``ranlux`` or ``philox``, a word on the split record that is not ``static``
+or ``claim``, and ``claim`` on the combining run, and it refuses when ``parameters.tab`` is
+missing or rendered for the other gas; at ``philox`` it prints the program's Philox line in
+place of the RANLUX ones; it reads ``settings.tab`` when there is one (the 2012 values
+otherwise), deals ``itn * inp`` blocks per set and writes the settings into each block file,
+and prints the temperature in its SUMMARY. What it writes is chosen by the input file's first
+line, its label:
 
     ok           a complete output ending in a SUMMARY block; the cross sections are a function
                  of the seed and the generator, so a result can be traced to its job
@@ -20,25 +22,46 @@ temperature in its SUMMARY. What it writes is chosen by the input file's first l
     silent       no output file at all, exit 0
     sleep S      wait S seconds, then as ``ok`` (the concurrency test)
     lazy         as ``ok``, but in a split run the last worker leaves its last block unwritten
+                 (under the static dealing) or claims its first block and never writes it
+                 (under the claimed dealing)
+    short K      as ``ok``, but a claiming worker stops after K claims, so with W * K below the
+                 block count some blocks are never claimed
+    greedy       as ``ok``, but a claiming worker ignores the claims and writes every block, so
+                 every block is written by every worker
 
 With a fourth record ``W w`` the stand-in does what the program does in a split run: worker
 ``w`` writes a block file for each of its blocks (``temp1`` a function of the seed, the set and
 the block, no failures) and an output whose SUMMARY is a partial sum; the combining run
 (``w = 0``) reads every block back, stops with ``combining run: no file ...`` and no SUMMARY if
 one is missing, and otherwise writes the ``ok`` output (or ``sets N``) with the program's
-``blocks of imp trajectories`` line.
+``blocks of imp trajectories`` line. With ``W w claim`` the worker claims blocks as the program
+does, creating ``../claim-<set>-<k>`` exclusively before each block and integrating the block
+only when the create succeeds, in stream order (``ranlux``) or point-major order (``philox``),
+and prints the program's ``blocks claimed as reached`` line.
 
 The output mimics the real file's shape where the driver reads it (the SUMMARY labels, the
 ``a30`` padding of the echoed input name, the ``E`` exponents, the multi-set tables) and is a
 sketch elsewhere.
 """
 
+import os
 import sys
 import time
 from pathlib import Path
 
-from mobcal.io.block import Block, block_name, owned
+from mobcal.io.block import Block, block_name, claim_name, owned
 from mobcal.settings import DEFAULTS, RENDERED, SettingsError, read_rendered
+
+
+def claim(name: str, me: int) -> bool:
+    """Create the claim file exclusively, as the program's ``open(status='new')`` does."""
+    try:
+        fd = os.open(Path("..") / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{me:5d}\n")
+    return True
 
 
 def main() -> int:
@@ -48,12 +71,20 @@ def main() -> int:
     seed_record = records[2].split()
     seed = int(seed_record[0])
     generator = seed_record[1] if len(seed_record) > 1 else "ranlux"
-    split = tuple(int(x) for x in records[3].split()[:2]) if len(records) > 3 else None
+    split_record = records[3].split() if len(records) > 3 else []
+    split = tuple(int(x) for x in split_record[:2]) if split_record else None
+    deal = split_record[2] if len(split_record) > 2 else "static"
     table = Path("parameters.tab")
     head = table.read_text(encoding="ascii").split()[:3] if table.is_file() else []
     if generator not in ("ranlux", "philox"):
         return write(out, [f" random number generator {generator} in mobcal.in is not ranlux or "
                            "philox"], 1)
+    if deal not in ("static", "claim"):
+        return write(out, [f" dealing word {deal[:6]:<6} in the split record of mobcal.in is "
+                           "not static or claim"], 1)
+    claiming = deal == "claim"
+    if claiming and split[1] == 0:
+        return write(out, [" the combining run (w = 0) does not claim blocks"], 1)
     # The settings, as the program reads them: the 2012 values without the file.
     settings = DEFAULTS
     if Path(RENDERED).is_file():
@@ -74,8 +105,10 @@ def main() -> int:
     if mode == "sleep":
         time.sleep(float(arg))
         mode = "ok"
-    lazy = mode == "lazy"
-    if lazy:
+    lazy, greedy, short = mode == "lazy", mode == "greedy", None
+    if mode == "short":
+        short = int(arg)
+    if mode in ("lazy", "greedy", "short"):
         mode = "ok"
 
     lines = [f" input file name = {inp:<30}", f" input file label = {label:<30}",
@@ -98,11 +131,28 @@ def main() -> int:
     if split is not None:
         total, me = split
         done = read_blocks = empty = 0
+        claims = 0
         for s in range(1, sets + 1):
-            for k in range(1, blocks_per_set + 1):
-                if owned(k, total, me):
-                    if lazy and me == total and k == max(
-                            kk for kk in range(1, blocks_per_set + 1) if owned(kk, total, me)):
+            # the walk: stream order (cycle-major), or point-major for a claiming Philox worker
+            ks = list(range(1, blocks_per_set + 1))
+            if claiming and generator == "ranlux":
+                ks.sort(key=lambda k: Block.cycle_point(k, settings.itn))
+            for k in ks:
+                if claiming:
+                    if greedy:
+                        mine = True
+                    elif short is not None and claims >= short:
+                        mine = False
+                    else:
+                        mine = claim(claim_name(s, k), me)
+                        claims += mine
+                else:
+                    mine = owned(k, total, me)
+                if mine:
+                    if lazy and me == total and (
+                            claiming and claims == 1 or not claiming and k == max(
+                                kk for kk in range(1, blocks_per_set + 1)
+                                if owned(kk, total, me))):
                         continue
                     Block(s, *Block.cycle_point(k, settings.itn), seed,
                           (seed % 1000 + s + k) / 1e3, 0.5, 0, generator,
@@ -117,6 +167,9 @@ def main() -> int:
                     empty += 1
         lines += ["", f" blocks of imp trajectories: integrated{done:5d}, read from files"
                       f"{read_blocks:5d}, empty{empty:5d} (worker{me:3d} of{total:3d})"]
+        if claiming:
+            walk = "point" if generator == "philox" else "cycle"
+            lines.append(f" blocks claimed as reached, visited {walk}-major")
 
     tm = 50 + seed % 7 + (0.5 if generator == "philox" else 0)
     if split is not None and split[1] > 0:

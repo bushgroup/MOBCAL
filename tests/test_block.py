@@ -10,7 +10,10 @@ from mobcal.io.block import (
     GENERATOR_CODE,
     Block,
     BlockError,
+    all_names,
     block_name,
+    block_of_claim,
+    claim_name,
     expected_names,
     owned,
 )
@@ -82,3 +85,14 @@ def test_round_robin_shares():
     # At other settings the share is of itn * inp blocks.
     assert [len(expected_names(1, 4, w, 21)) for w in (1, 2, 3, 4)] == [6, 5, 5, 5]
     assert expected_names(1, 21, 21, 21) == ["block-001-00021.dat"]
+
+
+def test_the_claimed_dealings_names():
+    # Under the claimed dealing no worker owes a fixed list: the run owes every block, once.
+    every = all_names(2, 21)
+    assert len(every) == 42 and every[0] == "block-001-00001.dat"
+    assert every[-1] == "block-002-00021.dat"
+    assert all_names(1) == expected_names(1, 1, 1)
+    assert claim_name(1, 7) == "claim-001-00007"
+    assert block_of_claim("claim-002-00400") == "block-002-00400.dat"
+    assert [block_of_claim(claim_name(s, k)) for s in (1, 2) for k in range(1, 22)] == every

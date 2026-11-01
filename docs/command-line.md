@@ -49,9 +49,9 @@ Run calculations in parallel, one process per run.
 
 ```
 usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
-                  [--workers N] [--split W|auto] [--parameters PATH|NAME] [--out DIR]
-                  [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N]
-                  [--inp N] [--inum N] [--inor N]
+                  [--workers N] [--split W|auto] [--dealing {static,claimed}]
+                  [--parameters PATH|NAME] [--out DIR] [--skip-done] [--settings PATH]
+                  [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
@@ -61,6 +61,7 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
 - `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under 2012-philox-he.
 - `--workers N`: How many runs are in flight at once. Default: the number of processors divided by the processes per run, or under `--split` auto, the number it chooses.
 - `--split W|auto`: How many processes each calculation is divided among. A divided run gives the serial result exactly. W processes, or auto, which chooses the runs in flight and the processes per run from the run count, the processors and the ion sizes, dividing a run among at most 40 processes and only when that saves at least 20% of its time. Default: 1, one process per calculation.
+- `--dealing {static,claimed}`: How a divided calculation shares its blocks of trajectories among its processes. Static gives each process a fixed share. Claimed lets each process take the next block no other has taken, so the processes finish together and one slowed by other work does not set the run's time. The result is the same either way. static or claimed. Default: static.
 - `--parameters PATH|NAME`: The element table, which gives each atom of the ion its mass and its Lennard-Jones and hard-sphere parameters in the gas: a table the package ships, or a TOML file of one's own for one gas. A path to a table for the method's gas, or a shipped table by name: 2012 (He, N2), 2000 (He). Default: the method's, 2012 under 2012-philox-he.
 - `--out DIR`: The folder for a study: each batch adds its run directories here, and summary.csv and summary.json are rewritten to cover every run it holds. Default: runs/.
 - `--skip-done`: Leave out the runs the output folder already holds complete.

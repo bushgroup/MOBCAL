@@ -19,6 +19,12 @@ The fourth record makes the run worker ``w`` of ``W``: it integrates the traject
 with ``(k - 1) mod W == w - 1``, draws the random stream through the others, and writes each
 block it integrated to a file. ``w == 0`` is the combining run, which integrates nothing and
 reads every block back. Without the record the program is the 2012 program, byte for byte.
+The record may end with the word ``claim``, ``W w claim``: the worker then integrates not a
+fixed share but every block it is the first to claim, by creating ``../claim-<set>-<k>`` in
+the directory above its own, so workers that finish early keep integrating until no block is
+left. The package calls the two dealings ``static`` and ``claimed`` (``DEALINGS``); the word
+is written only for ``claimed``, so a static run file is what it was. The program refuses any
+other word, and ``claim`` on the combining run, before it calculates anything.
 """
 
 from __future__ import annotations
@@ -31,6 +37,10 @@ FIELD_WIDTH = 30
 MAX_SEED = 2**31 - 1
 GENERATORS = ("ranlux", "philox")  # the words the program accepts on the seed record
 DEFAULT_GENERATOR = "ranlux"  # what no word means: the 2012 generator
+DEALINGS = ("static", "claimed")  # how a split run's blocks are shared among its workers
+DEFAULT_DEALING = "static"  # what no word on the fourth record means: the fixed (w, W) share
+CLAIM_WORD = "claim"  # the word the program reads for the claimed dealing
+_DEALING_WORDS = {"static": "static", CLAIM_WORD: "claimed"}  # the record's words
 
 
 class InFileError(ValueError):
@@ -52,6 +62,7 @@ class InFile:
     seed: int
     split: tuple[int, int] | None = None  # (W, w): worker w of W; w == 0 is the combining run
     generator: str = DEFAULT_GENERATOR  # the word on the seed record: ranlux or philox
+    dealing: str = DEFAULT_DEALING  # static, or claimed (the word claim on the fourth record)
 
     def __post_init__(self) -> None:
         check_name(self.input_name, "input file name")
@@ -69,12 +80,18 @@ class InFile:
                 ok = False
             if not ok:
                 raise InFileError(f"split {self.split!r}: (W, w) with W >= 1 and 0 <= w <= W")
+        if self.dealing not in DEALINGS:
+            raise InFileError(f"dealing {self.dealing!r}: one of {' or '.join(DEALINGS)}")
+        if self.dealing == "claimed" and not (self.split and self.split[1] > 0):
+            raise InFileError("dealing 'claimed' needs a worker, split (W, w) with w >= 1: the "
+                              "combining run does not claim blocks")
 
     def text(self) -> str:
         word = "" if self.generator == DEFAULT_GENERATOR else f" {self.generator}"
         text = f"{self.input_name}\n{self.output_name}\n{self.seed}{word}\n"
         if self.split is not None:
-            text += f"{self.split[0]} {self.split[1]}\n"
+            claim = f" {CLAIM_WORD}" if self.dealing == "claimed" else ""
+            text += f"{self.split[0]} {self.split[1]}{claim}\n"
         return text
 
     def write(self, directory: Path) -> Path:
@@ -95,16 +112,22 @@ class InFile:
         except (IndexError, ValueError):
             raise InFileError(f"seed line {lines[2]!r} is not an integer") from None
         generator = words[1] if len(words) > 1 else DEFAULT_GENERATOR  # as the program reads it
-        split = None
+        split, dealing = None, DEFAULT_DEALING
         rest = [s for s in lines[3:] if s.strip()]
         if rest:
+            fields = rest[0].split()
             try:
-                total, me = (int(x) for x in rest[0].split()[:2])
+                total, me = (int(x) for x in fields[:2])
             except ValueError:
                 raise InFileError(f"split record {rest[0]!r} is not two integers") from None
             split = (total, me)
+            if len(fields) > 2:  # the program reads a third word and refuses any other
+                if fields[2] not in _DEALING_WORDS:
+                    raise InFileError(f"split record {rest[0]!r}: the word after W w is "
+                                      f"{fields[2]!r}, not static or {CLAIM_WORD}")
+                dealing = _DEALING_WORDS[fields[2]]
         return cls(lines[0][:FIELD_WIDTH].rstrip(" "), lines[1][:FIELD_WIDTH].rstrip(" "), seed,
-                   split, generator)
+                   split, generator, dealing)
 
     @classmethod
     def read(cls, path: Path) -> InFile:

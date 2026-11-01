@@ -17,7 +17,7 @@ OPTIONS = {
     "temperature": ("run", "temperature"), "rng": ("run", "rng"), "imp": ("run", "imp"),
     "itn": ("run", "itn"), "inp": ("run", "inp"), "inum": ("run", "inum"),
     "inor": ("run", "inor"), "workers": ("run", "workers"), "split": ("run", "split"),
-    "out": ("run", "out"), "charges": ("import", "charges"),
+    "dealing": ("run", "dealing"), "out": ("run", "out"), "charges": ("import", "charges"),
     "net_charge": ("import", "net_charge"),
 }
 

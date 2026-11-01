@@ -41,13 +41,19 @@ A job with ``split=W`` is one calculation across W processes, with the serial re
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
 it integrates its share of the ``itn * inp`` trajectory blocks per coordinate set (400 at the
 2012 settings), draws the random stream through the rest (or, at ``philox``, moves the draw
-count past them), and writes a file per block it integrated. When every worker has
-landed and every block it owed is on disk, the block files are copied into the run directory
-and the program runs there once more as the combining run (``W 0``): it integrates nothing,
-reads the blocks back, and makes the sums, the averages and the SUMMARY with its own
-statements. That output is the run's output, read exactly as a serial one. A worker whose
-blocks are missing is a failure, with its output's last line as the reason, and the combining
-run never starts.
+count past them), and writes a file per block it integrated. The share is dealt one of two
+ways (``Job.dealing``): ``static``, a fixed round-robin share of the blocks, or ``claimed``,
+where each worker takes the next block no worker has taken, claiming it by creating
+``claim-<set>-<k>`` in the run directory (an exclusive create, so one worker wins each), so
+that early finishers keep integrating and a slowed worker does not set the wall. When every
+worker has landed and every block of the run is on disk (each worker's own share under
+``static``; every block exactly once across the workers under ``claimed``), the block files are
+copied into the run directory and the program runs there once more as the combining run
+(``W 0``): it integrates nothing, reads the blocks back, and makes the sums, the averages and
+the SUMMARY with its own statements. That output is the run's output, read exactly as a serial
+one. A block missing is a failure, with the worker that owed or claimed it and its output's
+last line as the reason, and the combining run never starts. Stale block and claim files are
+removed before any start.
 
 No Qt here. The window calls ``run_many`` from a worker thread and draws from the callbacks.
 
@@ -80,8 +86,8 @@ from pathlib import Path
 
 import mobcal
 from mobcal import fortran, methods, parameters, settings
-from mobcal.io.block import expected_names
-from mobcal.io.infile import FIELD_WIDTH, GENERATORS, InFile, InFileError
+from mobcal.io.block import all_names, block_of_claim, expected_names
+from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, FIELD_WIDTH, GENERATORS, InFile, InFileError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
@@ -96,6 +102,7 @@ SUMMARY_JSON = "summary.json"
 CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", "method", *settings.NAMES, "status", "PA",
                "EHS", "TM", "sets", "seconds", "output", "message")
 BLOCK_GLOB = "block-*.dat"
+CLAIM_GLOB = "claim-*"  # a claiming worker's claim files, in the run directory
 POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
 # The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
 # word is the 2012 run (ranlux), so a file written by hand or shipped means what it meant in
@@ -120,6 +127,7 @@ class Job:
     parameters: Path | None = None  # the element table; None is the package's for the gas
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
+    dealing: str = DEFAULT_DEALING  # how a split run's blocks are shared: static or claimed
     # the method the job was made from, which its record names while the job's fields are the
     # method's; None: the record names the shipped method the fields make, or custom
     method_from: methods.Method | None = field(default=None, compare=False, repr=False)
@@ -134,6 +142,8 @@ class Job:
             raise ValueError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
         if self.generator not in GENERATORS:
             raise ValueError(f"generator must be one of {GENERATORS}, not {self.generator!r}")
+        if self.dealing not in DEALINGS:
+            raise ValueError(f"dealing must be one of {DEALINGS}, not {self.dealing!r}")
         if not isinstance(self.settings, Settings):
             raise ValueError(f"settings must be a mobcal.settings.Settings, not "
                              f"{self.settings!r}")
@@ -386,17 +396,20 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
     return Result(job, False, message, returncode, seconds, output, {}, [])
 
 
-def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet) -> None:
+def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet,
+             dealing: str = DEFAULT_DEALING) -> None:
     """Make ``d`` ready for one start of the program: the input copied in under its staged name,
-    ``mobcal.in`` written, the element table and the settings rendered, and any output, record
-    or block file of an earlier run removed, so that nothing stale is ever read as this run's."""
+    ``mobcal.in`` written, the element table and the settings rendered, and any output, record,
+    block file or claim file of an earlier run removed, so that nothing stale is ever read as
+    this run's (a stale claim would keep a block from every worker)."""
     d.mkdir(parents=True, exist_ok=True)
     (d / OUTPUT_NAME).unlink(missing_ok=True)
     (d / RECORD_JSON).unlink(missing_ok=True)
-    for p in d.glob(BLOCK_GLOB):
-        p.unlink()
+    for glob in (BLOCK_GLOB, CLAIM_GLOB):
+        for p in d.glob(glob):
+            p.unlink()
     shutil.copyfile(job.input, d / job.staged)
-    InFile(job.staged, OUTPUT_NAME, job.seed, split, job.generator).write(d)
+    InFile(job.staged, OUTPUT_NAME, job.seed, split, job.generator, dealing).write(d)
     pset.render(d)
     job.settings.render(d)
 
@@ -518,12 +531,14 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
                running: Stop | None, blocks: BlocksProgress | None) -> Result:
     total, d = job.split, job.run_dir
     blocks_per_set = job.settings.blocks_per_set
+    claimed = job.dealing == "claimed"
+    every = all_names(coordinate_sets, blocks_per_set)
     expected = {w: expected_names(coordinate_sets, total, w, blocks_per_set)
                 for w in range(1, total + 1)}
-    n_expected = sum(len(v) for v in expected.values())
-    _prepare(job, d, (total, 0), pset)
+    n_expected = len(every)
+    _prepare(job, d, (total, 0), pset)  # the combining run, which never claims
     for w in expected:
-        _prepare(job, job.worker_dir(w), (total, w), pset)
+        _prepare(job, job.worker_dir(w), (total, w), pset, job.dealing)
 
     t0 = time.perf_counter()
     procs: dict[int, subprocess.Popen] = {}
@@ -558,21 +573,27 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
         for p in procs.values():
             _finish(p, running)
 
-    problems = []
     if running is not None and running.is_set():
         for p in procs.values():
             _kill_tree(p)
             p.wait()
         return _failed(job, "split run ended before its combining run", None,
                        time.perf_counter() - t0)
-    for w, names in expected.items():
-        missing = [n for n in names if not (job.worker_dir(w) / n).is_file()]
-        if not missing:
-            continue
+
+    def why(w: int) -> str:
         out = job.worker_dir(w) / OUTPUT_NAME
         last = OutFile.read(out).last_line if out.is_file() else ""
-        why = last or f"exit {procs[w].returncode}"
-        problems.append(f"worker {w}: {len(missing)} of {len(names)} blocks missing ({why})")
+        return last or f"exit {procs[w].returncode}"
+
+    problems = []
+    if not claimed:
+        for w, names in expected.items():
+            missing = [n for n in names if not (job.worker_dir(w) / n).is_file()]
+            if missing:
+                problems.append(f"worker {w}: {len(missing)} of {len(names)} blocks missing "
+                                f"({why(w)})")
+    else:
+        problems = _judge_claimed(job, every, d, why)
     if problems:
         rc = next((p.returncode for p in procs.values() if p.returncode), 0)
         return _failed(job, "; ".join(problems), rc, time.perf_counter() - t0)
@@ -590,6 +611,47 @@ def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: Paramet
     finally:
         _finish(proc, running)
     return _collect(job, d, rc, time.perf_counter() - t0)
+
+
+def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str]) -> list[str]:
+    """A claimed split run once every worker has exited: every block of the run must be on
+    disk exactly once across the worker directories. A block that is missing was either
+    claimed by a worker that never wrote it (the claim file names the worker) or never claimed
+    at all (every worker stopped before reaching it); a block written twice means the exclusive
+    create did not hold, which the platforms do not do, and is reported for what it is."""
+    found: dict[str, list[int]] = {}
+    for w in range(1, job.split + 1):
+        for p in job.worker_dir(w).glob(BLOCK_GLOB):
+            found.setdefault(p.name, []).append(w)
+    claimed_by: dict[str, int] = {}
+    for p in d.glob(CLAIM_GLOB):
+        try:
+            claimed_by[block_of_claim(p.name)] = int(p.read_text(encoding="ascii").split()[0])
+        except (OSError, ValueError, IndexError):
+            claimed_by[block_of_claim(p.name)] = 0
+    problems = []
+    unwritten: dict[int, list[str]] = {}
+    unclaimed = []
+    for n in every:
+        if n in found:
+            continue
+        if n in claimed_by:
+            unwritten.setdefault(claimed_by[n], []).append(n)
+        else:
+            unclaimed.append(n)
+    for w, names in sorted(unwritten.items()):
+        who = f"worker {w}" if w else "a worker"
+        problems.append(f"{who}: {len(names)} claimed {'block' if len(names) == 1 else 'blocks'}"
+                        f" not written, {names[0]} first ({why(w) if w else 'claim unreadable'})")
+    if unclaimed:
+        problems.append(f"{len(unclaimed)} {'block' if len(unclaimed) == 1 else 'blocks'} never "
+                        f"claimed, {unclaimed[0]} first ({why(1)})")
+    for n, ws in sorted(found.items()):
+        if len(ws) > 1:
+            problems.append(f"{n} written by workers {' and '.join(map(str, ws))}")
+        elif n not in every:
+            problems.append(f"{n} is not a block of this run")
+    return problems
 
 
 def _sha256(path: Path) -> str:
@@ -612,7 +674,8 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
         "binary": {"gas": j.gas, "path": str(exe), "command": list(command), "build": build},
         "input": {"path": str(j.input), "staged_name": j.staged, "sha256": _sha256(j.input),
                   "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
-        "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split},
+        "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split,
+                      "dealing": j.dealing if j.split else None},
         "method": j.method,
         "method_file": j.method_file,
         "parameters": r.parameters,

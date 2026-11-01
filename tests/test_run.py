@@ -265,7 +265,8 @@ def test_a_split_run_renders_into_every_directory(tmp_path):
     for w in (1, 2, 3):
         assert (job.worker_dir(w) / parameters.RENDERED).read_bytes() == want
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
-    assert rec["mobcal_in"] == {"seed": 3, "generator": "philox", "split": 3}
+    assert rec["mobcal_in"] == {"seed": 3, "generator": "philox", "split": 3,
+                                "dealing": "static"}
 
 
 def test_the_record_of_a_run(tmp_path):
@@ -279,7 +280,8 @@ def test_the_record_of_a_run(tmp_path):
     assert rec["input"] == {"path": str(inp), "staged_name": "ok.mfj",
                             "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
                             "atoms": 21, "coordinate_sets": 1}
-    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
+    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None,
+                                "dealing": None}
     assert rec["parameters"] == parameters.shipped("n2").record()
     assert rec["parameters"]["rendered"] == "parameters.tab"
     assert rec["settings"] == {"temperature": 301.0, "imp": 1000, "itn": 10, "inp": 40,
@@ -354,7 +356,8 @@ def test_a_job_under_philox(tmp_path):
     out = OutFile.read(r.output)
     assert out.seed == 5013489 and out.generator == "philox"
     rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
-    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None}
+    assert rec["mobcal_in"] == {"seed": 5013489, "generator": "philox", "split": None,
+                                "dealing": None}
     with pytest.raises(ValueError, match="generator must be one of"):
         Job(inp, "he", 1, tmp_path, generator="rand")
 

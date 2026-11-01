@@ -5,9 +5,9 @@
     mobcal build [--gas he|n2] [--out DIR]
     mobcal run INPUT [INPUT ...] [--method KEY|PATH] [--seeds N[,N...]]
                [--rng philox|ranlux] [--parameters PATH|NAME]
-               [--workers N] [--split W|auto] [--out DIR] [--skip-done]
-               [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N]
-               [--inor N]
+               [--workers N] [--split W|auto] [--dealing static|claimed] [--out DIR]
+               [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N]
+               [--inum N] [--inor N]
     mobcal methods-text PATH [PATH ...]
     mobcal gui [--check]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
@@ -61,7 +61,7 @@ from pathlib import Path
 
 from mobcal import ROOT, __version__, estimate, fortran, methods, options, parameters, settings
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError, prior
-from mobcal.io.infile import GENERATORS
+from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, GENERATORS
 from mobcal.run import DEFAULT_RNG, Job, Result, run_many
 
 DEFAULT_OUT = Path("runs")
@@ -149,6 +149,8 @@ def parser() -> argparse.ArgumentParser:
                                          "number it chooses"))
     r.add_argument("--split", type=_split, default=None, metavar="W|auto",
                    help=options.cli_help("split", "1, one process per calculation"))
+    r.add_argument("--dealing", choices=list(DEALINGS), default=None,
+                   help=options.cli_help("dealing", DEFAULT_DEALING))
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help=options.cli_help("parameters",
                                          f"the method's, {parameters.DEFAULT} under "
@@ -405,7 +407,7 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
     try:
         batch = Batch(tuple(inputs), args.out, method.ref, seeds=tuple(args.seeds),
                       parameters=args.parameters, generator=args.rng, settings=st,
-                      split=args.split, workers=args.workers)
+                      split=args.split, workers=args.workers, dealing=args.dealing)
         batch.jobs()
     except (BatchError, ValueError) as e:
         raise UsageError(str(e)) from None

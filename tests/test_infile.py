@@ -1,10 +1,10 @@
 """mobcal.io.infile: the three records, the a30 limit on the two names, the seed, the generator
-word, the split."""
+word, the split, the dealing word."""
 
 import pytest
 
 from mobcal import fortran
-from mobcal.io.infile import GENERATORS, MAX_SEED, InFile, InFileError
+from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, GENERATORS, MAX_SEED, InFile, InFileError
 
 
 def test_the_shipped_run_file():
@@ -48,10 +48,32 @@ def test_the_fourth_record(tmp_path):
     p = i.write(tmp_path)
     assert p.read_bytes() == b"Choline_pop.mfj\nmobcal.out\n5013489\n3 2\n"
     assert InFile.read(p) == i
-    assert InFile.parse("a\nb\n1\n\n4 0 trailing\n").split == (4, 0)
+    assert InFile.parse("a\nb\n1\n\n4 0 static\n").split == (4, 0)
     assert InFile.parse("a\nb\n1\n\n\n").split is None
     with pytest.raises(InFileError, match="not two integers"):
         InFile.parse("a\nb\n1\n3 x\n")
+    with pytest.raises(InFileError, match="not static or claim"):  # the program refuses it too
+        InFile.parse("a\nb\n1\n\n4 0 trailing\n")
+
+
+def test_the_dealing_word(tmp_path):
+    assert DEALINGS == ("static", "claimed") and DEFAULT_DEALING == "static"
+    i = InFile("Choline_pop.mfj", "mobcal.out", 5013489, (3, 2), "philox", "claimed")
+    p = i.write(tmp_path)
+    assert p.read_bytes() == b"Choline_pop.mfj\nmobcal.out\n5013489 philox\n3 2 claim\n"
+    assert InFile.read(p) == i
+    # static is never written, so a static run file is what it was before the word existed
+    static = InFile("a", "b", 1, (3, 1), dealing="static")
+    assert static.text() == InFile("a", "b", 1, (3, 1)).text() == "a\nb\n1\n3 1\n"
+    assert InFile.parse("a\nb\n1\n3 1 static\n") == InFile("a", "b", 1, (3, 1))
+    assert InFile.parse("a\nb\n1\n3 1 claim\n").dealing == "claimed"
+    with pytest.raises(InFileError, match="dealing"):
+        InFile("a", "b", 1, (3, 1), dealing="claim")  # the package's word is claimed
+    # the combining run does not claim, and a serial run has nothing to deal
+    with pytest.raises(InFileError, match="combining run"):
+        InFile("a", "b", 1, (3, 0), dealing="claimed")
+    with pytest.raises(InFileError, match="combining run"):
+        InFile("a", "b", 1, None, dealing="claimed")
 
 
 @pytest.mark.parametrize("split", [(0, 0), (3, 4), (3, -1), (-1, 0), (3,), (1.0, 0), "3 1"])

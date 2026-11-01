@@ -122,6 +122,16 @@ combining run refuses a block from other settings as it refuses one from another
 generator. The test suite runs choline in helium at 3 cycles of 7 velocity points split four
 ways, under both generators, and holds the combined output to the serial one line for line.
 
+The blocks are shared among the workers in one of two ways, `--dealing static` or `--dealing
+claimed`. Static gives each worker a fixed share of the blocks, every W-th one over an index
+that mixes the velocity points. Claimed lets each worker take the next block that no worker has
+taken yet, so a worker that finishes its blocks early keeps working until none is left, and a
+worker slowed by other work on the computer does not set the run's time. The result is the same
+under both: a block's trajectories depend only on its place in the random stream, not on which
+process computes them, so the combined output is the serial output either way. Under Philox a
+claiming worker takes the slowest blocks first, which is what keeps the workers finishing
+together; under RANLUX it can only take them in the order of the stream.
+
 ## Equal to a compiled build
 
 At the 2012 values, with or without the file, the outputs are the 2012 outputs; the regression

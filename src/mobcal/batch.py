@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mobcal import estimate, fortran, methods, parameters, settings
+from mobcal.io.infile import DEALINGS, DEFAULT_DEALING
 from mobcal.run import RECORD_JSON, Job
 from mobcal.settings import Settings, Source
 
@@ -64,6 +65,7 @@ class Batch:
     generator: str | None = None  # None: the method's
     settings: Settings | None = None  # None: the method's
     split: int | str | None = AUTO  # W, "auto" (mobcal.estimate.allocate), or None: serial
+    dealing: str | None = None  # a split run's dealing, static or claimed; None: the default
     workers: int | None = None  # runs in flight; None: the allocation's, or the CPU count
     skip_done: bool = False  # leave out, when the batch starts, runs the folder holds complete
     remaining: tuple[str, ...] | None = None  # run labels left, once paused; None: every run
@@ -88,6 +90,8 @@ class Batch:
         if not (self.split in (None, AUTO) or (isinstance(self.split, int) and self.split >= 1)):
             raise BatchError(f"split must be a worker count, {AUTO!r} or None, not "
                              f"{self.split!r}")
+        if self.dealing is not None and self.dealing not in DEALINGS:
+            raise BatchError(f"dealing must be one of {DEALINGS} or None, not {self.dealing!r}")
 
     # --- what the runs use ---------------------------------------------------------------
 
@@ -129,7 +133,7 @@ class Batch:
         gas, gen, st, table = (self.resolved_gas, self.resolved_generator,
                                self.resolved_settings, self.table())
         return [Job(p, gas, s, self.out_dir, parameters=table, generator=gen, settings=st,
-                    method_from=self.loaded)
+                    dealing=self.dealing or DEFAULT_DEALING, method_from=self.loaded)
                 for p in self.inputs for s in self.seeds]
 
     def to_run(self) -> list[Job]:
@@ -186,7 +190,8 @@ class Batch:
                 "seeds": list(self.seeds), "parameters": self.parameters,
                 "generator": self.generator,
                 "settings": None if st is None else st.values(),
-                "split": self.split, "workers": self.workers, "skip_done": self.skip_done,
+                "split": self.split, "dealing": self.dealing, "workers": self.workers,
+                "skip_done": self.skip_done,
                 "remaining": None if self.remaining is None else list(self.remaining)}
 
     @classmethod
@@ -212,8 +217,8 @@ def from_entry(doc: dict) -> list[Batch]:
         common = dict(inputs=tuple(doc["inputs"]), out_dir=Path(doc["out_dir"]),
                       seeds=tuple(doc["seeds"]), parameters=doc.get("parameters"),
                       generator=doc.get("generator"), settings=st,
-                      split=doc.get("split", AUTO), workers=doc.get("workers"),
-                      skip_done=bool(doc.get("skip_done", False)))
+                      split=doc.get("split", AUTO), dealing=doc.get("dealing"),
+                      workers=doc.get("workers"), skip_done=bool(doc.get("skip_done", False)))
         if fmt == 3:
             return [Batch(method=doc["method"], gas=doc.get("gas"),
                           remaining=doc.get("remaining"), **common)]

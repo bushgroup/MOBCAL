@@ -116,6 +116,12 @@ SHARED = {
     "workers": Description(
         "How many runs are in flight at once.",
         window="Set here when the box above is unchecked."),
+    "dealing": Description(
+        "How a divided calculation shares its blocks of trajectories among its processes. "
+        "Static gives each process a fixed share. Claimed lets each process take the next "
+        "block no other has taken, so the processes finish together and one slowed by other "
+        "work does not set the run's time. The result is the same either way.",
+        cli="static or claimed."),
     "split": Description(
         "How many processes each calculation is divided among. A divided run gives the serial "
         "result exactly.",

@@ -56,9 +56,27 @@ def owned(k: int, total: int, me: int) -> bool:
 
 def expected_names(coordinate_sets: int, total: int, me: int,
                    blocks_per_set: int = BLOCKS_PER_SET) -> list[str]:
-    """The block files worker ``me`` of ``total`` writes for an input with this many sets."""
+    """The block files worker ``me`` of ``total`` writes for an input with this many sets,
+    under the static dealing."""
     return [block_name(s, k) for s in range(1, coordinate_sets + 1)
             for k in range(1, blocks_per_set + 1) if owned(k, total, me)]
+
+
+def all_names(coordinate_sets: int, blocks_per_set: int = BLOCKS_PER_SET) -> list[str]:
+    """Every block file of a run with this many sets: what the workers together must write."""
+    return [block_name(s, k) for s in range(1, coordinate_sets + 1)
+            for k in range(1, blocks_per_set + 1)]
+
+
+def claim_name(coordinate_set: int, k: int) -> str:
+    """The claim file a claiming worker creates for block ``k`` of a set, in the run directory
+    (``..`` from the worker's own); its content is the worker number that won it."""
+    return f"claim-{coordinate_set:03d}-{k:05d}"
+
+
+def block_of_claim(name: str) -> str:
+    """The block file a claim file stands for."""
+    return "block-" + name[len("claim-"):] + ".dat"
 
 
 @dataclass(frozen=True)
