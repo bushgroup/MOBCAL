@@ -53,12 +53,11 @@ from PySide6.QtWidgets import (  # noqa: E402
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
 from mobcal import cli, docs, fortran, methods, options  # noqa: E402
-from mobcal.app import inputs  # noqa: E402
-from mobcal.io.mfj import Atom, Mfj  # noqa: E402
-from mobcal.app import theme, tip  # noqa: E402
+from mobcal.app import inputs, theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
 from mobcal.app.window import MainWindow  # noqa: E402
+from mobcal.io.mfj import Atom, Mfj  # noqa: E402
 from mobcal.run import Job  # noqa: E402
 
 FAKE = Path(__file__).resolve().parent / "fake_mobcal.py"
