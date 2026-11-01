@@ -66,10 +66,10 @@ INCLUDES = ("mobcal_ljread.inc", "mobcal_rng.inc", "mobcal_arrays.inc", "mobcal_
 # here from those blobs on 2026-10-21, LF line endings (see .gitattributes); the two sources
 # with the changes fortran/README.md lists under Changes, and the includes they share.
 SHA256 = {
-    "mobcal_He.f": "6d135ef361ddfc138ec694da0f5acae543b3778838df107d8c1028406dbc0ce0",
-    "mobcal_N2.f": "f8b569c35cac786ca6a87ccf8140f8e24cabb1cf53023544bfe1224d0fa26e0d",
+    "mobcal_He.f": "0f267d9bfa269d772f3a24fd8f925a36b776009be7ca396a476e1c0549248cc0",
+    "mobcal_N2.f": "378be2e681f7858769ed44b771967c053e02d2ac76212b3df08191c3c0d46129",
     "mobcal_ljread.inc": "c70141e81e7707c52397e1f07734712a3cbd8be2ff8f9cc7fc792f120f4b5d46",
-    "mobcal_rng.inc": "16ac0098bfb55d79e3a23c9377fbae25596a3f3a3a2af813eb64793f7d69c9fe",
+    "mobcal_rng.inc": "242d6da6e9b406623da9d1af050217613e724fc8fd1dbb3c2b005ae003c90202",
     "mobcal_arrays.inc": "6cfa5f8378315b1193dd154c9228f2b891165ee2437bef27f87833c2a9c6878a",
     "mobcal_settings.inc": "bbf0cc80941b277e31b4bd0e6d5108a0c260c56d38804365d5e16f4fc928f3bd",
     "Choline.mfj": "a4cf1c4a14a2a84c49eb9b369df81070f6978c6d9ecd320ea521dc094499d8db",

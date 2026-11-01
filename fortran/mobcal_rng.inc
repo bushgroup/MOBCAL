@@ -129,6 +129,39 @@ c
 c
 c     ***************************************************************
 c
+      subroutine rngtell(n)
+c
+c     The count so far: the next draw is draw n+1.
+c
+      implicit none
+      integer*8 n
+      integer*8 ndraw,kseed
+      common/rngstate/ndraw,kseed
+c
+      n=ndraw
+      return
+      end
+c
+c     ***************************************************************
+c
+      subroutine rngseek(n)
+c
+c     Sets the count to n, so that the next draw is draw n+1: a
+c     worker that claims blocks out of stream order reaches each
+c     block's first draw from the count RNGTELL gave at the loop's
+c     entry.
+c
+      implicit none
+      integer*8 n
+      integer*8 ndraw,kseed
+      common/rngstate/ndraw,kseed
+c
+      ndraw=n
+      return
+      end
+c
+c     ***************************************************************
+c
       double precision function phiuni()
 c
 c     The next uniform, from the draw count and the key, and the

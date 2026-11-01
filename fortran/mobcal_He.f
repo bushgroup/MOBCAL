@@ -86,8 +86,9 @@ c
       dimension tmc(100),tmm(100),ehsc(100),ehsm(100),
      ?pac(100),pam(100),asympp(100)
       character*30 filen1,filen2,unit,dchar,xlabel
-      character*80 rseed
+      character*80 rseed,rsplit
       character*8 gen
+      character*6 deal
       include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
@@ -95,7 +96,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
-      common/split/iwtot,iwme,inum,inor
+      common/split/iwtot,iwme,inum,inor,iclaim
 c
 c     ***************************************************************
 c
@@ -128,11 +129,18 @@ c
 c
 c     an optional fourth record, W w, makes this run worker w of W in a
 c     calculation split across W processes (w = 0 is the combining run
-c     that reads every block back); no record means an ordinary run
+c     that reads every block back); no record means an ordinary run.
+c     the word claim after the two integers makes the worker take the
+c     blocks no other worker has claimed, in the order it reaches
+c     them, in place of its fixed (w, W) share
 c
       iwtot=0
       iwme=0
-      read(20,*,end=21,err=21) iwtot,iwme
+      iclaim=0
+      deal='static'
+      read(20,'(a80)',end=21,err=21) rsplit
+      read(rsplit,*,end=21,err=21) iwtot,iwme
+      read(rsplit,*,end=21,err=21) idum,idum,deal
    21 continue
       close (20)
 c
@@ -142,6 +150,20 @@ c
       if(iwtot.lt.0.or.iwme.lt.0.or.iwme.gt.iwtot) then
       write(8,640) iwtot,iwme
   640 format(1x,'bad split record in mobcal.in:',2i8)
+      close(8)
+      stop 1
+      endif
+      if(deal.eq.'claim') iclaim=1
+      if(deal.ne.'static'.and.deal.ne.'claim') then
+      write(8,642) deal
+  642 format(1x,'dealing word ',a,' in the split record of mobcal.in',
+     ?' is not static or claim')
+      close(8)
+      stop 1
+      endif
+      if(iclaim.eq.1.and.iwme.eq.0) then
+      write(8,643)
+  643 format(1x,'the combining run (w = 0) does not claim blocks')
       close(8)
       stop 1
       endif
@@ -1464,7 +1486,8 @@ c
       dimension q1st(100),q2st(100),cosx(0:500)
       dimension om11st(100),om12st(100),om13st(100),om22st(100)
       logical lblk
-      character*20 fnblk
+      character*20 fnblk,fnclm
+      integer*8 kper,kdraw0
       include 'mobcal_arrays.inc'
       common/printswitch/ip,it,iu1,iu2,iu3,iv,im2,im4,igs
       common/constants/mu,ro,eo,pi,cang,ro2,dipol,emax,m1,m2,
@@ -1472,7 +1495,7 @@ c
       common/trajectory/sw1,sw2,dtsf1,dtsf2,cmin,ifail,ifailc,inwr
       common/angles/theta,phi,gamma
       common/xrandom/i1,i2,i3,i4,i5,i6
-      common/split/iwtot,iwme,inum,inor
+      common/split/iwtot,iwme,inum,inor,iclaim
 c
       if(im2.eq.0) write(8,631)
   631 format(/1x,'mobility calculation by MOBIL2 (trajectory method)',/)
@@ -1704,14 +1727,38 @@ c
       icomp=0
       iread=0
       iempt=0
-      do 4040 ic=1,itn
-      if(ip.eq.1) write(8,681) ic
-  681 format(/1x,'cycle number, ic =',i3)
+c
+c     the blocks are visited cycle-major, the order of the random
+c     stream, except by a claiming worker at Philox (ipm = 1), which
+c     visits them point-major, the slowest velocity point's blocks
+c     first, and seeks the draw count to each block it claims from
+c     the count at the loop's entry; either way ic and ig are the
+c     block's cycle and point and the statements below are the same
+c
+      ipm=0
+      if(iclaim.eq.1.and.i5.eq.2) ipm=1
+      iout=itn
+      iinn=inp
+      if(ipm.eq.1) then
+      iout=inp
+      iinn=itn
+      endif
+      kper=4*imp
+      if(i5.eq.2) call rngtell(kdraw0)
+      do 4039 ic=1,itn
       om11st(ic)=0.d0
       om12st(ic)=0.d0
       om13st(ic)=0.d0
       om22st(ic)=0.d0
-      do 4010 ig=1,inp
+ 4039 continue
+      do 4040 kc=1,iout
+      if(ipm.eq.0) ic=kc
+      if(ipm.eq.1) ig=kc
+      if(ip.eq.1.and.ipm.eq.0) write(8,681) ic
+  681 format(/1x,'cycle number, ic =',i3)
+      do 4010 kg=1,iinn
+      if(ipm.eq.0) ig=kg
+      if(ipm.eq.1) ic=kg
       gst2=pgst(ig)*pgst(ig)
       v=dsqrt((gst2*eo)/(0.5d0*mu))
       if(ip.eq.1) write(8,682) ic,ig,gst2,v
@@ -1719,16 +1766,32 @@ c
      ?1x,'v =',e11.4)
 c
 c     in a split calculation (fourth record of mobcal.in) this block of
-c     imp trajectories is integrated here only if it is this worker's;
-c     otherwise the random stream is drawn through it (at Philox the
-c     draw count is moved past it, 4 draws per trajectory) and its two
-c     sums are read from the file the worker that integrated it wrote
+c     imp trajectories is integrated here only if it is this worker's,
+c     by its (w, W) share or by claiming it first; otherwise the
+c     random stream is drawn through it (at Philox the draw count is
+c     moved past it, 4 draws per trajectory, or, point-major, left to
+c     the seek) and its two sums are read from the file the worker
+c     that integrated it wrote
 c
       kblk=(ig-1)*itn+ic
       ifbeg=ifailc
       write(fnblk,'(a,i3.3,a,i5.5,a)') 'block-',iic,'-',kblk,'.dat'
       if(iwtot.eq.0) goto 3990
+      if(iclaim.eq.1) then
+c     claiming: the block is this worker's if it creates the claim
+c     file first; the create is exclusive, so exactly one worker does
+      write(fnclm,'(a,i3.3,a,i5.5)') '../claim-',iic,'-',kblk
+      open(18,file=fnclm,status='new',iostat=ios)
+      if(ios.eq.0) then
+      write(18,'(i5)') iwme
+      close(18)
+      if(ipm.eq.1) call rngseek(kdraw0+kper*((ic-1)*inp+ig-1))
+      goto 3990
+      endif
+      else
       if(iwme.gt.0.and.mod(kblk-1,iwtot).eq.iwme-1) goto 3990
+      endif
+      if(ipm.eq.1) goto 3985
       if(i5.eq.2) then
       call rngskip(4*imp)
       else
@@ -1737,6 +1800,7 @@ c
       call rantate
  3980 continue
       endif
+ 3985 continue
       temp1=0.d0
       temp2=0.d0
       inquire(file=fnblk,exist=lblk)
@@ -1832,12 +1896,16 @@ c
   670 format(/1x,'v =',1pe11.4,5x,'q1st =',e11.4,/)
  4010 continue
 c
-      if(ip.eq.1) write(8,620) om11st(ic)
+      if(ip.eq.1.and.ipm.eq.0) write(8,620) om11st(ic)
   620 format(/1x,'OMEGA(1,1)*=',1pe11.4,/)
  4040 continue
+      if(ipm.eq.1) call rngseek(kdraw0+kper*itn*inp)
       if(iwtot.gt.0) write(8,690) icomp,iread,iempt,iwme,iwtot
   690 format(/1x,'blocks of imp trajectories: integrated',i5,
      ?', read from files',i5,', empty',i5,' (worker',i3,' of',i3,')')
+      if(iclaim.eq.1.and.ipm.eq.0) write(8,695) 'cycle'
+      if(iclaim.eq.1.and.ipm.eq.1) write(8,695) 'point'
+  695 format(1x,'blocks claimed as reached, visited ',a,'-major')
 c
 c     calculate running averages
 c
