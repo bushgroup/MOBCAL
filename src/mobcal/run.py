@@ -33,7 +33,9 @@ flight, calls back as each lands, and returns a ``Summary`` that writes ``summar
 own results and every earlier run's ``record.json``. A ``Stop`` handed to ``run_many`` ends the
 batch from another thread: no run starts after it, every process running is killed with its
 whole process tree, and the runs it ended report ``stopped`` and keep their directories as
-partial records.
+partial records. ``Stop.drain`` is the gentler half: no run starts after it, the runs in flight
+finish as usual, and every job not yet started comes back ``waiting``, without a directory or a
+record, so the caller knows exactly which runs are left (the window's Pause queue).
 
 A job with ``split=W`` is one calculation across W processes, with the serial result exactly.
 Each worker runs in ``<run_dir>/wNN/`` with a ``mobcal.in`` naming it worker ``w`` of ``W``;
@@ -212,10 +214,12 @@ class Result:
     conformers: list[dict[str, float]]  # per coordinate set
     parameters: dict = dataclasses.field(default_factory=dict)  # the set's record; {} if unread
     stopped: bool = False  # ended by a Stop, not by itself
+    waiting: bool = False  # never started: the batch was drained first (Stop.drain)
 
     @property
     def status(self) -> str:
-        return "ok" if self.ok else "stopped" if self.stopped else "failed"
+        return ("ok" if self.ok else "stopped" if self.stopped else "waiting" if self.waiting
+                else "failed")
 
     def record(self) -> dict:
         j = self.job
@@ -304,10 +308,12 @@ def read_records(out_dir: Path) -> dict[str, dict]:
 
 class Stop:
     """Ends a ``run_many`` batch from any thread: once called, no run starts, every process
-    running is killed with its whole tree, and the runs it ended report stopped."""
+    running is killed with its whole tree, and the runs it ended report stopped. ``drain``
+    only refuses new starts: the runs in flight finish, and the rest report waiting."""
 
     def __init__(self) -> None:
         self._event = threading.Event()
+        self._drain = threading.Event()
         self._lock = threading.Lock()
         self._procs: set[subprocess.Popen] = set()
 
@@ -322,6 +328,13 @@ class Stop:
 
     def is_set(self) -> bool:
         return self._event.is_set()
+
+    def drain(self) -> None:
+        """Start nothing more; let what is running finish."""
+        self._drain.set()
+
+    def draining(self) -> bool:
+        return self._drain.is_set()
 
     def add(self, proc: subprocess.Popen) -> None:
         with self._lock:
@@ -468,6 +481,9 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     if _running is not None and _running.is_set():
         return dataclasses.replace(_failed(job, "not started: the batch was stopped"),
                                    stopped=True)
+    if _running is not None and _running.draining():
+        return dataclasses.replace(_failed(job, "not started: the batch was paused"),
+                                   waiting=True)
     if on_start is not None:
         on_start(job)
     started = dt.datetime.now().astimezone()
@@ -636,7 +652,8 @@ def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress
     about to start, once its input and table have been read. A split job counts as one job in
     flight and starts its own W processes. ``stop`` ends the batch from another thread: every
     job still to start returns at once as stopped, and every running one is killed and reports
-    stopped. A KeyboardInterrupt stops every running binary and is re-raised.
+    stopped; ``stop.drain()`` lets the running ones finish and returns the rest as waiting. A
+    KeyboardInterrupt stops every running binary and is re-raised.
     """
     jobs = list(jobs)
     workers = max(1, min(workers or os.cpu_count() or 1, len(jobs) or 1))
@@ -687,23 +704,31 @@ class Summary:
 
     @property
     def failed(self) -> list[Result]:
-        return [r for r in self.results if not r.ok and not r.stopped]
+        return [r for r in self.results if not r.ok and not r.stopped and not r.waiting]
 
     @property
     def stopped(self) -> list[Result]:
         return [r for r in self.results if r.stopped]
+
+    @property
+    def waiting(self) -> list[Result]:
+        """The jobs a drain left unstarted."""
+        return [r for r in self.results if r.waiting]
 
     def write(self, out_dir: Path) -> tuple[Path, Path]:
         """Write ``summary.csv`` (one row per run) and ``summary.json`` (the same, with the
         per-set values and the provenance) into ``out_dir`` and return the two paths. They
         cover every run the folder holds, in name order: this batch's results, and every other
         run directory's ``record.json``; ``summary.json`` also names this batch's runs, its
-        workers and its wall time."""
+        workers and its wall time. A waiting job ran nowhere and is left out of both, so a
+        drained batch's summary is the folder as it stands, and an earlier run of the same name
+        keeps its row."""
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         csv_path, json_path = out_dir / SUMMARY_CSV, out_dir / SUMMARY_JSON
         found = read_records(out_dir)
-        found.update((r.job.label, r.record()) for r in self.results)
+        ran = [r for r in self.results if not r.waiting]
+        found.update((r.job.label, r.record()) for r in ran)
         runs = [found[k] for k in sorted(found)]
         with open(csv_path, "w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
@@ -717,7 +742,7 @@ class Summary:
             "python": sys.version.split()[0],
             "workers": self.workers,
             "seconds": round(self.seconds, 1),
-            "batch": [r.job.label for r in self.results],
+            "batch": [r.job.label for r in ran],
             "runs": runs,
         }
         with open(json_path, "w", encoding="utf-8") as f:
@@ -727,7 +752,8 @@ class Summary:
 
     def __str__(self) -> str:
         n, bad, stopped = len(self.results), len(self.failed), len(self.stopped)
-        w = self.workers
+        waiting, w = len(self.waiting), self.workers
         return (f"{n} run{'s' if n != 1 else ''}, {len(self.ok)} ok, {bad} failed, "
                 + (f"{stopped} stopped, " if stopped else "")
+                + (f"{waiting} waiting, " if waiting else "")
                 + f"{self.seconds:.0f} s wall on {w} worker{'s' if w != 1 else ''}")

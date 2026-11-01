@@ -3,8 +3,11 @@
 The driver's callbacks arrive on its supervising threads; each re-emits as a Qt signal, which
 Qt queues onto the UI thread, so the window draws only there. ``stop`` is the driver's
 ``Stop``: safe from the UI thread, it kills every process of the batch with its whole tree and
-the runs it ended come back as stopped. The summary is written by the worker, not the window,
-since it reads every record in the results folder.
+the runs it ended come back as stopped. ``drain`` is the driver's ``Stop.drain``, the window's
+Pause queue: no run starts after it, the runs in flight finish, and the rest come back waiting.
+The summary is written by the worker, not the window, since it reads every record in the
+results folder; at a pause it is the folder as it stands, written again when the batch ends.
+``summary`` keeps it for a caller that cannot wait for the signal (closing the window).
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from PySide6.QtCore import QThread, Signal
 
 from mobcal import estimate
 from mobcal.batch import CLASH, Batch, prior
-from mobcal.run import Job, Launcher, Result, Stop, run_many
+from mobcal.run import Job, Launcher, Result, Stop, Summary, run_many
 
 
 class BatchWorker(QThread):
@@ -34,13 +37,21 @@ class BatchWorker(QThread):
         self._launcher = launcher
         self._cpus = cpus
         self._stop = Stop()
+        self.summary: Summary | None = None
 
     def stop(self) -> None:
         self._stop()
 
+    def drain(self) -> None:
+        self._stop.drain()
+
     @property
     def stopping(self) -> bool:
         return self._stop.is_set()
+
+    @property
+    def draining(self) -> bool:
+        return self._stop.draining()
 
     def run(self) -> None:  # QThread's entry point, on the worker thread
         try:
@@ -58,6 +69,7 @@ class BatchWorker(QThread):
             summary = run_many(plan.jobs, plan.workers, progress=self._landed,
                                launcher=self._launcher, blocks=self._blocks,
                                stop=self._stop, on_start=self._started)
+            self.summary = summary
             summary.write(self.batch.out_dir)
             self.finished_batch.emit(summary)
         except Exception as e:  # anything else is a bug, shown rather than lost with the thread

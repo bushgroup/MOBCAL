@@ -8,6 +8,7 @@ and driver as a real batch.
 
 from __future__ import annotations
 
+import dataclasses
 import html
 import json
 import os
@@ -19,7 +20,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QRect, QSettings, Qt, QUrl  # noqa: E402
+from PySide6.QtCore import QModelIndex, QRect, QSettings, Qt, QUrl  # noqa: E402
 from PySide6.QtGui import (  # noqa: E402
     QAction,
     QColor,
@@ -98,6 +99,13 @@ def window(qtbot, tmp_path, monkeypatch):
 def add(qtbot, w: MainWindow, *paths: Path) -> None:
     w.inputs.add_paths(list(paths))
     qtbot.waitUntil(lambda: not w.inputs.busy, timeout=60_000)
+
+
+def run(w: MainWindow) -> None:
+    """Add the form's batch and start the queue, as Add batch then Start queue do."""
+    w.add_batch_clicked()
+    if w.state == win.IDLE and w.queued():
+        w.toggle_clicked()
 
 
 def wait_idle(qtbot, w: MainWindow, timeout: int = 30_000) -> None:
@@ -232,16 +240,16 @@ def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
     assert len(shown) == 1
 
 
-def test_the_estimate_and_the_run_action(window, qtbot):
+def test_the_estimate_and_add_batch(window, qtbot):
     w = window
-    assert not w.run_action.isEnabled() and "add an input" in w.estimate_label.text()
+    assert not w.add_batch_button.isEnabled() and "add an input" in w.estimate_label.text()
     add(qtbot, w, CHOLINE)
-    assert w.run_action.isEnabled()
+    assert w.add_batch_button.isEnabled()
     assert w.estimate_label.text().startswith("MOBCAL 2012 with Philox (He): 1 run on 1 "
                                               "worker, each across 8 processes; about")
     w.counts["itn"].setValue(100)
     w.counts["inp"].setValue(100)  # 100 * 100 * 1000 points: over the program's 9,999,999
-    assert not w.run_action.isEnabled() and "points per coordinate set" in \
+    assert not w.add_batch_button.isEnabled() and "points per coordinate set" in \
         w.estimate_label.text()
 
 
@@ -253,7 +261,7 @@ def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     bad = write_input(tmp_path / "bad.mfj", "refuse")
     add(qtbot, w, a, bad)
     w.seeds_spin.setValue(3)
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     rows = w.result_rows()
     assert [(r.input.stem, r.gas) for r in rows] == [("a", "he"), ("bad", "he")]
@@ -270,7 +278,7 @@ def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     # Nitrogen is another batch, under its own method, into the same folder.
     w.apply_method("2012-philox-n2")
     w.seeds_spin.setValue(1)
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     assert [(r.input.stem, r.gas) for r in w.result_rows()] == [("a", "n2"), ("bad", "n2")]
     assert w.results_table.item(0, 3).text() == ""  # no PA in nitrogen
@@ -283,120 +291,277 @@ def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     assert QGuiApplication.clipboard().text().splitlines()[0].startswith("ion\tinput\tgas\tTM")
 
 
-def test_run_while_running_queues_and_the_queue_survives(window, qtbot, tmp_path):
+def serial(w: MainWindow, seeds: int) -> None:
+    """One run at a time, one process each, so a pause finds one run in flight and the rest
+    not started."""
+    w.auto_cores.setChecked(False)
+    w.workers_spin.setValue(1)
+    w.split_spin.setValue(1)
+    w.seeds_spin.setValue(seeds)
+
+
+def labels(b: batches.Batch, *seeds: int) -> tuple[str, ...]:
+    return tuple(j.label for j in b.jobs() if j.seed in seeds)
+
+
+def test_add_batch_only_queues_and_the_queue_survives(window, qtbot, tmp_path):
     w = window
-    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
-    w.run_clicked()
-    assert w.worker is not None and w.run_action.iconText() == "Add to queue"
+    t = w.toggle_button
+    assert t.text() == "Start queue" and not t.isEnabled()  # the queue is empty
+    assert w.queue_total.text() == "Nothing queued."
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    w.add_batch_clicked()  # nothing running, and still it only queues
+    assert w.worker is None and len(w.queued()) == 1 and w.state == win.IDLE
+    assert t.text() == "Start queue" and t.isEnabled()
+    assert t.toolTip() == tip(options.tooltip("start_queue"))
+    assert "; about " in w.queue.item(0).text() and w.queue_total.text().startswith("In all")
+    t.click()
+    assert w.worker is not None and w.state == win.RUNNING and not w.queued()
+    assert w.queue.item(0).text().startswith("Running: MOBCAL 2012 with Philox (He)")
+    assert t.text() == "Pause queue" and t.toolTip() == tip(options.tooltip("pause_queue"))
     w.seeds_spin.setValue(2)
-    w.run_clicked()
+    w.add_batch_clicked()
     w.apply_method("2012-n2")
-    w.run_clicked()
-    assert w.queue.count() == 2
-    assert w.queue.item(1).text().startswith("MOBCAL 2012 (N2): 1 input, N2, 2 seeds")
+    w.add_batch_clicked()
+    assert w.queue.count() == 3 and len(w.queued()) == 2
+    assert w.queue.item(2).text().startswith("MOBCAL 2012 (N2): 1 input, N2, 2 seeds")
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
     saved, problems = batches.load(w.store.queue_path)
     assert [b.title() for b in saved] == ["MOBCAL 2012 with Philox (He)",
+                                          "MOBCAL 2012 with Philox (He)",
                                           "MOBCAL 2012 (N2)"] and not problems
-    assert saved[0].seeds == (5013489, 5013490)
-    # The second launch offers them back.
+    assert saved[0].remaining == labels(saved[0], 5013489) and saved[1].remaining is None
+    assert saved[1].seeds == (5013489, 5013490)
+    # The second launch offers them back, paused.
     w2 = MainWindow(w.store, launcher=launcher, cpus=8)
     qtbot.addWidget(w2)
-    assert not w2.resume_action.isEnabled()
+    assert w2.toggle_button.text() == "Start queue" and not w2.toggle_button.isEnabled()
     w2.offer_saved_queue()
-    assert [b.title() for b in w2.queued()] == ["MOBCAL 2012 with Philox (He)",
-                                               "MOBCAL 2012 (N2)"]
-    assert w2.resume_action.isEnabled() and not w.resume_action.isEnabled()
-    w2.resume_action.trigger()  # the first queued batch starts, the second waits
-    assert w2.worker is not None and w2.queue.count() == 1 and not w2.resume_action.isEnabled()
-    w2.queue.clear()
-    w2.save_queue()
-    wait_idle(qtbot, w, 60_000)
-    wait_idle(qtbot, w2, 60_000)
+    assert w2.state == win.PAUSED and w2.current == saved[0] and w2.queued() == saved[1:]
+    assert w2.toggle_button.text() == "Resume queue" and w2.toggle_button.isEnabled()
+    assert w2.queue.item(0).text().startswith("Paused: ")
+    w.queue.selectAll()
+    w.remove_clicked()  # answered yes: the running batch stops and the waiting ones go
+    wait_idle(qtbot, w)
     assert batches.load(w.store.queue_path) == ([], [])
 
 
-def test_stop_asks_then_stops_the_batch(window, qtbot, tmp_path):
+def test_pause_drains_and_resume_runs_exactly_the_runs_left(window, qtbot, tmp_path):
     w = window
-    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
-    w.run_clicked()
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
+    serial(w, 3)
+    w.add_batch_clicked()
+    b = w.queued()[0]
+    w.toggle_clicked()
     qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
-    w._answers.append(QMessageBox.StandardButton.No)
-    w.stop_clicked()
-    assert not w.worker.stopping
-    w.stop_clicked()
+    w.toggle_clicked()  # Pause queue: the run in flight finishes, the other two never start
+    assert w.state == win.PAUSING
+    assert w.toggle_button.text() == "Pausing…" and not w.toggle_button.isEnabled()
+    assert "pausing, waiting for 1 run in flight" in w.status_label.text()
+    assert w.queue.item(0).text().startswith("Pausing: ")
+    qtbot.waitUntil(lambda: w.state == win.PAUSED, timeout=30_000)
+    assert w.current.remaining == labels(b, 5013490, 5013491)
+    assert [r.status for r in w.results] == ["ok"]
+    assert not any(j.run_dir.exists() for j in w.current.to_run())
+    assert w.toggle_button.text() == "Resume queue" and w.toggle_button.isEnabled()
+    assert "2 runs left" in w.queue.item(0).text() and "paused, 2 runs left" in \
+        w.status_label.text()
+    assert batches.load(w.store.queue_path)[0][0].remaining == w.current.remaining
+    w.toggle_clicked()  # Resume queue
+    qtbot.waitUntil(lambda: w.plan is not None, timeout=20_000)
+    assert [j.seed for j in w.plan.jobs] == [5013490, 5013491]
     wait_idle(qtbot, w)
-    assert w.result_rows()[0].status == "stopped"
+    assert all((j.run_dir / "record.json").is_file() for j in b.jobs())
+    assert w.toggle_button.text() == "Start queue" and not w.toggle_button.isEnabled()
 
 
-def test_closing_asks_then_stops_and_keeps_the_queue(window, qtbot, tmp_path):
+def test_a_drained_batch_does_not_move_the_queue_on(window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
+    serial(w, 1)  # its one run is in flight when Pause comes: nothing is left to pause
+    w.add_batch_clicked()
+    w.seeds_spin.setValue(2)
+    w.add_batch_clicked()
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: w.worker is None, timeout=30_000)
+    assert w.state == win.IDLE and w.current is None and len(w.queued()) == 1
+    assert w.toggle_button.text() == "Start queue" and w.toggle_button.isEnabled()
+    w.queue.selectAll()
+    w.remove_clicked()
+    assert w.queue.count() == 0 and not w.toggle_button.isEnabled()
+
+
+def test_remove_batch_on_the_running_row_asks_then_stops_and_leaves_the_queue_paused(
+        window, qtbot, tmp_path):
     w = window
     add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
-    w.run_clicked()
-    w.run_clicked()  # queued
+    w.add_batch_clicked()
+    w.add_batch_clicked()
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w.queue.item(0).setSelected(True)
+    w._answers.append(QMessageBox.StandardButton.No)
+    w.remove_clicked()
+    assert w.state == win.RUNNING and not w.worker.stopping
+    w.queue.item(0).setSelected(True)
+    w.remove_clicked()  # answered yes
+    qtbot.waitUntil(lambda: w.worker is None, timeout=30_000)
+    assert w.result_rows()[0].status == "stopped"
+    assert w.state == win.IDLE and len(w.queued()) == 1 and w.queue.count() == 1
+    assert w.toggle_button.text() == "Start queue" and w.toggle_button.isEnabled()
+    w.queue.item(0).setSelected(True)
+    w.remove_clicked()  # a waiting row goes without a question
+    assert w.queue.count() == 0 and not w.toggle_button.isEnabled()
+
+
+def test_removing_a_paused_batch_asks_only_when_runs_are_complete(window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
+    serial(w, 2)
+    w.add_batch_clicked()
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: w.state == win.PAUSED, timeout=30_000)
+    w.queue.item(0).setSelected(True)
+    w._answers.append(QMessageBox.StandardButton.No)
+    w.remove_clicked()
+    assert w.state == win.PAUSED
+    w.queue.item(0).setSelected(True)
+    w.remove_clicked()  # answered yes
+    assert w.state == win.IDLE and w.queue.count() == 0
+    # A paused batch with nothing complete, as a queue put back at launch, goes unasked.
+    w._pin(w.form_batch())
+    w.queue.item(0).setSelected(True)
+    w._answers.append(QMessageBox.StandardButton.No)  # never asked, so never read
+    w.remove_clicked()
+    assert w.queue.count() == 0 and w._answers
+
+
+def test_the_running_row_is_pinned_and_waiting_rows_reorder(window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    w.add_batch_clicked()
+    w.toggle_clicked()
+    w.seeds_spin.setValue(2)
+    w.add_batch_clicked()
+    w.seeds_spin.setValue(3)
+    w.add_batch_clicked()
+    top = w.queue.item(0)
+    assert top.data(win.PINNED) and top.font().bold()
+    assert not top.flags() & Qt.ItemFlag.ItemIsDragEnabled
+    assert w.queue.item(1).flags() & Qt.ItemFlag.ItemIsDragEnabled
+    m = w.queue.model()
+    assert m.moveRow(QModelIndex(), 2, QModelIndex(), 1)  # a waiting row moves up
+    assert [len(b.seeds) for b in w.queued()] == [3, 2]
+    assert m.moveRow(QModelIndex(), 2, QModelIndex(), 0)  # dropped above the running row
+    qtbot.waitUntil(lambda: w.queue.item(0).data(win.PINNED), timeout=5_000)
+    assert [len(b.seeds) for b in w.queued()] == [2, 3]
+    assert [len(b.seeds) for b in batches.load(w.store.queue_path)[0]] == [1, 2, 3]
+    w.queue.selectAll()
+    w.remove_clicked()
+    wait_idle(qtbot, w)
+
+
+def test_closing_while_running_keeps_the_batch_with_its_runs_not_complete(
+        window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
+    serial(w, 3)
+    w.add_batch_clicked()
+    b = w.queued()[0]
+    w.add_batch_clicked()  # waiting
+    w.toggle_clicked()
     qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
     w._answers.append(QMessageBox.StandardButton.No)
     assert not w.close() and w.worker is not None
     worker = w.worker
     assert w.close()
     assert worker.isFinished() and worker.stopping
-    assert len(batches.load(w.store.queue_path)[0]) == 1
+    saved, _ = batches.load(w.store.queue_path)
+    # The one killed and the two never started, then the waiting batch.
+    assert saved == [dataclasses.replace(b, remaining=labels(b, 5013489, 5013490, 5013491)), b]
+    w2 = MainWindow(w.store, launcher=launcher, cpus=8)
+    qtbot.addWidget(w2)
+    w2.offer_saved_queue()
+    assert w2.state == win.PAUSED and w2.current == saved[0] and w2.queued() == [b]
+    assert w2.toggle_button.text() == "Resume queue"
 
 
-def test_the_run_and_stop_actions_track_the_batch(window, qtbot, tmp_path):
+def test_a_paused_batch_survives_closing_and_comes_back_paused(window, qtbot, tmp_path):
     w = window
-    assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
-    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
-    w.run_action.trigger()
-    assert w.worker is not None and w.stop_action.isEnabled()
-    assert w.run_action.isEnabled() and w.run_action.iconText() == "Add to queue"
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 2"))
+    serial(w, 3)
+    w.add_batch_clicked()
+    w.toggle_clicked()
     qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
-    w.stop_action.trigger()  # answered yes
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: w.state == win.PAUSED, timeout=30_000)
+    left = w.current.remaining
+    assert w.close()  # nothing running: no question
+    w2 = MainWindow(w.store, launcher=launcher, cpus=8)
+    qtbot.addWidget(w2)
+    w2.offer_saved_queue()
+    assert w2.state == win.PAUSED and w2.current.remaining == left and len(left) == 2
+    assert "2 runs left" in w2.queue.item(0).text()
+
+
+def test_run_them_again_then_pause_keeps_the_runs_it_never_reached(
+        window, qtbot, tmp_path, monkeypatch):
+    w = window
+    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 1"))
+    serial(w, 3)
+    run(w)
     wait_idle(qtbot, w)
-    assert w.run_action.iconText() == "Run" and not w.stop_action.isEnabled()
-
-
-def test_add_batch_is_run_where_the_queue_is(window, qtbot, tmp_path):
-    w = window
-    b = w.add_batch_button
-    assert not b.isEnabled() and not w.run_action.isEnabled()  # no input yet
-    add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
-    assert b.isEnabled()
-    b.click()  # nothing running: it starts
-    assert w.worker is not None and w.queue.count() == 0
-    b.click()  # running: it queues
-    assert w.queue.count() == 1 and b.text() == "Add batch"
-    w.queue.clear()
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: setattr(box, "_clicked", next(
+        b for b in box.buttons() if b.text() == "Run them again")))
+    monkeypatch.setattr(QMessageBox, "clickedButton", lambda box: box._clicked)
+    w.add_batch_clicked()
+    b = w.queued()[0]
+    assert not b.skip_done
+    w.toggle_clicked()
     qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
-    w.stop_action.trigger()  # answered yes
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: w.state == win.PAUSED, timeout=30_000)
+    # Seeds 2 and 3 are complete in the folder, from the first batch, and still left to run.
+    left = w.current.to_run()
+    assert [j.seed for j in left] == [5013490, 5013491]
+    assert {p.kind for p in batches.prior(left)} == {batches.DONE}
+    w.toggle_clicked()
+    qtbot.waitUntil(lambda: w.plan is not None, timeout=20_000)
+    assert [j.seed for j in w.plan.jobs] == [5013490, 5013491]
     wait_idle(qtbot, w)
 
 
 # --- the menus and the colours -------------------------------------------------------------
 
-def test_the_menus_hold_the_actions(window):
+def test_the_menus_are_file_and_help_and_no_queue_control_has_a_shortcut(window):
     w = window
     menus = {m.text(): [a for a in m.menu().actions() if not a.isSeparator()]
              for m in w.menuBar().actions()}
-    assert list(menus) == ["&File", "&Batch", "&Help"]
+    assert list(menus) == ["&File", "&Help"]
     assert menus["&File"] == [w.load_method_action, w.save_method_action, w.exit_action]
     assert [a.toolTip() for a in menus["&File"][:2]] == [options.tooltip("load_method"),
                                                          options.tooltip("save_method")]
-    assert menus["&Batch"] == [w.run_action, w.stop_action, w.resume_action]
     assert menus["&Help"] == [w.help_action, w.about_action]
     assert w.help_action.shortcuts() == QKeySequence.keyBindings(
         QKeySequence.StandardKey.HelpContents)
     roles = [a.menuRole() for a in (w.exit_action, w.about_action)]
     assert roles == [QAction.MenuRole.QuitRole, QAction.MenuRole.AboutRole]
     assert not w.findChildren(QToolBar)
-    assert [s.toString() for s in w.run_action.shortcuts()] == ["Ctrl+R", "F5"]
-    assert w.stop_action.shortcut().toString() == "Shift+F5"
+    keys = {s.toString() for a in w.findChildren(QAction) for s in a.shortcuts()}
+    assert not keys & {"Ctrl+R", "F5", "Shift+F5"}
+    for b in (w.add_batch_button, w.toggle_button, w.remove_button):
+        assert b.shortcut().isEmpty()
 
 
 def test_exit_while_running_asks_and_no_keeps_the_window(window, qtbot, tmp_path):
     w = window
     w.show()
     add(qtbot, w, write_input(tmp_path / "slow.mfj", "sleep 60"))
-    w.run_clicked()
+    run(w)
     qtbot.waitUntil(lambda: bool(w.running), timeout=20_000)
     w._answers.append(QMessageBox.StandardButton.No)
     w.exit_action.trigger()
@@ -587,7 +752,7 @@ def test_group_titles_take_the_text_colour_and_nothing_inside_does(qtbot, monkey
 def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path, monkeypatch):
     w = window
     add(qtbot, w, write_input(tmp_path / "a.mfj", "ok"))
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     clicked = []
 
@@ -597,11 +762,11 @@ def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path,
     monkeypatch.setattr(QMessageBox, "exec", exec_)
     monkeypatch.setattr(QMessageBox, "clickedButton", lambda box: box._clicked)
     clicked[:] = ["Skip them"]
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     assert "did not run: nothing to run" in w.status_label.text()
     clicked[:] = ["Run them again"]
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     assert w.result_rows()[0].status == "ok"
 
@@ -609,13 +774,13 @@ def test_a_run_the_folder_holds_is_skipped_or_run_again(window, qtbot, tmp_path,
 def test_another_input_of_the_same_name_is_refused(window, qtbot, tmp_path):
     w = window
     add(qtbot, w, write_input(tmp_path / "a.mfj", "ok"))
-    w.run_clicked()
+    run(w)
     wait_idle(qtbot, w)
     other = tmp_path / "other"
     other.mkdir()
     w.inputs.clear()
     add(qtbot, w, write_input(other / "a.mfj", "sets 2"))
-    w.run_clicked()
+    run(w)
     assert w.worker is None and "another input of the same name" in w._warnings[-1]
 
 
@@ -627,11 +792,11 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     sp, opt = w.inputs.items
     assert sp.charges == "chelpg" and sp.atoms == 21 and not sp.problem()
     assert opt.charges is None and opt.problem().endswith("choose its charges")
-    assert not w.run_action.isEnabled()
+    assert not w.add_batch_button.isEnabled()
     combo = w.inputs.table.cellWidget(1, 3)
     assert combo.itemData(combo.count() - 1) == "uniform"
     combo.setCurrentIndex(combo.findData("mulliken"))
-    assert w.run_action.isEnabled()
+    assert w.add_batch_button.isEnabled()
     b = w.form_batch()
     assert [p.name for p in b.inputs] == ["choline_sp_chelpg.mfj", "choline_opt_mulliken.mfj"]
     w.launcher = launcher
@@ -667,7 +832,7 @@ def test_an_xyz_asks_for_its_net_charge(window, qtbot):
     combo.setCurrentIndex(combo.findData("uniform"))
     assert item.problem().endswith("give the ion's net charge")
     w.inputs.table.cellWidget(0, 4).setValue(1)
-    assert not item.problem() and w.run_action.isEnabled()
+    assert not item.problem() and w.add_batch_button.isEnabled()
 
 
 def mfj_file(tmp_path: Path, name: str, mode: str, charges: list[list[float] | None]) -> Path:
@@ -731,13 +896,13 @@ def test_a_four_column_file_blocks_nitrogen_and_not_helium(window, qtbot, tmp_pa
     w = window
     four = mfj_file(tmp_path, "four.mfj", "equal", [None])
     add(qtbot, w, four)
-    assert w.gas == "he" and w.run_action.isEnabled()
+    assert w.gas == "he" and w.add_batch_button.isEnabled()
     w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
-    assert not w.run_action.isEnabled()
+    assert not w.add_batch_button.isEnabled()
     assert "fifth column" in w.inputs.table.item(0, 5).text()
     assert "fifth column" in w.estimate_label.text()
     w.gas_combo.setCurrentIndex(w.gas_combo.findData("he"))
-    assert w.run_action.isEnabled() and w.inputs.table.item(0, 5).text() == "ready"
+    assert w.add_batch_button.isEnabled() and w.inputs.table.item(0, 5).text() == "ready"
 
 
 def test_an_unreadable_input_says_why(window, qtbot, tmp_path):
@@ -745,7 +910,7 @@ def test_an_unreadable_input_says_why(window, qtbot, tmp_path):
     junk = tmp_path / "junk.mfj"
     junk.write_text("not a structure\n", encoding="ascii")
     add(qtbot, w, junk)
-    assert w.inputs.items[0].state == "error" and not w.run_action.isEnabled()
+    assert w.inputs.items[0].state == "error" and not w.add_batch_button.isEnabled()
 
 
 # --- the tooltips -------------------------------------------------------------------------

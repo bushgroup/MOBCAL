@@ -6,9 +6,15 @@ A batch runs one method (``mobcal.methods``), a shipped one by its key or a meth
 path, and so one gas; both gases is two batches. Each field left as None takes the method's
 value, so a batch saved as "MOBCAL 2000 (He), these inputs" stays that, and a field set over the
 method (the gas among them) makes the runs ``custom``, or the shipped method the fields make,
-as their records will say. ``to_dict``/``from_dict`` are the queue file's form, ``format = 2``,
-paths as strings; ``load`` reads a ``format = 1`` file too, whose batch named a method of
-both gases and a list of gases, as one batch per gas (``mobcal.methods.ALIASES``).
+as their records will say. ``to_dict``/``from_dict`` are the queue file's form, ``format = 3``,
+paths as strings; ``load`` reads ``format = 2`` (the same, without ``remaining``) and
+``format = 1``, whose batch named a method of both gases and a list of gases, as one batch per
+gas (``mobcal.methods.ALIASES``).
+
+A batch that was paused or closed part-way holds ``remaining``, the labels of the runs it has
+left, and runs only those. ``skip_done`` cannot say it: a batch queued to *run again* over a
+folder of complete runs and paused halfway still finds its unreached runs complete in the
+folder, from the earlier calculation, and would skip exactly the runs it was asked to repeat.
 
 The results folder is a study's: every batch adds its run directories to it, and the summary
 covers them all (``mobcal.run.Summary.write``). ``prior`` says, before a batch starts, which of
@@ -36,8 +42,9 @@ from mobcal import estimate, fortran, methods, parameters, settings
 from mobcal.run import RECORD_JSON, Job
 from mobcal.settings import Settings, Source
 
-FORMAT = 2
-FORMATS = (1, 2)  # what load reads; 1 is the queue file of the version before one method a batch
+FORMAT = 3
+FORMATS = (1, 2, 3)  # what load reads; 1 is the queue file of the version before one method a
+# batch, 2 the one before a batch carried its remaining runs
 DEFAULT_SEED = 5013489  # the seed the shipped mobcal.in carries, at which 2012 was run
 AUTO = "auto"
 
@@ -59,6 +66,7 @@ class Batch:
     split: int | str | None = AUTO  # W, "auto" (mobcal.estimate.allocate), or None: serial
     workers: int | None = None  # runs in flight; None: the allocation's, or the CPU count
     skip_done: bool = False  # leave out, when the batch starts, runs the folder holds complete
+    remaining: tuple[str, ...] | None = None  # run labels left, once paused; None: every run
     # the method, read once when the batch is made
     loaded: methods.Method = field(default=None, init=False, compare=False, repr=False)
 
@@ -67,6 +75,8 @@ class Batch:
         object.__setattr__(self, "out_dir", Path(self.out_dir))
         object.__setattr__(self, "method", str(self.method))
         object.__setattr__(self, "seeds", tuple(int(s) for s in self.seeds))
+        if self.remaining is not None:
+            object.__setattr__(self, "remaining", tuple(str(r) for r in self.remaining))
         try:
             object.__setattr__(self, "loaded", methods.get(self.method))
         except methods.MethodError as e:
@@ -123,8 +133,12 @@ class Batch:
                 for p in self.inputs for s in self.seeds]
 
     def to_run(self) -> list[Job]:
-        """The jobs, less those the folder holds complete when ``skip_done``."""
+        """The jobs left: those ``remaining`` names when it is set, else the jobs less those the
+        folder holds complete when ``skip_done``."""
         jobs = self.jobs()
+        if self.remaining is not None:
+            keep = set(self.remaining)
+            return [j for j in jobs if j.label in keep]
         if not self.skip_done:
             return jobs
         done = {p.job.label for p in prior(jobs) if p.kind == DONE}
@@ -172,11 +186,12 @@ class Batch:
                 "seeds": list(self.seeds), "parameters": self.parameters,
                 "generator": self.generator,
                 "settings": None if st is None else st.values(),
-                "split": self.split, "workers": self.workers, "skip_done": self.skip_done}
+                "split": self.split, "workers": self.workers, "skip_done": self.skip_done,
+                "remaining": None if self.remaining is None else list(self.remaining)}
 
     @classmethod
     def from_dict(cls, doc: dict) -> Batch:
-        """A ``format = 2`` entry. Raises BatchError."""
+        """A ``format = 3`` entry. Raises BatchError."""
         if doc.get("format") != FORMAT:
             raise BatchError(f"batch format {doc.get('format')!r}; from_dict reads {FORMAT}")
         return from_entry(doc)[0]
@@ -199,6 +214,9 @@ def from_entry(doc: dict) -> list[Batch]:
                       generator=doc.get("generator"), settings=st,
                       split=doc.get("split", AUTO), workers=doc.get("workers"),
                       skip_done=bool(doc.get("skip_done", False)))
+        if fmt == 3:
+            return [Batch(method=doc["method"], gas=doc.get("gas"),
+                          remaining=doc.get("remaining"), **common)]
         if fmt == 2:
             return [Batch(method=doc["method"], gas=doc.get("gas"), **common)]
         old = doc["method"]

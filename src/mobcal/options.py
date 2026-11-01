@@ -163,11 +163,18 @@ WINDOW = {
     "remove_inputs": "Removes the selected inputs.",
     "choose_folder": "Chooses the results folder.",
     "net_charge_read": "Read from the output, which was computed at this charge.",
-    "queue": "Batches waiting to run, in the order they start; each starts when the one before "
-             "it ends. Drag a batch to move it.",
-    "add_batch": "Makes a batch of the inputs and the fields to the left, as Batch, Run does. "
-                 "It starts at once when nothing is running, and otherwise waits in the queue.",
-    "remove_queued": "Removes the selected batches from the queue.",
+    "queue": "The batches, in the order they run. The running or paused batch is the top row "
+             "and stays there; drag a waiting batch to move it.",
+    "add_batch": "Adds a batch of the inputs and the fields to the left to the end of the "
+                 "queue. It never starts it.",
+    "start_queue": "Starts the batch at the top of the queue. Each batch after it starts when "
+                   "the one before ends.",
+    "pause_queue": "Starts no more runs of this batch. Runs in flight finish and keep their "
+                   "results; the rest wait for Resume queue.",
+    "pausing": "Waiting for the runs in flight to finish.",
+    "resume_queue": "Runs the paused batch's remaining runs, then the batches after it.",
+    "remove_queued": "Removes the selected batches. On the running batch it asks, then stops "
+                     "it.",
     "progress": "Runs done of the batch.",
     "running": "Each running run and its time so far, and for a divided run, its blocks of "
                "trajectories written.",

@@ -8,6 +8,7 @@ nothing else, so equal staged directories are equal outputs at the same seed.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import time
@@ -378,6 +379,40 @@ def test_stop_ends_a_batch_and_marks_its_runs_stopped(tmp_path):
     assert {r["status"] for r in json.loads(json_path.read_text())["runs"]} == {"stopped"}
 
 
+def test_drain_lets_the_runs_in_flight_finish_and_starts_nothing_more(tmp_path):
+    out = tmp_path / "runs"
+    jobs = [Job(write_input(tmp_path / f"s{i}.mfj", "sleep 2"), "he", i, out) for i in (1, 2)]
+    jobs += [Job(write_input(tmp_path / f"later{i}.mfj", "ok"), "he", i, out) for i in (3, 4)]
+    stop = Stop()
+    started = []
+
+    def on_start(job):
+        started.append(job)
+        if len(started) == 2:
+            stop.drain()
+    s = run_many(jobs, workers=2, launcher=launcher, stop=stop, on_start=on_start)
+    assert [r.status for r in s.results] == ["ok", "ok", "waiting", "waiting"]
+    assert s.results[2].message == "not started: the batch was paused"
+    assert not jobs[2].run_dir.exists() and not s.failed and not s.stopped
+    assert [r.job for r in s.waiting] == jobs[2:] and "2 waiting" in str(s)
+    _, json_path = s.write(out)
+    doc = json.loads(json_path.read_text(encoding="utf-8"))
+    assert [r["name"] for r in doc["runs"]] == sorted(j.label for j in jobs[:2])
+    assert doc["batch"] == [j.label for j in jobs[:2]]
+
+
+def test_a_waiting_run_leaves_an_earlier_record_of_its_name_in_the_summary(tmp_path):
+    out = tmp_path / "runs"
+    job = Job(write_input(tmp_path / "a.mfj", "ok"), "he", 1, out)
+    run_many([job], 1, launcher=launcher).write(out)
+    stop = Stop()
+    stop.drain()
+    s = run_many([job], 1, launcher=launcher, stop=stop)
+    assert s.results[0].waiting
+    _, json_path = s.write(out)
+    assert [r["status"] for r in json.loads(json_path.read_text())["runs"]] == ["ok"]
+
+
 def test_stop_ends_a_split_run_before_its_combining_run(tmp_path):
     job = Job(write_input(tmp_path / "s.mfj", "sleep 30"), "he", 1, tmp_path / "runs", split=3)
     stop = Stop()
@@ -487,6 +522,35 @@ def test_a_queue_file_from_before_one_method_a_batch_loads_one_batch_per_gas(tmp
         ("2012-n2", None, "2012-n2"), ("2000-he", None, "2000-he")]
     assert problems == ["queued batch 4: no method was named '1996'; the methods were current, "
                         "2012, 2000"]
+
+
+def test_a_paused_batch_runs_only_its_remaining_runs_and_keeps_them_in_the_file(tmp_path):
+    out = tmp_path / "runs"
+    a = write_input(tmp_path / "a.mfj", "ok")
+    full = Batch((a,), out, seeds=(1, 2, 3))
+    run_many(full.jobs(), 3, launcher=launcher)  # every run complete in the folder
+    labels = [j.label for j in full.jobs()]
+    # Queued to run them again and paused after the first: the other two are complete in the
+    # folder from the earlier calculation, and skip_done would skip exactly those.
+    paused = Batch((a,), out, seeds=(1, 2, 3), remaining=labels[1:])
+    assert [j.label for j in paused.to_run()] == labels[1:]
+    assert dataclasses.replace(paused, skip_done=True).to_run() == paused.to_run()
+    assert Batch((a,), out, seeds=(1, 2, 3), skip_done=True).to_run() == []
+    path = batch.save([paused, full], tmp_path / "queue.json")
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert doc["format"] == 3 and doc["batches"][0]["remaining"] == labels[1:]
+    assert doc["batches"][1]["remaining"] is None
+    assert batch.load(path) == ([paused, full], [])
+
+
+def test_a_queue_file_of_format_2_still_loads(tmp_path):
+    b = Batch((CHOLINE,), tmp_path / "runs", method="2012-n2", seeds=(1, 2))
+    entry = b.to_dict()
+    del entry["remaining"]
+    path = tmp_path / "queue.json"
+    path.write_text(json.dumps({"format": 2, "batches": [{**entry, "format": 2}]}),
+                    encoding="utf-8")
+    assert batch.load(path) == ([b], [])
 
 
 def test_a_batch_refuses_what_cannot_run(tmp_path):

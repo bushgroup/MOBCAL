@@ -35,7 +35,7 @@ and its charges](import.md)), and its row shows the charges the import will use.
 holds an ESP fit it is selected, the Merz-Kollman fit (`mk`, the scheme of the 2012 choline charges)
 before CHELPG; otherwise the row asks for a choice before the batch can run. `uniform`, the net
 charge spread evenly over the atoms, is always offered and never selected for you. An `.xyz` file
-does not carry the ion's net charge, so its row asks for it. At Run each import is written, `.mfj`
+does not carry the ion's net charge, so its row asks for it. At Add batch each import is written, `.mfj`
 and `.import.json`, into `imported/` in the results folder, so the folder holds the file each run
 read.
 
@@ -97,18 +97,34 @@ rename the input or choose another folder.
 
 ## Running, the queue and stopping
 
-Run, Stop and Resume queue are in the Batch menu, and Add batch, under the queue, does what Run
-does. Ctrl+R or F5 runs (⌘R on macOS), and Shift+F5 stops. Run starts the batch. While a batch runs,
-Run adds the form's batch to the queue instead, and the queue starts its next batch when the running
-one ends. Queued batches can be reordered by dragging and removed. The queue is saved as it changes,
-and batches still queued when the window closes are offered back when it next opens; Batch, Resume
-queue starts them.
+Every batch control is a button in the Queue box: Add batch, a second button that starts, pauses
+and resumes the queue, and Remove batch. None has a menu entry or a keyboard shortcut. Add batch
+puts the form's batch at the end of the queue and never starts it, whether or not a batch is
+running. The second button reads Start queue when batches are waiting and none has started, and
+starts the top one; each batch after it starts when the one before ends. While a batch runs it
+reads Pause queue. A run cannot save its place partway, so a pause waits for the runs in flight:
+no new run of the batch starts, the runs already started finish and keep their results, and the
+button reads Pausing… until the last of them lands, with the number still in flight in the
+progress line. When every run of a batch started at once, as one ion with three seeds does on a
+machine with many processors, the pause waits for the whole batch. The paused batch keeps exactly
+the runs that never started, and Resume queue runs those and then moves on to the next batch; the
+queue does not move on while a batch is paused.
+
+The running or paused batch is the top row of the queue, marked Running, Pausing or Paused, and
+stays there; waiting batches can be dragged into another order below it. Each row shows its
+estimate, the running row the time it has left, and the line under the list gives the total.
+Remove batch removes the selected waiting batches. On the running batch it asks, then stops it:
+runs already complete keep their results, and runs in flight are killed, keep their directories
+marked stopped in the summary, and start again from their first trajectory if the batch is run
+again. The stopped batch leaves the queue, and the next batch waits for Start queue. Removing a
+paused batch asks only when some of its runs are complete, since the rest are then forgotten.
 
 Progress shows the runs done of the batch, the time each running run has taken, and, for a
-divided run, how many of its blocks of trajectories are written, against the estimate. Stop asks,
-then ends every process of the running batch. Runs already complete keep their results; the
-stopped ones keep their directories, marked stopped in the summary. Closing the window while a
-batch runs, or choosing File, Exit, asks the same question and stops the batch.
+divided run, how many of its blocks of trajectories are written, against the estimate. The queue
+is saved as it changes. Closing the window while a batch runs, or choosing File, Exit, asks
+first, then kills the runs in flight. The batch is kept as the first entry of the queue, holding
+the runs that never started and the ones killed, and a paused batch is kept the same way. When
+the window next opens it offers the queue back, paused, and Resume queue carries on from there.
 
 ## Results
 

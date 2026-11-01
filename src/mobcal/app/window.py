@@ -9,20 +9,29 @@ records say the same. The gas is a method's field like any other: changing it sh
 method in the other gas when there is one. Under the form, the estimate for the batch as it
 stands.
 
-Above, a menu bar: File ▸ Load method…, Save method… and Exit, Batch ▸ Run, Stop and Resume
-queue (each one ``QAction`` that owns its text and enabled state), Help ▸ MOBCAL Help (F1, the
-guide in a window of its own, ``mobcal.app.help``) and About; the queue's Add
-batch button is Run. Load method adds a method file to the Method list and Save method writes
-the form's method fields to one and adds it; the list is remembered by path and SHA-256, and a
-file that has gone or changed is dropped at the next launch with a message
-(``report_dropped_methods``). Right, the queue, the progress and the results. Run starts the
-batch, or appends it to the queue while one is running; the queue is reorderable, starts its
-next batch when the running one ends, and is saved on every change and offered back at the next
-launch. Stop asks, then ends every process of the running batch. Progress is runs done of N,
-each running run's elapsed time (and blocks written, for a split run), against the estimate.
-Results are one row per ion and gas, TM headline, mean ± s.d. over seeds, with Copy, Save CSV,
-Show in folder, Open output and Copy methods text. Closing asks, then stops the running batch;
-the queue stays saved.
+Above, a menu bar: File ▸ Load method…, Save method… and Exit, and Help ▸ MOBCAL Help (F1,
+the guide in a window of its own, ``mobcal.app.help``) and About. Load method adds a method file
+to the Method list and Save method writes the form's method fields to one and adds it; the list
+is remembered by path and SHA-256, and a file that has gone or changed is dropped at the next
+launch with a message (``report_dropped_methods``).
+
+Right, the queue, the progress and the results. Every batch control is in the Queue box, and
+none has a menu entry or a shortcut. Add batch appends the form's batch to the queue and never
+starts it. One toggle follows the queue's state (``state``, the one place that knows it):
+*Start queue* with batches waiting and none running or paused, *Pause queue* while one runs,
+*Pausing…* (disabled) while the runs in flight of a paused batch finish, *Resume queue* once it
+is paused. Pause drains: no new run starts, the runs in flight land as usual, and the batch
+stays the queue's top row holding exactly the runs that never started (``Batch.remaining``);
+the queue does not move on until Resume. The running or paused batch is that pinned top row,
+marked, never dragged and never dropped above; waiting rows reorder by drag. Remove batch takes
+the selected waiting rows out, and on the top row asks, then stops the running batch (or forgets
+the paused one), leaving the queue paused. Each row shows its estimate (the running row, the
+time left), and a line under the list gives the total. The queue, the running or paused batch
+first with its runs not complete, is saved on every change and offered back, paused, at the next
+launch. Progress is runs done of N, each running run's elapsed time (and blocks written, for a
+split run), against the estimate. Results are one row per ion and gas, TM headline, mean ± s.d.
+over seeds, with Copy, Save CSV, Show in folder, Open output and Copy methods text. Closing while
+a batch runs asks, then kills its runs in flight; the batch is kept as the queue's first entry.
 
 Every control and column header has a tooltip from ``mobcal.options``; a control that an
 option of ``mobcal run`` also sets shows that option's description, so the two cannot drift.
@@ -90,6 +99,13 @@ OTHER_TABLE = "Other file…"
 RESULT_COLUMNS = ("Ion", "Gas", "TM (Å²)", "PA (Å²)", "EHS (Å²)", "Status", "Time")
 CSV_HEADER = ("ion", "input", "gas", "TM", "PA", "EHS", "runs", "status", "seconds", "folder",
               "message")
+PINNED = Qt.ItemDataRole.UserRole + 1  # the queue's top row: the running or paused batch
+SECONDS = Qt.ItemDataRole.UserRole + 2  # a row's estimate, None when it cannot be made
+IDLE, RUNNING, PAUSING, PAUSED, STOPPING = "idle", "running", "pausing", "paused", "stopping"
+TOGGLE = {IDLE: ("Start queue", "start_queue"), RUNNING: ("Pause queue", "pause_queue"),
+          PAUSING: ("Pausing…", "pausing"), STOPPING: ("Pause queue", "pause_queue"),
+          PAUSED: ("Resume queue", "resume_queue")}
+MARK = {RUNNING: "Running", PAUSING: "Pausing", STOPPING: "Stopping", PAUSED: "Paused"}
 
 
 def set_tip(key: str, *widgets: QWidget) -> None:
@@ -135,6 +151,7 @@ class MainWindow(QMainWindow):
         self.launcher = launcher  # tests run a stand-in binary
         self.cpus = cpus or os.cpu_count() or 1
         self.worker: BatchWorker | None = None
+        self.current: Batch | None = None  # the queue's top row: running, pausing or paused
         self.help: HelpWindow | None = None
         self.results: list[Result] = []
         self.running: dict[str, tuple[Job, float]] = {}  # label -> job, start time
@@ -194,22 +211,10 @@ class MainWindow(QMainWindow):
     # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
-        """Run, Stop and Resume queue as actions, in the Batch menu; File ▸ Load method…, Save
-        method… and Exit, which closes the window by the same path as its close button; Help ▸
-        MOBCAL Help, at the platform's help key, and About. The roles put Exit and About in the
-        application menu on macOS. Resume queue is
-        enabled only while the queue holds batches and nothing runs, which is a queue put back at
-        launch: otherwise the queue starts its next batch itself when one ends."""
-        self.run_action = QAction("&Run", self)
-        self.run_action.setShortcuts([QKeySequence("Ctrl+R"), QKeySequence("F5")])
-        self.run_action.triggered.connect(self.run_clicked)
-        self.stop_action = QAction("&Stop…", self)
-        self.stop_action.setShortcut(QKeySequence("Shift+F5"))
-        self.stop_action.setEnabled(False)
-        self.stop_action.triggered.connect(self.stop_clicked)
-        self.resume_action = QAction("Res&ume queue", self)
-        self.resume_action.setEnabled(False)
-        self.resume_action.triggered.connect(self.resume_queue)
+        """File ▸ Load method…, Save method… and Exit, which closes the window by the same path
+        as its close button; Help ▸ MOBCAL Help, at the platform's help key, and About. The
+        roles put Exit and About in the application menu on macOS. The batch controls are the
+        Queue box's buttons, with no menu entry and no shortcut."""
         self.load_method_action = QAction("&Load method…", self)
         self.load_method_action.setToolTip(options.tooltip("load_method"))
         self.load_method_action.triggered.connect(lambda: self.load_method())
@@ -234,18 +239,9 @@ class MainWindow(QMainWindow):
         file.addAction(self.save_method_action)
         file.addSeparator()
         file.addAction(self.exit_action)
-        batch = bar.addMenu("&Batch")
-        batch.addAction(self.run_action)
-        batch.addAction(self.stop_action)
-        batch.addSeparator()
-        batch.addAction(self.resume_action)
         help_menu = bar.addMenu("&Help")
         help_menu.addAction(self.help_action)
         help_menu.addAction(self.about_action)
-
-    def resume_queue(self) -> None:
-        if self.worker is None and self.queue.count():
-            self.start(self._take_queued(0))
 
     def show_help(self) -> HelpWindow:
         """Show the guide, made at the first call and brought forward at every later one."""
@@ -645,25 +641,26 @@ class MainWindow(QMainWindow):
             b = self.form_batch()
         except (BatchError, settings.SettingsError, ValueError) as e:
             self.estimate_label.setText(str(e))
-            self.run_action.setEnabled(False)
+            self.add_batch_button.setEnabled(False)
             return
         if problems:
             self.estimate_label.setText("; ".join(problems))
-            self.run_action.setEnabled(False)
+            self.add_batch_button.setEnabled(False)
             self.cores_label.setText("")
             return
         try:
             p = b.plan(self.cpus, sizes=self.inputs.sizes(self.out_dir))
         except (BatchError, ValueError) as e:
             self.estimate_label.setText(str(e))
-            self.run_action.setEnabled(False)
+            self.add_batch_button.setEnabled(False)
             return
         self.estimate_label.setText(f"{self.method_title()}: {estimate.describe(p)}")
         self.cores_label.setText(estimate.describe(p).split(";")[0] + f", of {self.cpus} CPUs")
-        self.run_action.setEnabled(True)
-        self.run_action.setText("Add to &queue" if self.worker is not None else "&Run")
+        self.add_batch_button.setEnabled(True)
 
-    def run_clicked(self) -> None:
+    def add_batch_clicked(self) -> None:
+        """Add batch: the form's batch, checked against the results folder, to the end of the
+        queue. It never starts anything."""
         if self.inputs.problems() or not self.inputs.items:
             return
         try:
@@ -672,19 +669,19 @@ class MainWindow(QMainWindow):
             for item in self.inputs.items:
                 item.write(self.out_dir, (self.gas,))
         except (BatchError, settings.SettingsError, StructureError, OSError, ValueError) as e:
-            QMessageBox.warning(self, "Run", str(e))
+            QMessageBox.warning(self, "Add batch", str(e))
             return
         found = batches.prior(b.jobs())
         clashes = [p for p in found if p.kind == CLASH]
         if clashes:
-            QMessageBox.warning(self, "Run", "This folder holds runs of other inputs under the "
-                                "same names:\n\n" + "\n".join(f"{p.job.run_dir.name}: "
+            QMessageBox.warning(self, "Add batch", "This folder holds runs of other inputs under "
+                                "the same names:\n\n" + "\n".join(f"{p.job.run_dir.name}: "
                                                                f"{p.detail}" for p in clashes)
                                 + "\n\nRename the input or choose another results folder.")
             return
         done = [p for p in found if p.kind == DONE]
         if done:
-            ask = QMessageBox(QMessageBox.Icon.Question, "Run",
+            ask = QMessageBox(QMessageBox.Icon.Question, "Add batch",
                               f"{len(done)} of these {len(b.jobs())} runs are already in this "
                               "folder, complete.", parent=self)
             skip = ask.addButton("Skip them", QMessageBox.ButtonRole.AcceptRole)
@@ -696,15 +693,46 @@ class MainWindow(QMainWindow):
             if ask.clickedButton() is skip:
                 b = dataclasses.replace(b, skip_done=True)
         self.store.out_dir = str(self.out_dir)
-        if self.worker is not None:
-            self.enqueue(b)
-        else:
-            self.start(b)
+        self.enqueue(b)
 
     # --- running ---------------------------------------------------------------------------
 
+    @property
+    def state(self) -> str:
+        """The queue's state, from the worker and the top row: idle, running, pausing (drained,
+        runs still in flight), stopping, or paused."""
+        if self.worker is not None:
+            return (STOPPING if self.worker.stopping else PAUSING if self.worker.draining
+                    else RUNNING)
+        return PAUSED if self.current is not None else IDLE
+
+    def _set_controls(self) -> None:
+        """The toggle's text, enabled state and tooltip, and the top row's mark, from
+        ``state``."""
+        s = self.state
+        text, key = TOGGLE[s]
+        self.toggle_button.setText(text)
+        self.toggle_button.setEnabled(s in (RUNNING, PAUSED) or (s == IDLE and bool(
+            self.queued())))
+        set_tip(key, self.toggle_button)
+        self._draw_queue()
+
+    def toggle_clicked(self) -> None:
+        """Start queue, Pause queue or Resume queue, by the state."""
+        s = self.state
+        if s == IDLE and self.queued():
+            self.start(self._take_queued(0))
+        elif s == RUNNING:
+            self.worker.drain()
+            self._set_controls()
+            self._draw_progress()
+        elif s == PAUSED:
+            self.start(self.current)
+
     def start(self, b: Batch) -> None:
-        self.worker = BatchWorker(b, self.inputs.sizes(b.out_dir), self.launcher, self.cpus)
+        """Run a batch as the queue's top row: the first waiting one, or the paused one."""
+        self._pin(b)
+        self.worker = BatchWorker(b, {}, self.launcher, self.cpus)
         self.worker.planned.connect(self._on_planned)
         self.worker.run_started.connect(self._on_started)
         self.worker.run_landed.connect(self._on_landed)
@@ -718,10 +746,8 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"{self.current_title}: starting…")
         self.progress.setRange(0, 0)
         self.results_table.setRowCount(0)
-        self.stop_action.setEnabled(True)
-        self.resume_action.setEnabled(False)
         self.methods_button.setEnabled(False)
-        self.run_action.setText("Add to &queue")
+        self._set_controls()
         self.tick.start()
         self.worker.start()
 
@@ -730,6 +756,7 @@ class MainWindow(QMainWindow):
         self.progress.setRange(0, len(p.jobs))
         self.progress.setValue(0)
         self._draw_progress()
+        self.save_queue()  # the running batch now names its runs
 
     def _on_started(self, job: Job) -> None:
         self.running[job.label] = (job, time.monotonic())
@@ -739,16 +766,18 @@ class MainWindow(QMainWindow):
         self.blocks[job.label] = (n, total)
 
     def _on_landed(self, r: Result, done: int, total: int) -> None:
+        if r.waiting:  # left for Resume: it ran nowhere
+            return
         self.running.pop(r.job.label, None)
         self.results.append(r)
-        self.progress.setValue(done)
+        self.progress.setValue(len(self.results))
         self._draw_results()
         self._draw_progress()
+        self.save_queue()
 
     def _on_finished(self, s: Summary) -> None:
-        self.results = list(s.results)
+        self.results = [r for r in s.results if not r.waiting]
         self._draw_results()
-        self.last_summary = s
         out = self.worker.batch.out_dir if self.worker else self.out_dir
         self.status_label.setText(f"{self.current_title}: {s}; summary.csv in {out}")
         self.methods_button.setEnabled(bool(s.ok))
@@ -757,33 +786,43 @@ class MainWindow(QMainWindow):
         self.status_label.setText(f"{self.current_title}: did not run: {message}")
 
     def _worker_done(self) -> None:
+        """The batch's worker has ended: finished, drained or stopped. A finished batch leaves
+        the queue and the next one starts; a drained one with runs left stays the top row,
+        paused, holding exactly those; a stopped one leaves and the queue waits."""
         if self._closing:
             return
+        was, w = self.state, self.worker
         self.tick.stop()
         self.running.clear()
-        self.last_batch = self.worker.batch if self.worker else None
         self.worker = None
         self.progress.setRange(0, 1)
         self.progress.setValue(1)
-        self.stop_action.setEnabled(False)
-        self.run_action.setText("&Run")
         self._draw_running()
-        if self.queue.count():
-            self.start(self._take_queued(0))
+        left = [r.job.label for r in w.summary.waiting] if w.summary is not None else []
+        if was == PAUSING and left:
+            self._pin(dataclasses.replace(w.batch, remaining=tuple(left)))
+            n = len(left)
+            self.status_label.setText(
+                f"{self.current_title}: paused, {n} run{'s' if n != 1 else ''} left; "
+                f"{len(self.results)} landed, summary.csv in {w.batch.out_dir}")
         else:
-            self.resume_action.setEnabled(False)
+            self._unpin()
+            if was == RUNNING and self.queued():
+                self.start(self._take_queued(0))
+        self._set_controls()
+        self.save_queue()
         self.update_estimate()
 
-    def stop_clicked(self) -> None:
-        if self.worker is None:
-            return
-        if QMessageBox.question(self, "Stop", "Stop every run of this batch? Runs already "
-                                "complete keep their results; the stopped ones keep their "
-                                "folders as partial records.") \
-                != QMessageBox.StandardButton.Yes:
-            return
-        self.status_label.setText(f"{self.current_title}: stopping…")
-        self.worker.stop()
+    def _left(self) -> tuple[str, ...] | None:
+        """The running batch's runs not complete, by label: the ones not started and the ones
+        stopped. None while the batch has not said what it runs (every run of it, then)."""
+        w = self.worker
+        if w.summary is not None:
+            return tuple(r.job.label for r in w.summary.results if r.stopped or r.waiting)
+        if self.plan is None:
+            return w.batch.remaining
+        landed = {r.job.label for r in self.results if not r.stopped}
+        return tuple(j.label for j in self.plan.jobs if j.label not in landed)
 
     def _draw_progress(self) -> None:
         if self.worker is None:
@@ -791,11 +830,18 @@ class MainWindow(QMainWindow):
         elapsed = estimate.duration(time.monotonic() - self.batch_started)
         if self.plan is not None:
             n = len(self.plan.jobs)
-            self.status_label.setText(
-                f"{self.current_title}: {len(self.results)} of {n} run{'s' if n != 1 else ''} "
-                f"done, {elapsed} elapsed, estimate about {estimate.duration(self.plan.seconds)}"
-                + (" (stopping)" if self.worker.stopping else ""))
+            line = (f"{self.current_title}: {len(self.results)} of {n} "
+                    f"run{'s' if n != 1 else ''} done, {elapsed} elapsed, estimate about "
+                    f"{estimate.duration(self.plan.seconds)}")
+            if self.worker.stopping:
+                line += " (stopping)"
+            elif self.worker.draining:
+                k = len(self.running)
+                line += (f"; pausing, waiting for {k} run{'s' if k != 1 else ''} in flight"
+                         if k else "; pausing")
+            self.status_label.setText(line)
         self._draw_running()
+        self._draw_queue()
 
     def _draw_running(self) -> None:
         self.running_list.clear()
@@ -814,62 +860,211 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(box)
         self.queue = QListWidget()
         self.queue.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.queue.model().rowsMoved.connect(self.save_queue)
+        self.queue.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.queue.model().rowsMoved.connect(self._rows_moved)
         self.queue.setMaximumHeight(120)
         set_tip("queue", self.queue)
+        self.queue_total = QLabel()
+        self.queue_total.setWordWrap(True)
         row = QHBoxLayout()
-        # Run, as a button where the queue is: it keeps its own text while Run's says "Add to
-        # queue", and follows Run's enabled state, so it is greyed out when the form cannot
-        # make a batch.
         self.add_batch_button = QPushButton("Add batch")
         set_tip("add_batch", self.add_batch_button)
-        self.add_batch_button.setEnabled(self.run_action.isEnabled())
-        self.run_action.enabledChanged.connect(self.add_batch_button.setEnabled)
-        self.add_batch_button.clicked.connect(self.run_action.trigger)
-        remove = QPushButton("Remove")
-        set_tip("remove_queued", remove)
-        remove.clicked.connect(self._remove_queued)
+        self.add_batch_button.setEnabled(False)
+        self.add_batch_button.clicked.connect(self.add_batch_clicked)
+        self.toggle_button = QPushButton()
+        self.toggle_button.clicked.connect(self.toggle_clicked)
+        self.remove_button = QPushButton("Remove batch")
+        set_tip("remove_queued", self.remove_button)
+        self.remove_button.clicked.connect(self.remove_clicked)
         row.addWidget(self.add_batch_button)
-        row.addWidget(remove)
+        row.addWidget(self.toggle_button)
+        row.addWidget(self.remove_button)
         row.addStretch(1)
         lay.addWidget(self.queue)
+        lay.addWidget(self.queue_total)
         lay.addLayout(row)
+        self._set_controls()
         return box
 
     def queued(self) -> list[Batch]:
+        """The waiting batches, in order: every row but the pinned top one."""
         return [self.queue.item(i).data(Qt.ItemDataRole.UserRole)
-                for i in range(self.queue.count())]
+                for i in range(self.queue.count()) if not self.queue.item(i).data(PINNED)]
 
-    def enqueue(self, b: Batch) -> None:
-        n = len(b.inputs)
-        text = (f"{b.title()}: {n} input{'s' if n != 1 else ''}, "
-                f"{parameters.GAS[b.resolved_gas]}, {len(b.seeds)} "
-                f"seed{'s' if len(b.seeds) != 1 else ''}, to {b.out_dir}")
-        item = QListWidgetItem(text)
+    def _estimate(self, b: Batch) -> float | None:
+        """The batch's estimate, in seconds, of the runs it has left, from its ``.mfj`` files
+        as they are now; None when one cannot be read."""
+        try:
+            jobs = b.to_run()
+            if not jobs:
+                return 0.0
+            p = b.plan(self.cpus, jobs=jobs, sizes={})
+        except (BatchError, ValueError, OSError):
+            return None
+        return None if any(w is None for w in p.walls) else p.seconds
+
+    def _pin(self, b: Batch) -> None:
+        """Make the batch the queue's top row, the running or paused one: bold, not draggable,
+        and kept first (``_rows_moved``)."""
+        if self.current is None:
+            item = QListWidgetItem()
+            item.setData(PINNED, True)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsDragEnabled
+                          & ~Qt.ItemFlag.ItemIsDropEnabled)
+            font = item.font()
+            font.setBold(True)
+            item.setFont(font)
+            self.queue.insertItem(0, item)
+        self.current = b
+        item = self.queue.item(0)
         item.setData(Qt.ItemDataRole.UserRole, b)
-        self.queue.addItem(item)
-        self.resume_action.setEnabled(self.worker is None)
+        item.setData(SECONDS, self._estimate(b))
+        self._draw_queue()
+
+    def _unpin(self) -> None:
+        if self.current is not None:
+            self.queue.takeItem(0)
+            self.current = None
+            self._draw_queue()
+
+    def _rows_moved(self, *_) -> None:
+        """A drag has reordered the waiting rows; one dropped above the pinned row is put back
+        under it, once the move has finished."""
+        if self.current is not None and not self.queue.item(0).data(PINNED):
+            QTimer.singleShot(0, self._repin)
         self.save_queue()
 
-    def _take_queued(self, row: int) -> Batch:
+    def _repin(self) -> None:
+        for i in range(self.queue.count()):
+            if self.queue.item(i).data(PINNED):
+                if i:
+                    self.queue.insertItem(0, self.queue.takeItem(i))
+                break
+
+    @staticmethod
+    def _describe(b: Batch) -> str:
+        n = len(b.inputs)
+        return (f"{b.title()}: {n} input{'s' if n != 1 else ''}, "
+                f"{parameters.GAS[b.resolved_gas]}, {len(b.seeds)} "
+                f"seed{'s' if len(b.seeds) != 1 else ''}, to {b.out_dir.name or b.out_dir}")
+
+    def _time_left(self) -> float | None:
+        """The top row's estimate: the running batch's plan less its elapsed time (negative
+        once overdue), or the paused batch's remaining runs."""
+        if self.worker is not None and self.plan is not None:
+            if any(w is None for w in self.plan.walls):
+                return None
+            return self.plan.seconds - (time.monotonic() - self.batch_started)
+        return self.queue.item(0).data(SECONDS)
+
+    def _draw_queue(self) -> None:
+        """Every row's text, with its estimate, and the total under the list."""
+        total, unknown = 0.0, 0
+        for i in range(self.queue.count()):
+            item = self.queue.item(i)
+            b = item.data(Qt.ItemDataRole.UserRole)
+            if item.data(PINNED):
+                s = self._time_left()
+                if s is None:
+                    when = "no estimate: an input cannot be read"
+                elif s < 0:
+                    when = "overdue"
+                elif self.worker is not None:
+                    when = f"about {estimate.duration(s)} left"
+                else:
+                    n = len(b.remaining) if b.remaining is not None else len(b.jobs())
+                    when = (f"{n} run{'s' if n != 1 else ''} left, about "
+                            f"{estimate.duration(s)}")
+                item.setText(f"{MARK[self.state]}: {self._describe(b)}; {when}")
+            else:
+                s = item.data(SECONDS)
+                when = ("no estimate: an input cannot be read" if s is None
+                        else f"about {estimate.duration(s)}")
+                item.setText(f"{self._describe(b)}; {when}")
+            item.setToolTip(f"{item.text()}\n\nResults folder: {b.out_dir}")
+            if s is None:
+                unknown += 1
+            else:
+                total += max(0.0, s)
+        if not self.queue.count():
+            self.queue_total.setText("Nothing queued.")
+            return
+        text = f"In all, about {estimate.duration(total)}"
+        if unknown:
+            text += (f", not counting {unknown} batch{'es' if unknown != 1 else ''} with no "
+                     "estimate")
+        self.queue_total.setText(text + ".")
+
+    def enqueue(self, b: Batch) -> None:
+        """Append a batch to the queue, waiting; it never starts here."""
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, b)
+        item.setData(SECONDS, self._estimate(b))
+        self.queue.addItem(item)
+        self._set_controls()
+        self.save_queue()
+
+    def _take_queued(self, index: int) -> Batch:
+        """Take the waiting batch at ``index`` (counted among the waiting rows) out."""
+        row = index + (1 if self.current is not None else 0)
         b = self.queue.takeItem(row).data(Qt.ItemDataRole.UserRole)
         self.save_queue()
         return b
 
-    def _remove_queued(self) -> None:
-        for item in self.queue.selectedItems():
-            self.queue.takeItem(self.queue.row(item))
-        self.resume_action.setEnabled(self.worker is None and self.queue.count() > 0)
+    def remove_clicked(self) -> None:
+        """Remove batch: the selected waiting rows go; the top row asks, then its batch is
+        stopped (running) or forgotten (paused), and the queue is left paused."""
+        items = self.queue.selectedItems()
+        for item in items:
+            if not item.data(PINNED):
+                self.queue.takeItem(self.queue.row(item))
+        if any(item.data(PINNED) for item in items):
+            self._remove_current()
+        self._set_controls()
         self.save_queue()
 
+    def _remove_current(self) -> None:
+        s = self.state
+        if s in (RUNNING, PAUSING):
+            if QMessageBox.question(self, "Remove batch", "Stop this batch? Runs complete keep "
+                                    "their results; runs in flight are killed and start over "
+                                    "if it is run again.") != QMessageBox.StandardButton.Yes:
+                return
+            self.status_label.setText(f"{self.current_title}: stopping…")
+            self.worker.stop()  # _worker_done takes it out and starts nothing
+        elif s == PAUSED:
+            b = self.current
+            n = len(b.jobs())
+            if b.remaining is not None and len(b.remaining) < n:
+                done, left = n - len(b.remaining), len(b.remaining)
+                if QMessageBox.question(
+                        self, "Remove batch", f"{done} of the {n} runs of this batch are "
+                        f"complete and keep their results. Remove it and forget the {left} "
+                        f"run{'s' if left != 1 else ''} left?") \
+                        != QMessageBox.StandardButton.Yes:
+                    return
+            self._unpin()
+
     def save_queue(self, *_) -> None:
+        """Write the queue file: the running or paused batch first, holding its runs not
+        complete (with none left, it is not written), then the waiting batches."""
+        saved = []
+        if self.current is not None:
+            b = self.current
+            if self.worker is not None:
+                left = self._left()
+                if left is not None:
+                    b = dataclasses.replace(b, remaining=left) if left else None
+            if b is not None:
+                saved.append(b)
         try:
-            batches.save(self.queued(), self.store.queue_path)
+            batches.save(saved + self.queued(), self.store.queue_path)
         except OSError as e:
             self.status_label.setText(f"could not save the queue: {e}")
 
     def offer_saved_queue(self) -> None:
-        """At launch: offer back the batches that were queued when the window last closed."""
+        """At launch: offer back the batches that were in the queue when the window last
+        closed. They come back paused: the first is the top row, for Resume queue."""
         path = self.store.queue_path
         if not path.is_file():
             return
@@ -880,15 +1075,16 @@ class MainWindow(QMainWindow):
         if not saved:
             return
         n = len(saved)
-        text = (f"{n} batch{'es were' if n != 1 else ' was'} queued when MOBCAL last closed. "
-                "Put them back in the queue?")
+        text = (f"{n} batch{'es were' if n != 1 else ' was'} in the queue when MOBCAL last "
+                "closed. Put them back in the queue, paused?")
         if problems:
             text += "\n\nNot restored:\n" + "\n".join(problems)
         if QMessageBox.question(self, "Queue", text) == QMessageBox.StandardButton.Yes:
-            for b in saved:
+            self._pin(saved[0])
+            for b in saved[1:]:
                 self.enqueue(b)
-        else:
-            self.save_queue()
+            self._set_controls()
+        self.save_queue()
 
     # --- progress and results ----------------------------------------------------------
 
@@ -1018,7 +1214,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, e) -> None:  # noqa: N802 -- Qt's name
         if self.worker is not None:
             if QMessageBox.question(self, "Close", "A batch is running. Stop it and close? "
-                                    "Queued batches are kept for next time.") \
+                                    "Runs in flight are killed; the batch keeps its runs not "
+                                    "complete, and it and the queue are kept for next time.") \
                     != QMessageBox.StandardButton.Yes:
                 e.ignore()
                 return
@@ -1026,6 +1223,6 @@ class MainWindow(QMainWindow):
             w = self.worker
             w.stop()
             w.wait(30_000)
-        self.save_queue()
+        self.save_queue()  # the running batch first, with what it has left (_left)
         self.store.geometry = self.saveGeometry()
         e.accept()
