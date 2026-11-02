@@ -52,11 +52,12 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
-from mobcal import cli, docs, estimate, fortran, methods, options  # noqa: E402
+from mobcal import cli, docs, estimate, fortran, methods, options, parameters  # noqa: E402
 from mobcal.app import inputs, theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
 from mobcal.app.window import MainWindow  # noqa: E402
+from mobcal.io.ion import Ion  # noqa: E402
 from mobcal.io.mfj import Atom, Mfj  # noqa: E402
 from mobcal.run import Job  # noqa: E402
 
@@ -817,9 +818,11 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     w.launcher = launcher
     for item in w.inputs.items:
         item.write(w.out_dir, (w.gas,))
-    rec = json.loads((w.out_dir / "imported" / "choline_sp_chelpg.import.json").read_text(
-        encoding="utf-8"))
+    imported = w.out_dir / "imported"
+    rec = Ion.read(imported / "choline_sp_chelpg.ion.json").import_record
     assert rec["charges"]["choice"] == "chelpg"
+    assert Mfj.read(imported / "choline_sp_chelpg.mfj") == Ion.read(
+        imported / "choline_sp_chelpg.ion.json").mfj(parameters.shipped(w.gas))
 
 
 def test_a_gaussian_log_preselects_mk_then_chelpg_and_shows_an_untested_version(window, qtbot,

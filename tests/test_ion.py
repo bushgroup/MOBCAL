@@ -9,6 +9,7 @@ the page lists is shown once, and the schema is checked to refuse the structural
 from __future__ import annotations
 
 import copy
+import dataclasses
 import hashlib
 import json
 import random
@@ -17,7 +18,7 @@ from pathlib import Path
 import jsonschema
 import pytest
 
-from mobcal import fortran, parameters
+from mobcal import cli, fortran, parameters
 from mobcal.io import ion, structure
 from mobcal.io.ion import Ion, IonError
 from mobcal.io.mfj import MAX_ATOMS, MAX_SETS, Atom, Mfj
@@ -113,8 +114,7 @@ def test_a_permuted_set_keeps_its_own_symbols_and_null_charges_stay_null():
     (QM / "gaussian" / "choline_2012_mk" / "choline_2012_mk.log", "mk"),
 ])
 def test_an_imported_mfj_comes_back_byte_for_byte(tmp_path, source, choice):
-    out, _ = structure.write(structure.convert(structure.read(source), choice),
-                             tmp_path / "imp.mfj")
+    out = structure.convert(structure.read(source), choice).mfj.write(tmp_path / "imp.mfj")
     i = ion.from_mfj(out)
     assert i.molecular_charge == 1
     for gas in ("he", "n2"):
@@ -360,3 +360,37 @@ def test_the_page_example_matches_the_stored_file():
     for k in ("label", "molecular_charge", "units", "charge_mode"):
         assert f'"{k}": {json.dumps(d[k])}' in page, k
     assert copy.deepcopy(d)["import"]["source"]["sha256"][:8] in page
+
+
+# --- mobcal export ---------------------------------------------------------------------------
+
+def test_export_writes_the_mfj_a_run_stages_beside_the_ion_file(tmp_path, capsys):
+    src = tmp_path / "choline.ion.json"
+    src.write_bytes((DATA / "choline.ion.json").read_bytes())
+    assert cli.main(["export", str(src)]) == 0
+    out = tmp_path / "choline.mfj"
+    assert ("21 atoms, 1 conformer, keys of the 'MOBCAL 2012 helium' and 'MOBCAL 2012 "
+            "nitrogen' tables") in capsys.readouterr().out
+    assert out.read_bytes() == (DATA / "choline.mfj").read_bytes()
+    assert Mfj.read(out) == Mfj.read(CHOLINE)
+    assert cli.main(["export", str(src)]) == 2
+    assert "exists; not replacing it" in capsys.readouterr().err
+    assert cli.main(["export", str(src), "--force", "--gas", "he", "--parameters", "2000",
+                     "-o", str(tmp_path / "c2000.mfj")]) == 0
+    assert "keys of the 'MOBCAL 2000 helium' table" in capsys.readouterr().out
+    assert (tmp_path / "c2000.mfj").read_bytes() == out.read_bytes()
+
+
+def test_export_refuses_an_element_a_table_lacks_and_a_bad_file(tmp_path, capsys):
+    i = Ion.read(DATA / "choline.ion.json")
+    p = dataclasses.replace(i, symbols=("P", *i.symbols[1:]))
+    src = p.write(tmp_path / "p.ion.json")
+    assert cli.main(["export", str(src)]) == 2
+    assert "P (1 atom) not in the element table" in capsys.readouterr().err
+    assert cli.main(["export", str(src), "--gas", "n2"]) == 0
+    assert Mfj.read(tmp_path / "p.mfj").sets[0][0].key == 31
+    bad = tmp_path / "bad.ion.json"
+    bad.write_text('{"format": "mobcal-ion", "version": 2}', encoding="utf-8")
+    assert cli.main(["export", str(bad)]) == 2
+    assert "bad.ion.json: version: 2" in capsys.readouterr().err
+    assert not (tmp_path / "bad.mfj").exists()

@@ -104,11 +104,13 @@ uv run pytest
 ## Running calculations
 
 An input file can be written by hand ([`fortran/Choline.mfj`](fortran/Choline.mfj) is the 2012
-example) or from an ORCA or Gaussian output or an `.xyz` file with the charges you name
-([`docs/import.md`](docs/import.md)):
+example) or imported from an ORCA or Gaussian output or an `.xyz` file with the charges you
+name, as an ion file ([`docs/import.md`](docs/import.md), [`docs/ion-file.md`](docs/ion-file.md))
+from which `mobcal export` writes the `.mfj` the program reads:
 
 ```
-uv run mobcal import choline_sp.out --charges chelpg -o choline.mfj
+uv run mobcal import choline_sp.out --charges chelpg -o choline.ion.json
+uv run mobcal export choline.ion.json
 ```
 
 `mobcal run` runs the built binaries on one or more input files, one process per calculation

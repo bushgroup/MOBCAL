@@ -8,8 +8,9 @@ preselected when the file holds one (``PRESELECT``), otherwise nothing until the
 ``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for the
 ion's net charge; an output of a version the import is not tested on reads "ready (untested
 version)", with the warning in its tooltip. At Run the import is written as ``mobcal import`` writes
-it, ``.mfj`` and ``.import.json``, into ``imported/`` in the results folder, so the study folder
-holds what was run.
+it, an ``.ion.json``, into ``imported/`` in the results folder, with the ``.mfj`` the run reads
+beside it, written from the ion file as ``mobcal export`` writes it, so the study folder holds
+what was run.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from mobcal import options
 from mobcal.app import tip
-from mobcal.io import structure
+from mobcal.io import ion, structure
 from mobcal.io.mfj import Mfj, MfjError
 
 # The ESP fit preselected when the file holds it, first found: Merz-Kollman, the scheme of the
@@ -126,15 +127,16 @@ class Input:
         return Path(out_dir) / IMPORTED / f"{self.path.stem}_{self.charges}.mfj"
 
     def write(self, out_dir: Path, gases: tuple[str, ...]) -> Path:
-        """Write an import's ``.mfj`` and record (replacing an earlier one, which is the same
-        source's same choice); an ``.mfj`` is used where it is. Raises StructureError."""
+        """Write an import's ion file and the ``.mfj`` the run reads (replacing earlier ones,
+        which are the same source's same choice); an ``.mfj`` is used where it is. Raises
+        StructureError."""
         if self.kind == "mfj":
             return self.path
         imp = structure.convert(self.structure, self.charges, self.net_charge, gases)
         out = self.mfj_path(out_dir)
         out.parent.mkdir(parents=True, exist_ok=True)
-        mfj, _ = structure.write(imp, out, overwrite=True)
-        return mfj
+        structure.write(imp, out.with_name(out.stem + ion.SUFFIX), overwrite=True)
+        return imp.mfj.write(out)
 
 
 class _Signals(QObject):

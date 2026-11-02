@@ -1,12 +1,13 @@
 # Importing a structure and its charges
 
-A MOBCAL input file (`.mfj`) gives, for every atom of the ion, its x, y and z coordinates, the
-integer key of its element, and a partial charge. The 2012 model needs nothing else from a
-structure: no atom types, no bonds and no force-field labels. `mobcal import` writes that file from
-an ORCA or Gaussian output or from an `.xyz` file, with the charges you name, and writes beside it a
-record of where every number came from. The written file has one coordinate set, coordinates in
-ångström, and charges in `calc` mode, i.e., one explicit charge on every atom line, which is the
-form both 2012 programs read the same way.
+The 2012 programs read an ion from a `.mfj` file, which gives, for every atom, its x, y and z
+coordinates, the integer key of its element, and a partial charge. The 2012 model needs nothing
+else from a structure: no atom types, no bonds and no force-field labels. `mobcal import` writes
+an ion file, `X.ion.json` ([The ion file](ion-file.md)), from an ORCA or Gaussian output or from
+an `.xyz` file, with the charges you name, and the ion file carries the record of where every
+number came from. The ion file has one conformer, coordinates in ångström, each atom's element,
+and charges in `calc` mode, i.e., one explicit charge on every atom, which is the form both 2012
+programs read the same way. The `.mfj` the program reads is written from the ion file.
 
 This page describes what the import reads, how the charges are chosen, and what it refuses. It
 does not choose a level of theory or a charge scheme for you;
@@ -24,22 +25,31 @@ the rules on this page, and its row offers the charges the file holds
 mobcal import choline_sp.out --charges chelpg
 ```
 
-reads the ORCA output `choline_sp.out` and writes `choline_sp_chelpg.mfj` and
-`choline_sp_chelpg.import.json` in the current directory:
+reads the ORCA output `choline_sp.out` and writes the ion file `choline_sp_chelpg.ion.json` in
+the current directory:
 
 ```
-wrote choline_sp_chelpg.mfj: 21 atoms from choline_sp.out (ORCA 6.1.1), chelpg charges summing to +1.000000 (net charge +1), element keys of the He and N2 tables
-wrote choline_sp_chelpg.import.json
+wrote choline_sp_chelpg.ion.json: 21 atoms from choline_sp.out (ORCA 6.1.1), chelpg charges summing to +1.000000 (net charge +1), every element in the He and N2 tables
 ```
 
-`-o NAME.mfj` names the file instead, and its record goes beside it as `NAME.import.json`. The
-import never replaces an existing file unless given `--force`. The written file runs like any
-other input, in helium under the default method and in nitrogen under its nitrogen form:
+`-o NAME.ion.json` names the file instead. The import never replaces an existing file unless
+given `--force`.
+
+To run the imported ion, write its `.mfj` with `mobcal export`, which gives each element its key
+from the element table of each gas (both by default, so the file runs in either) and writes
+`choline_sp_chelpg.mfj` beside the ion file, then run that file like any other input, in helium
+under the default method and in nitrogen under its nitrogen form:
 
 ```
+mobcal export choline_sp_chelpg.ion.json
 mobcal run choline_sp_chelpg.mfj
 mobcal run choline_sp_chelpg.mfj --method 2012-philox-n2
 ```
+
+`mobcal export` takes `--gas he` or `n2` for one gas's table, `--parameters` for another table
+([The element tables](parameters.md)), and `-o NAME.mfj` for another name, and it refuses an
+element the table lacks. The `.mfj` it writes is a function of the ion file and the table alone,
+so the same ion file gives the same bytes on every computer.
 
 The installed program carries this ORCA output as `examples/choline_sp.out`, and a Gaussian 16
 output on the same ion as `examples/choline_2012_mk.log`. They are two of six ORCA jobs and three
@@ -170,14 +180,16 @@ Each refusal exits with status 2, writes nothing, and says why.
 
 ## The record
 
-`NAME.import.json` records the source file's path and SHA-256, the program and version that
+The `import` block of the ion file ([The ion file](ion-file.md#the-record-of-how-the-file-was-made))
+records the source file's path and SHA-256, the program and version that
 wrote it and whether the import is tested on that version, the reader (cclib and its version for
 an ORCA or Gaussian output), the route keywords and input file name an ORCA output reports or the
 route of a Gaussian log, the charges chosen with their sum, the net charge and where it came
 from, the tolerance, the blocks the file held and any it refused, each element's key with the
-name and SHA-256 of each table checked, and the label, atom count and SHA-256 of the written
-`.mfj`. The `.mfj` label holds 30 characters, the import writes the source file's name and the
-charge choice there, and the record is where the rest goes.
+name and SHA-256 of each table checked. The declaration of the charge column names the charges
+and the output they came from, e.g., `chelpg charges from choline_sp.out (ORCA 6.1.1)`. The
+label, i.e., line 1 of the `.mfj`, holds 30 characters, and the import writes the source file's
+name and the charge choice there, joined by `_`; the ion file is where the rest goes.
 
 ORCA and Gaussian outputs are read with cclib 1.9rc1, which the package pins. cclib 1.8.1, the
 last stable release, stops with an error on every ORCA 6.1.1 output in `tests/data/qm/`. cclib

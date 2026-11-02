@@ -1,5 +1,6 @@
 """mobcal.io.structure and ``mobcal import``: the ORCA and Gaussian fixtures, the .xyz reader,
-the refusals, and an imported ion run through the driver in both gases.
+the refusals, the ion file it writes, and an imported ion run through the driver in both
+gases.
 
 Every value an import writes is checked against the output as printed, read here by a few
 regular expressions and no cclib, and the ORCA CHELPG charges also against ORCA's own
@@ -10,7 +11,6 @@ pinned by ``tests/data/qm/SHA256SUMS``.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import subprocess
 import sys
@@ -20,6 +20,7 @@ import pytest
 
 from mobcal import cli, fortran, parameters, settings
 from mobcal.io import structure
+from mobcal.io.ion import Ion
 from mobcal.io.mfj import MAX_ATOMS, Mfj
 from mobcal.io.outfile import OutFile
 from mobcal.io.structure import StructureError
@@ -277,7 +278,7 @@ def test_an_orca_output_of_another_version_imports_with_a_warning(tmp_path):
     assert s.version == "5.0.4" and s.details["untested_version"] is True
     assert "tested on ORCA 6 outputs" in s.warnings[0]
     rec = structure.convert(s, "chelpg").record
-    assert rec["source"]["untested_version"] is True and rec["format"] == 2
+    assert rec["source"]["untested_version"] is True
 
 
 def test_a_file_no_program_wrote_is_refused(tmp_path):
@@ -490,7 +491,7 @@ def test_a_gaussian_log_of_another_version_imports_with_a_warning(tmp_path, caps
     err = capsys.readouterr().err
     assert err.startswith("warning: g09.log is from Gaussian 09 Rev. D.01; the import is tested "
                           "on Gaussian 16 outputs")
-    rec = json.loads((tmp_path / "g09_mk.import.json").read_text(encoding="utf-8"))
+    rec = Ion.read(tmp_path / "g09_mk.ion.json").import_record
     assert rec["source"]["untested_version"] is True
     assert cli.main(["import", str(GAUSSIAN / "choline_2012_mk" / "choline_2012_mk.log"),
                      "--charges", "mk"]) == 0
@@ -578,24 +579,41 @@ def test_keys_are_the_tables_keys():
 
 # --- writing and the record ------------------------------------------------------------------
 
-def test_write_puts_the_record_beside_the_file_and_never_replaces(tmp_path, read_all):
+def test_write_puts_the_record_in_the_ion_file_and_never_replaces(tmp_path, read_all):
     imp = structure.convert(read_all["choline_sp"], "chelpg")
-    mfj, rec = structure.write(imp, tmp_path / "choline.mfj")
-    assert rec == tmp_path / "choline.import.json"
-    assert Mfj.read(mfj) == imp.mfj
-    r = json.loads(rec.read_text(encoding="utf-8"))
+    out = structure.write(imp, tmp_path / "choline.ion.json")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["choline.ion.json"]
+    i = Ion.read(out)
+    assert i == imp.ion
+    assert i.mfj(parameters.shipped("he")) == imp.mfj == i.mfj(parameters.shipped("n2"))
+    assert (i.label, i.molecular_charge, i.units, i.charge_mode) == (
+        "choline_sp_chelpg", 1, "angstrom", "calc")
+    assert i.columns == {"charges": {"unit": "e",
+                                     "source": "chelpg charges from choline_sp.out (ORCA 6.1.1)"}}
+    assert i.written_by["program"] == "mobcal" and i.written is not None
+    r = i.import_record
     src = ORCA / "choline_sp" / "choline_sp.out"
     assert r["source"]["sha256"] == hashlib.sha256(src.read_bytes()).hexdigest()
     assert (r["source"]["program"], r["source"]["version"]) == ("ORCA", "6.1.1")
     assert r["source"]["keywords"] == ["B3LYP", "D3BJ", "def2-TZVP", "CHELPG", "Hirshfeld"]
-    assert r["mfj"]["sha256"] == hashlib.sha256(mfj.read_bytes()).hexdigest()
-    assert r["mfj"]["label"] == "choline_sp_chelpg"
     assert r["charges"]["net_charge_from"] == "output"
     assert r["elements"]["tables"]["He"]["sha256"] == parameters.SHA256["mobcal_He.toml"]
     assert r["elements"]["tables"]["N2"]["sha256"] == parameters.SHA256["mobcal_N2.toml"]
     with pytest.raises(StructureError, match="exists; not replacing it"):
-        structure.write(imp, mfj)
-    structure.write(imp, mfj, overwrite=True)
+        structure.write(imp, out)
+    structure.write(imp, out, overwrite=True)
+    with pytest.raises(StructureError, match="an import writes an ion file"):
+        structure.write(imp, tmp_path / "choline.mfj")
+
+
+def test_the_charges_declare_where_they_came_from(tmp_path, read_all):
+    s = structure.read(xyz(tmp_path, ["C 0 0 0 0.25", "H 1.1 0 0 0.75"], "ch.xyz"))
+    assert structure.convert(s, "column", net_charge=1).ion.columns["charges"]["source"] == (
+        "column 5 of ch.xyz")
+    assert structure.convert(s, "uniform", net_charge=1).ion.columns["charges"]["source"] == (
+        "uniform: +1/2 e on every atom, the net charge given")
+    g = structure.convert(read_all["choline_sp"], "uniform").ion
+    assert g.columns["charges"]["source"] == "uniform: +1/21 e on every atom, the net charge output"
 
 
 def test_a_long_or_unusual_name_gives_a_label_the_program_reads(tmp_path):
@@ -616,8 +634,7 @@ def test_the_command_lists_the_blocks_until_one_is_named(tmp_path, capsys, monke
     assert cli.main(["import", src, "--charges", "chelpg"]) == 0
     out = capsys.readouterr().out
     assert "21 atoms from choline_two_jobs.out (ORCA 6.1.1), chelpg charges" in out
-    assert sorted(p.name for p in tmp_path.iterdir()) == [
-        "choline_two_jobs_chelpg.import.json", "choline_two_jobs_chelpg.mfj"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["choline_two_jobs_chelpg.ion.json"]
     assert cli.main(["import", src, "--charges", "chelpg"]) == 2
     assert "exists; not replacing it" in capsys.readouterr().err
     assert cli.main(["import", src, "--charges", "chelpg", "--force"]) == 0
@@ -625,7 +642,7 @@ def test_the_command_lists_the_blocks_until_one_is_named(tmp_path, capsys, monke
 
 def test_the_command_takes_an_xyz_a_net_charge_and_a_gas(tmp_path, capsys):
     p = xyz(tmp_path, ["P 0 0 0", "H 1.4 0 0", "H -1.4 0 0"], "ph2.xyz")
-    out = tmp_path / "ph2.mfj"
+    out = tmp_path / "ph2.ion.json"
     assert cli.main(["import", str(p), "--charges", "uniform", "-o", str(out)]) == 2
     assert "does not carry the ion's net charge" in capsys.readouterr().err
     assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
@@ -633,7 +650,10 @@ def test_the_command_takes_an_xyz_a_net_charge_and_a_gas(tmp_path, capsys):
     assert "not in the He element table" in capsys.readouterr().err
     assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
                      "--gas", "n2", "-o", str(out)]) == 0
-    assert Mfj.read(out).keys == (1, 31)
+    assert Ion.read(out).symbols == ("P", "H", "H")
+    assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
+                     "--gas", "n2", "-o", str(tmp_path / "ph2.mfj")]) == 2
+    assert "an import writes an ion file" in capsys.readouterr().err
 
 
 def test_running_a_calculation_never_loads_cclib():
@@ -666,6 +686,13 @@ def header(out: Path) -> list[str]:
             if line.strip().startswith(HEADER)]
 
 
+def staged(imp: structure.Imported, tmp_path: Path, name: str) -> Path:
+    """The import written as an ion file, and the .mfj written from that file as a run reads it
+    (the shipped tables agree on every key, so one serves both gases)."""
+    i = Ion.read(structure.write(imp, tmp_path / f"{name}.ion.json"))
+    return i.mfj(parameters.shipped("he")).write(tmp_path / f"{name}.mfj")
+
+
 def run(binary: Path, mfj: Path, gas: str, out_dir: Path):
     r = run_one(Job(mfj, gas, 5013489, out_dir, generator="ranlux", settings=QUICK),
                 lambda _job: [str(binary)])
@@ -682,8 +709,7 @@ def test_choline_through_an_xyz_runs_as_the_2012_input_in_both_gases(binaries, t
     raw = CHOLINE.read_text(encoding="latin-1").splitlines()[6:6 + ref.atoms]
     rows = [f"{symbols[int(t[3])]} {t[0]} {t[1]} {t[2]} {t[4]}" for t in map(str.split, raw)]
     s = structure.read(xyz(tmp_path, rows, "choline.xyz"))
-    mfj, _ = structure.write(structure.convert(s, "column", net_charge=1),
-                             tmp_path / "choline.mfj")
+    mfj = staged(structure.convert(s, "column", net_charge=1), tmp_path, "choline")
     got = Mfj.read(mfj)
     assert got.sets == ref.sets
     for gas, binary in binaries.items():
@@ -695,8 +721,8 @@ def test_choline_through_an_xyz_runs_as_the_2012_input_in_both_gases(binaries, t
 
 @pytest.mark.parametrize("charges", ["chelpg", "uniform"])
 def test_an_imported_orca_output_runs_in_both_gases(binaries, tmp_path, read_all, charges):
-    mfj, _ = structure.write(structure.convert(read_all["choline_sp"], charges),
-                             tmp_path / f"choline_sp_{charges}.mfj")
+    mfj = staged(structure.convert(read_all["choline_sp"], charges), tmp_path,
+                 f"choline_sp_{charges}")
     for gas, binary in binaries.items():
         r = run(binary, mfj, gas, tmp_path / "runs")
         lines = header(r.output)
@@ -710,8 +736,7 @@ def test_an_imported_orca_output_runs_in_both_gases(binaries, tmp_path, read_all
 def test_an_imported_gaussian_mk_fit_runs_in_both_gases(binaries, tmp_path, g_read):
     """At the 2012 geometry the MK import differs from Choline.mfj in the charges alone, so the
     program prints the 2012 header but for the total absolute charge."""
-    mfj, _ = structure.write(structure.convert(g_read["choline_2012_mk"], "mk"),
-                             tmp_path / "choline_2012_mk.mfj")
+    mfj = staged(structure.convert(g_read["choline_2012_mk"], "mk"), tmp_path, "choline_2012_mk")
     for gas, binary in binaries.items():
         r = run(binary, mfj, gas, tmp_path / "runs")
         want = header(REFERENCE / f"Choline_{parameters.GAS[gas]}.out")

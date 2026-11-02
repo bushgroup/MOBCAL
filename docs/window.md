@@ -35,9 +35,10 @@ and its charges](import.md)), and its row shows the charges the import will use.
 holds an ESP fit it is selected, the Merz-Kollman fit (`mk`, the scheme of the 2012 choline charges)
 before CHELPG; otherwise the row asks for a choice before the batch can run. `uniform`, the net
 charge spread evenly over the atoms, is always offered and never selected for you. An `.xyz` file
-does not carry the ion's net charge, so its row asks for it. At Add batch each import is written, `.mfj`
-and `.import.json`, into `imported/` in the results folder, so the folder holds the file each run
-read.
+does not carry the ion's net charge, so its row asks for it. At Add batch each import is written as an ion
+file, `.ion.json` ([The ion file](ion-file.md)), into `imported/` in the results folder, with the
+`.mfj` written from it beside it, so the folder holds the file each run read and the record of
+where its charges came from.
 
 ## Method, Basics and Advanced
 

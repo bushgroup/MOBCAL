@@ -208,7 +208,7 @@ def main() -> int:
     import hashlib
     from pathlib import Path
 
-    from mobcal.io import structure
+    from mobcal.io import ion, structure
     qm = Path(ROOT) / "tests" / "data" / "qm"
     pins = dict(reversed(line.split("  ", 1)) for line in
                 (qm / "SHA256SUMS").read_text(encoding="ascii").splitlines())
@@ -221,7 +221,8 @@ def main() -> int:
         try:
             s = structure.read(qm / rel)
             imp = structure.convert(s, charges)
-            ok = Mfj.parse(imp.mfj.text()) == imp.mfj and imp.mfj.atoms == 21 and not s.warnings
+            ok = (ion.Ion.parse(imp.ion.text()) == imp.ion and Mfj.parse(imp.mfj.text()) == imp.mfj
+                  and imp.mfj.atoms == 21 and not s.warnings)
             why = f"{s.program} {s.version}, {imp.record['source']['reader']}"
         except structure.StructureError as e:
             ok, why = False, str(e)

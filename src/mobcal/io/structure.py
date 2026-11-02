@@ -1,12 +1,12 @@
-"""A structure and its charges, from an ORCA or Gaussian output or an ``.xyz``, written as a
-2012 ``.mfj``.
+"""A structure and its charges, from an ORCA or Gaussian output or an ``.xyz``, written as an
+ion file (``mobcal.io.ion``).
 
 The 2012 model takes little from a structure: per atom x y z, the integer mass key of its
 element, and a charge. No atom type, bond or force-field label. ``read`` gets the last geometry
 and every charge block that belongs to it; ``convert`` turns one choice of charges into a
-single-set ``Mfj`` (ångström, ``calc`` mode, five columns) and a provenance record; ``write``
-puts the two side by side, ``X.mfj`` and ``X.import.json``, because the a30 label has no room
-for where the numbers came from.
+one-conformer ``Ion`` (ångström, ``calc`` mode, the charges declared with where they came from)
+whose ``import`` block is the provenance record; ``write`` writes it as ``X.ion.json``. The
+``.mfj`` a run reads is written from it per run, or on request by ``mobcal export``.
 
 Sources. ORCA and Gaussian outputs are read with cclib, pinned in ``pyproject.toml`` and
 imported here only, inside ``read``, so that nothing else in the package loads it or the numpy
@@ -50,14 +50,12 @@ has no phosphorus. Nothing here adds a row.
 
     from mobcal.io import structure
     s = structure.read("choline_sp.out")
-    structure.write(structure.convert(s, "chelpg"), "choline_sp_chelpg.mfj")
+    structure.write(structure.convert(s, "chelpg"), "choline_sp_chelpg.ion.json")
 """
 
 from __future__ import annotations
 
-import datetime
 import hashlib
-import json
 import logging
 import math
 import re
@@ -66,17 +64,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mobcal import __version__, parameters
-from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, Atom, Mfj
+from mobcal.io import ion
+from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, Mfj
 
 # |sum of the named charges - Q|, in e. ORCA's Hirshfeld charges, integrated on a grid, sum to
 # Q + 2.2e-4 for the 21-atom choline cation; Mulliken, Loewdin and CHELPG to Q at the printed
-# digits.
-TOLERANCE = 1e-3
+# digits. The ion file's tolerance is the same number, held in one place.
+TOLERANCE = ion.TOLERANCE
 UNIFORM = "uniform"
 COLUMN = "column"  # an .xyz file's fifth column
 GASES = ("he", "n2")
-RECORD_SUFFIX = ".import.json"
-RECORD_FORMAT = 2  # 2: source.untested_version; source.route for a Gaussian output
 
 # The major version each program's outputs are tested on; another imports with a warning.
 TESTED = {"ORCA": "6", "Gaussian": "16"}
@@ -152,8 +149,19 @@ class Structure:
 
 @dataclass(frozen=True)
 class Imported:
-    mfj: Mfj
-    record: dict
+    ion: ion.Ion
+    gases: tuple[str, ...]  # whose default tables the elements were checked in
+
+    @property
+    def record(self) -> dict:
+        """The provenance record, the ion file's ``import`` block."""
+        return self.ion.import_record
+
+    @property
+    def mfj(self) -> Mfj:
+        """The ``.mfj`` a run on the first gas's default table reads (the shipped tables agree
+        on every key, so it is the same for each gas checked)."""
+        return self.ion.mfj(parameters.shipped(self.gases[0]))
 
 
 def read(path: Path | str) -> Structure:
@@ -475,7 +483,7 @@ def element_keys(symbols: tuple[str, ...] | list[str],
 
 def convert(structure: Structure, charges: str | None, net_charge: int | None = None,
             gases: tuple[str, ...] = GASES, label: str | None = None) -> Imported:
-    """The ``.mfj`` for one choice of charges, and its provenance record."""
+    """The ion file for one choice of charges, with its provenance record."""
     s = structure
     if charges is None:
         raise StructureError(f"choose the charges: {s.offer()}")
@@ -500,50 +508,50 @@ def convert(structure: Structure, charges: str | None, net_charge: int | None = 
                              f"{total - q_net:+.2e} e from the net charge {q_net:+d}; the "
                              f"import allows {TOLERANCE:g} e")
     keys = element_keys(s.symbols, gases)
-    atoms = tuple(Atom(x, y, z, keys[sym], qi)
-                  for sym, (x, y, z), qi in zip(s.symbols, s.coordinates, q, strict=True))
     if label is None:
         label = _LABEL_UNSAFE.sub("_", f"{s.path.stem}_{charges}")[:FIELD_WIDTH]
-    mfj = Mfj(label, "ang", "calc", 1.0, (atoms,))
+    q_from = "output" if s.net_charge is not None else "given"
+    if charges == UNIFORM:
+        source = f"uniform: {q_net:+d}/{n} e on every atom, the net charge {q_from}"
+    elif charges == COLUMN:
+        source = f"column 5 of {s.path.name}"
+    else:
+        source = (f"{charges} charges from {s.path.name} ("
+                  + " ".join(p for p in (s.program, s.version) if p) + ")")
     record = {
-        "format": RECORD_FORMAT,
-        "mobcal": __version__,
-        "written": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
         "source": {"path": str(s.path.resolve()), "sha256": s.sha256, "program": s.program,
                    "version": s.version, "reader": s.reader, **s.details},
-        "charges": {"choice": charges, "net_charge": q_net,
-                    "net_charge_from": "output" if s.net_charge is not None else "given",
+        "charges": {"choice": charges, "net_charge": q_net, "net_charge_from": q_from,
                     "sum": total, "difference": total - q_net, "tolerance": TOLERANCE,
-                    "available": list(s.charges), "refused": s.unpaired},
+                    "available": list(s.charges), "refused": dict(s.unpaired)},
         "elements": {"keys": keys, "tables": {
             parameters.GAS[g]: {"name": t.name, "sha256": t.sha256}
             for g, t in ((g, parameters.shipped(g)) for g in gases)}},
-        "mfj": {"label": label, "atoms": n, "units": "ang", "charge_mode": "calc"},
     }
-    return Imported(mfj, record)
+    made = ion.Ion(label, q_net, "angstrom", 1.0, "calc", s.symbols,
+                   (ion.Conformer(s.coordinates, tuple(q)),), ion.written_by(),
+                   {"charges": {"unit": "e", "source": source}}, import_record=record,
+                   written=ion.now())
+    return Imported(made, tuple(gases))
 
 
-def record_path(mfj_path: Path | str) -> Path:
-    """Where the provenance record of an imported ``X.mfj`` goes: ``X.import.json``."""
-    p = Path(mfj_path)
-    return p.with_name(p.stem + RECORD_SUFFIX)
+def default_name(source: Path | str, charges: str) -> Path:
+    """Where ``mobcal import`` writes by default: ``SOURCE-STEM_CHARGES.ion.json``."""
+    return Path(f"{Path(source).stem}_{charges}{ion.SUFFIX}")
 
 
-def write(imported: Imported, out: Path | str, overwrite: bool = False) -> tuple[Path, Path]:
-    """Write the ``.mfj`` and its record beside it; refuses to replace either unless told to."""
+def write(imported: Imported, out: Path | str, overwrite: bool = False) -> Path:
+    """Write the ion file; refuses a name not ending in ``.ion.json``, and to replace a file
+    unless told to."""
     out = Path(out)
-    rec = record_path(out)
-    if not overwrite:
-        for p in (out, rec):
-            if p.exists():
-                raise StructureError(f"{p} exists; not replacing it")
-    text = imported.mfj.text()
-    if Mfj.parse(text) != imported.mfj:  # the writer's promise, kept on every file
-        raise StructureError(f"{out}: the file would not read back as written")
-    data = text.encode("latin-1")
-    record = dict(imported.record)
-    record["mfj"] = {**record["mfj"], "file": out.name, "sha256": hashlib.sha256(data).hexdigest()}
-    out.write_bytes(data)
-    rec.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8",
-                   newline="\n")
-    return out, rec
+    if not out.name.endswith(ion.SUFFIX):
+        raise StructureError(f"{out}: an import writes an ion file, named X{ion.SUFFIX}; "
+                             "mobcal export writes a .mfj from it")
+    if out.exists() and not overwrite:
+        raise StructureError(f"{out} exists; not replacing it")
+    try:
+        if ion.Ion.parse(imported.ion.text()) != imported.ion:  # the writer's promise
+            raise StructureError(f"{out}: the file would not read back as written")
+    except ion.IonError as e:
+        raise StructureError(f"{out}: {e}") from None
+    return imported.ion.write(out, overwrite=True)

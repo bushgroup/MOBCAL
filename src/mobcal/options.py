@@ -147,7 +147,7 @@ SHARED = {
         "The folder for a study: each batch adds its run directories here, and summary.csv "
         "and summary.json are rewritten to cover every run it holds."),
     "charges": Description(
-        "Which atomic charges the .mfj carries: a set the file holds, such as CHELPG or "
+        "Which atomic charges the imported ion carries: a set the file holds, such as CHELPG or "
         "Mulliken, or uniform, the net charge spread evenly over the atoms.",
         cli="The keys are mulliken, lowdin, chelpg and hirshfeld for an ORCA output's "
             "blocks; mulliken, hirshfeld, cm5, natural, mk and chelpg for a Gaussian "

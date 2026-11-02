@@ -178,6 +178,7 @@ Gaussian Merz-Kollman row:
 
 ```
 mobcal import tests/data/qm/gaussian/choline_2012_mk/choline_2012_mk.log --charges mk
+mobcal export choline_2012_mk_mk.ion.json
 mobcal run choline_2012_mk_mk.mfj --seeds 5013489,1234567,7654321
 mobcal run choline_2012_mk_mk.mfj --seeds 5013489,1234567,7654321 --method 2012-philox-n2 --split 10
 ```
@@ -185,5 +186,5 @@ mobcal run choline_2012_mk_mk.mfj --seeds 5013489,1234567,7654321 --method 2012-
 The ORCA rows import `choline_2012_b3lyp.out` and `choline_2012_hf.out`, the `uniform` row
 imports `choline_2012_b3lyp.out` with `--charges uniform`, and the 2012 column is
 `fortran/Choline.mfj` as it stands. The import records the charges it wrote and the route that
-computed them in the `.import.json` beside each input, so a cross section computed from an
-imported input can be traced to its charge scheme.
+computed them in each ion file, so a cross section computed from an imported input can be traced
+to its charge scheme.

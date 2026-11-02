@@ -218,6 +218,10 @@ and every real as the shortest decimal that reads back as the same double.
 3. Each conformer after the first is preceded by the line `coordinate set k`, which the program
    reads and discards.
 
+`mobcal export X.ion.json` writes this file as `X.mfj` beside the ion file, from the default
+table of each gas, or of the gas `--gas` names, or from the table `--parameters` names
+([Importing a structure and its charges](import.md#the-command)).
+
 A file read from a `.mfj` and written back gives the same input as the original: the same
 label, units, charge mode and correction factor, and on every atom of every coordinate set the
 same coordinates, key and charge, with four or five fields as the original had. The written

@@ -19,10 +19,11 @@
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
    ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
-   charges and the Gaussian example's MK charges, each of which must give the file the source
-   tree's import gives (cclib and everything
-   under it are in the bundle and work), and opens and closes the window with ``mobcal gui
-   --check`` on Qt's offscreen platform (Qt and its plugins are in the bundle and start).
+   charges and the Gaussian example's MK charges as ion files and export each as a ``.mfj``,
+   each of which must hold what the source tree's import gives, and the ``.mfj`` its bytes
+   (cclib and everything under it are in the bundle and work), and opens and closes the window
+   with ``mobcal gui --check`` on Qt's offscreen platform (Qt and its plugins are in the bundle
+   and start).
 5. With ``--archive`` (macOS and Linux), writes ``dist/mobcal-<version>-<os>-<arch>.tar.gz``,
    whose top folder is ``mobcal-<version>/`` on Linux and ``MOBCAL.app`` on macOS. Windows
    packages the folder with Inno Setup instead (``tools/build_exe.ps1``).
@@ -184,27 +185,39 @@ def self_check() -> None:
 
 
 def import_check() -> None:
-    from mobcal.io import structure
+    from mobcal import parameters
+    from mobcal.io import ion, structure
     exe = BUNDLE / EXE
     work = ROOT / "build" / "import-check"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
     for example, charges in EXAMPLES.items():
-        out = work / f"{example.stem}_{charges}.mfj"
+        out = work / f"{example.stem}_{charges}.ion.json"
         t0 = time.perf_counter()
-        proc = subprocess.run([str(exe), "import", str(PAYLOAD / "examples" / example.name),
-                               "--charges", charges, "-o", str(out)], env=clean_env(),
-                              capture_output=True, text=True)
+        steps = (["import", str(PAYLOAD / "examples" / example.name), "--charges", charges,
+                  "-o", str(out)], ["export", str(out)])
+        for step in steps:
+            proc = subprocess.run([str(exe), *step], env=clean_env(), capture_output=True,
+                                  text=True)
+            if proc.returncode != 0:
+                raise SystemExit(f"the built program's {step[0]} failed (exit "
+                                 f"{proc.returncode}):\n{proc.stdout}{proc.stderr}")
         seconds = time.perf_counter() - t0
-        if proc.returncode != 0:
-            raise SystemExit(f"the built program's import failed (exit {proc.returncode}):\n"
-                             f"{proc.stdout}{proc.stderr}")
-        want = structure.convert(structure.read(example), charges).mfj.text()
-        if out.read_text(encoding="latin-1") != want:
-            raise SystemExit(f"the built program's import wrote {out}, which differs from the "
-                             "source tree's")
-        print(f"import: {example.name} --charges {charges} in {seconds:.2f} s, the source "
-              "tree's file")
+        # The ion file differs from the source tree's in when, by what and from which path it
+        # was written; what it holds, and the .mfj written from it, may not.
+        want = structure.convert(structure.read(example), charges)
+        got = ion.Ion.read(out)
+        mfj = work / f"{example.stem}_{charges}.mfj"
+        same = (got.mfj(parameters.shipped("he")) == want.mfj
+                and mfj.read_text(encoding="latin-1") == want.mfj.text()
+                and got.columns == want.ion.columns
+                and got.import_record["charges"] == want.record["charges"]
+                and got.import_record["source"]["sha256"] == want.record["source"]["sha256"])
+        if not same:
+            raise SystemExit(f"the built program's import wrote {out}, or its export {mfj}, "
+                             "which differs from the source tree's")
+        print(f"import and export: {example.name} --charges {charges} in {seconds:.2f} s, the "
+              "source tree's ion file and .mfj")
 
 
 def window_check() -> None:

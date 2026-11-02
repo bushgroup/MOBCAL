@@ -13,7 +13,9 @@
     mobcal gui [--check]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
     mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
-                  [-o OUT.mfj] [--force]
+                  [-o OUT.ion.json] [--force]
+    mobcal export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
+                  [--force]
 
 ``run`` takes input files (paths or globs), makes one job per input and seed, prints
 how they will use the cores and about how long they will take (``mobcal.estimate``), runs them
@@ -38,12 +40,14 @@ Jarrold group's 2000 helium table; ``2012``, the default for each gas,
 ``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the temperature and the
 five sampling counts, ``mobcal.settings``), which replaces the method's settings, and the six
 single-value options override either value by value. Its exit status is 1 if any run failed.
-``import`` writes a single-set ``.mfj`` from an ORCA or Gaussian output or an ``.xyz`` with the
-charges named by ``--charges`` (refused, listing what the file holds, until one is named), and
-its provenance record ``OUT.import.json`` beside it; ``mobcal.io.structure`` says what it reads
-and refuses, and an output of a version the import is not tested on is taken with a warning.
-With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default the file
-must run in both.
+``import`` writes an ion file, ``OUT.ion.json`` (``mobcal.io.ion``), from an ORCA or Gaussian
+output or an ``.xyz`` with the charges named by ``--charges`` (refused, listing what the file
+holds, until one is named), its provenance record inside it; ``mobcal.io.structure`` says what
+it reads and refuses, and an output of a version the import is not tested on is taken with a
+warning. With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default
+the file must run in both.
+``export`` writes the ``.mfj`` the 2012 program reads from an ion file, each element's key from
+the table of each gas asked for (both by default, which must agree), as a run stages it.
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
@@ -199,8 +203,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--settings", type=Path, default=None, metavar="PATH",
                    help="Write this settings file instead of the 2012 values.")
 
-    m = command("import", "Write an .mfj from an ORCA or Gaussian output or an .xyz file, with "
-                "the charges you name.")
+    m = command("import", "Write an ion file from an ORCA or Gaussian output or an .xyz file, "
+                "with the charges you name.")
     m.add_argument("source", type=Path, metavar="SOURCE",
                    help="An ORCA or Gaussian output, or an .xyz file.")
     m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
@@ -208,11 +212,23 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("net_charge"))
     m.add_argument("--gas", choices=(*fortran.GASES, "both"), default="both",
                    help="Whose element table the atoms must be in. Default: both.")
-    m.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
-                   help="The file to write, with its record beside it as OUT.import.json. "
-                        "Default: SOURCE-STEM_KEY.mfj in the current directory.")
+    m.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.ion.json",
+                   help="The ion file to write. Default: SOURCE-STEM_KEY.ion.json in the "
+                        "current directory.")
     m.add_argument("--force", action="store_true",
-                   help="Replace OUT.mfj and its record if they exist.")
+                   help="Replace OUT.ion.json if it exists.")
+
+    x = command("export", "Write the .mfj the 2012 program reads from an ion file.")
+    x.add_argument("ion", type=Path, metavar="ION.ion.json", help="The ion file.")
+    x.add_argument("--gas", choices=(*fortran.GASES, "both"), default="both",
+                   help="Whose element table gives each element its key; with both, each "
+                        "element must be in both tables. Default: both.")
+    x.add_argument("--parameters", default=None, metavar="PATH|NAME",
+                   help="This TOML file, or this shipped table by name "
+                        f"({options.set_names()}), instead of the gas's default table.")
+    x.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
+                   help="The file to write. Default: ION.mfj beside the ion file.")
+    x.add_argument("--force", action="store_true", help="Replace OUT.mfj if it exists.")
     return ap
 
 
@@ -309,6 +325,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "import":
         return _import(args)
 
+    if args.cmd == "export":
+        return _export(args)
+
     if args.cmd == "gui":
         from mobcal.app import main as gui
         return gui(sys.argv[:1], check=args.check)
@@ -345,21 +364,47 @@ def _import(args: argparse.Namespace) -> int:
     try:
         s = structure.read(args.source)
         imp = structure.convert(s, args.charges, args.net_charge, gases)
-        out = args.out or Path(f"{args.source.stem}_{args.charges}.mfj")
-        mfj, rec = structure.write(imp, out, overwrite=args.force)
+        out = structure.write(imp, args.out or structure.default_name(args.source, args.charges),
+                              overwrite=args.force)
     except (structure.StructureError, OSError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
     for w in s.warnings:
         print(f"warning: {w}", file=sys.stderr)
     c = imp.record["charges"]
-    print(f"wrote {mfj}: {imp.mfj.atoms} atoms from {s.path.name}"
+    print(f"wrote {out}: {imp.ion.atoms} atoms from {s.path.name}"
           + (f" ({s.program} {s.version})" if s.version else "")
           + f", {c['choice']} charges summing to {c['sum']:+.6f} (net charge "
-          f"{c['net_charge']:+d}), element keys of the "
+          f"{c['net_charge']:+d}), every element in the "
           f"{' and '.join(parameters.GAS[g] for g in gases)} table"
           f"{'s' if len(gases) > 1 else ''}")
-    print(f"wrote {rec}")
+    return 0
+
+
+def _export(args: argparse.Namespace) -> int:
+    from mobcal.io import ion
+    gases = tuple(fortran.GASES) if args.gas == "both" else (args.gas,)
+    name = args.ion.name
+    stem = name[:-len(ion.SUFFIX)] if name.endswith(ion.SUFFIX) else args.ion.stem
+    out = args.out or args.ion.with_name(stem + ".mfj")
+    try:
+        i = ion.Ion.read(args.ion)
+        tables = [parameters.load(parameters.path_for(args.parameters, g), gas=g)
+                  for g in gases]
+        written = {t.name: i.mfj(t) for t in tables}
+        first = next(iter(written.values()))
+        if any(m != first for m in written.values()):
+            raise ion.IonError(f"the tables {' and '.join(written)} give an element different "
+                               "keys; export for one gas")
+        if out.exists() and not args.force:
+            raise ion.IonError(f"{out} exists; not replacing it")
+        m = first.write(out)
+    except (ion.IonError, parameters.ParameterError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"wrote {m}: {i.atoms} atoms, {len(i.conformers)} conformer"
+          f"{'s' if len(i.conformers) > 1 else ''}, keys of the "
+          f"{' and '.join(repr(t.name) for t in tables)} table{'s' if len(tables) > 1 else ''}")
     return 0
 
 
