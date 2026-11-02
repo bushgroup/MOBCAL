@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/ion.schema.json",
+  "title": "mobcal-ion, version 1",
+  "description": "An ion's elements, conformer geometries and charges, and how they were made; the input from which MOBCAL writes the .mfj the 2012 program reads. docs/ion-file.md is the specification. This schema checks the structure; the cross-field rules (array lengths, the charge sum against molecular_charge, null charges only outside calc mode, conformer symbols beside per-atom columns) are checked by mobcal.io.ion and listed on that page.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "label", "molecular_charge", "units", "correction_factor",
+               "charge_mode", "symbols", "columns", "conformers", "written_by"],
+  "properties": {
+    "format": {"const": "mobcal-ion"},
+    "version": {"const": 1},
+    "label": {
+      "description": "Line 1 of the written .mfj: at most 30 characters, ISO 8859-1, no line break, no trailing blank; leading blanks are kept.",
+      "type": "string",
+      "maxLength": 30,
+      "pattern": "^[\\u0000-\\u0009\\u000b\\u000c\\u000e-\\u00ff]*$"
+    },
+    "comment": {"type": "string"},
+    "molecular_charge": {
+      "description": "The ion's net charge z in e, an integer, or null where it is not known.",
+      "type": ["integer", "null"]
+    },
+    "units": {"enum": ["angstrom", "bohr"]},
+    "correction_factor": {
+      "description": "Line 6 of the .mfj, which the program applies to every centred coordinate; stored, never applied.",
+      "type": "number"
+    },
+    "charge_mode": {"enum": ["calc", "equal", "none"]},
+    "symbols": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200000,
+      "items": {"$ref": "#/$defs/symbol"}
+    },
+    "masses": {"$ref": "#/$defs/reals"},
+    "mmff94_types": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "mmff94_alpha": {"$ref": "#/$defs/reals"},
+    "mmff94_n": {"$ref": "#/$defs/reals"},
+    "mmff94_a": {"$ref": "#/$defs/reals"},
+    "mmff94_g": {"$ref": "#/$defs/reals"},
+    "connectivity": {
+      "description": "Bonds as [i, j, order], atoms counted from 0, i < j.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {"type": "integer", "minimum": 0},
+          {"type": "integer", "minimum": 0},
+          {"type": "number", "exclusiveMinimum": 0}
+        ],
+        "minItems": 3,
+        "maxItems": 3
+      }
+    },
+    "columns": {
+      "description": "One declaration per optional column or table the file carries, and none for one it does not.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "charges": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "e"}}},
+        "masses": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "u"}}},
+        "mmff94_types": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "1"}}},
+        "mmff94_alpha": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "angstrom^3"}}},
+        "mmff94_n": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "1"}}},
+        "mmff94_a": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "1"}}},
+        "mmff94_g": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "1"}}},
+        "connectivity": {"$ref": "#/$defs/declared", "properties": {"unit": {"const": "1"}}}
+      }
+    },
+    "conformers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["geometry"],
+        "properties": {
+          "symbols": {
+            "description": "Present only where this conformer's atom order differs from the top-level symbols.",
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/symbol"}
+          },
+          "geometry": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "charges": {
+            "type": "array",
+            "items": {"type": ["number", "null"]}
+          }
+        }
+      }
+    },
+    "import": {
+      "description": "How the geometry and charges were made: the fields of the import record, by name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": ["path", "sha256", "program", "reader"],
+          "properties": {
+            "path": {"type": "string"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "program": {"type": "string"},
+            "version": {"type": ["string", "null"]},
+            "reader": {"type": "string"}
+          }
+        },
+        "charges": {
+          "type": "object",
+          "required": ["choice"],
+          "properties": {
+            "choice": {"type": "string"},
+            "net_charge_from": {"enum": ["output", "given", "charges", null]}
+          }
+        },
+        "elements": {
+          "type": "object",
+          "required": ["keys", "tables"],
+          "properties": {
+            "keys": {
+              "type": "object",
+              "propertyNames": {"$ref": "#/$defs/symbol"},
+              "additionalProperties": {"type": "integer"}
+            },
+            "tables": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["name", "sha256"],
+                "properties": {
+                  "name": {"type": ["string", "null"]},
+                  "sha256": {"$ref": "#/$defs/sha256"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "written": {"type": "string", "format": "date-time"},
+    "written_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program", "version", "commit"],
+      "properties": {
+        "program": {"type": "string"},
+        "version": {"type": "string"},
+        "commit": {"type": ["string", "null"], "pattern": "^[0-9a-f]{40}(-dirty)?$"}
+      }
+    }
+  },
+  "$defs": {
+    "symbol": {"type": "string", "pattern": "^[A-Z][a-z]?$"},
+    "reals": {"type": "array", "items": {"type": "number"}},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "source"],
+      "properties": {
+        "unit": {"type": "string"},
+        "source": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
