@@ -91,8 +91,10 @@ the same coordinates, element keys and charges on every atom.
 
 **The label.** Line 1 of a `.mfj` is read as the first 30 characters of the line, with leading
 blanks kept and trailing blanks dropped, and the 2012 program prints it in its output. The ion
-file stores the label as that line will be written: at most 30 characters, no line break, no
-trailing blank, and only characters of ISO 8859-1 (the `.mfj` is written in that encoding). The
+file stores the label as that line will be written: at most 30 characters, no line break (none
+of the characters U+000A to U+000D, U+001C to U+001E and U+0085, each of which ends a line for
+some reader), no trailing blank, and only characters of ISO 8859-1 (the `.mfj` is written in
+that encoding). The
 label is never derived from the file's name when the `.mfj` is written, so renaming an ion file
 does not change a run's input. `mobcal import` chooses the label once, as the source file's
 stem and the charge choice joined by `_` with every blank or non-printing character replaced by
@@ -127,7 +129,10 @@ when such a file is read. A file whose conformers carry their own `symbols` cann
 per-atom columns `masses`, `mmff94_*` or `connectivity`, which would then be ambiguous.
 
 Every real is a JSON number, read as a double precision value; an integer literal such as `0`
-stands for the same real as `0.0`. `NaN` and `Infinity` are not JSON and are refused.
+stands for the same real as `0.0`. `NaN` and `Infinity` are not JSON and are refused, and so is
+a number too large for a double. MOBCAL writes every real as the shortest decimal that reads
+back as the same double, two spaces of indent, and an array of numbers or strings on one line,
+so that each atom's coordinates take one line of the file.
 
 ## Charges
 
@@ -227,7 +232,12 @@ its shipped element tables, which agree on every key they share (1 H, 12 C, 14 N
 23 Na, 28 Si, 31 P, 32 S, 56 Fe); a key no table defines is refused. The tables used are named
 under `import.elements`. When every coordinate set has a charge on every atom and every set's
 charges sum to the same integer within 0.001 e, that integer becomes `molecular_charge`, with
-`net_charge_from` set to `charges`; otherwise it is `null`.
+`net_charge_from` set to `charges`; otherwise it is `null`. The charge column is declared with
+the `.mfj`'s name and charge mode as its source, `import.charges.choice` is `column`, and
+`import.source` records the `.mfj`'s full path and SHA-256 with `mfj` as its program. A
+coordinate set whose atoms come in another order than the first set's keeps that order in its
+own `symbols`, and an atom line with four fields becomes a `null` charge, so that nothing the
+program reads is lost.
 
 ## What a reader refuses
 
@@ -235,19 +245,29 @@ MOBCAL refuses a file, naming the field, when
 
 - `format` is not `mobcal-ion`, or `version` is not one this version of MOBCAL reads (a file of
   version 2 is refused by name, not read as version 1);
+- the file is not JSON, holds `NaN`, `Infinity` or a number too large for a double, or names
+  the same key twice in one object;
 - a key appears that this page does not define, anywhere outside `import.source`;
-- a required field is missing, or a value has the wrong type;
+- a required field is missing, or a value has the wrong type (`true` is not a number, and
+  `1.5` is not an integer);
 - `label` is longer than 30 characters, holds a line break or a character outside ISO 8859-1,
   or ends in a blank;
 - a symbol is not one or two letters in standard case;
 - there are no conformers or more than 100, no atoms or more than 200,000, or a conformer's
   `geometry`, `charges` or `symbols`, or a top-level column, does not have one entry per atom;
-- a column is present without its declaration in `columns`, or declared and absent;
+- a column is present without its declaration in `columns`, or declared and absent, or
+  declared with a unit other than its own or an empty `source`;
+- an MMFF94 type is below 1;
 - `charge_mode` is `calc` and an atom of any conformer has no charge;
 - `molecular_charge` is an integer, `charge_mode` is `calc`, and a conformer's charges sum to a
   value more than 0.001 e from it;
 - a conformer carries its own `symbols` and the file carries a per-atom column;
-- a bond names an atom that does not exist, or names its atoms out of order.
+- a bond names an atom that does not exist, names its atoms out of order, or has an order
+  that is not positive;
+- `written` is not an ISO 8601 date and time, `written_by.commit` is neither null nor 40
+  hexadecimal digits (with `-dirty`), or a SHA-256 under `import` is not 64 lowercase
+  hexadecimal digits.
 
 Writing the `.mfj` refuses, in addition, an element the run's table lacks and, for a nitrogen
-run, a first conformer without a charge on every atom.
+run, a first conformer without a charge on every atom. MOBCAL never replaces an existing ion
+file unless it is told to.

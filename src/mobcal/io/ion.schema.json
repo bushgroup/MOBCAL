@@ -11,10 +11,11 @@
     "format": {"const": "mobcal-ion"},
     "version": {"const": 1},
     "label": {
-      "description": "Line 1 of the written .mfj: at most 30 characters, ISO 8859-1, no line break, no trailing blank; leading blanks are kept.",
+      "description": "Line 1 of the written .mfj: at most 30 characters, ISO 8859-1, no line break (none of U+000A to U+000D, U+001C to U+001E, U+0085), no trailing blank; leading blanks are kept.",
       "type": "string",
       "maxLength": 30,
-      "pattern": "^[\\u0000-\\u0009\\u000b\\u000c\\u000e-\\u00ff]*$"
+      "pattern": "^[\\u0000-\\u0009\\u000e-\\u001b\\u001f-\\u0084\\u0086-\\u00ff]*$",
+      "not": {"pattern": " $"}
     },
     "comment": {"type": "string"},
     "molecular_charge": {
@@ -119,14 +120,22 @@
         },
         "charges": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["choice"],
           "properties": {
             "choice": {"type": "string"},
-            "net_charge_from": {"enum": ["output", "given", "charges", null]}
+            "net_charge": {"type": ["integer", "null"]},
+            "net_charge_from": {"enum": ["output", "given", "charges", null]},
+            "sum": {"type": "number"},
+            "difference": {"type": "number"},
+            "tolerance": {"type": "number"},
+            "available": {"type": "array", "items": {"type": "string"}},
+            "refused": {"type": "object", "additionalProperties": {"type": "string"}}
           }
         },
         "elements": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["keys", "tables"],
           "properties": {
             "keys": {
@@ -138,6 +147,7 @@
               "type": "object",
               "additionalProperties": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": ["name", "sha256"],
                 "properties": {
                   "name": {"type": ["string", "null"]},
