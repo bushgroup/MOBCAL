@@ -69,7 +69,11 @@ from mobcal.settings import DEFAULTS, Settings
 # atom helium point is a 40-way split of 2026-10-23, scaled by the ratio of the two measurements
 # at 1,000 atoms. Out of sample, the 2000 release's 104-atom example lies within 10 % of the
 # curve per set, and the model is 5 to 20 % above single serial runs of choline in both gases
-# and of that example, which ran with less else on the machine.
+# and of that example, which ran with less else on the machine. Each run had a physical core
+# to itself; with all 40 busy a trajectory costs 11 to 30 % more, and with all 80 hyperthreads
+# busy a run takes 1.5 to 1.7 times as long (lab record, task 47). The globules carry no net
+# charge, and a 433-atom protein ion 4+ in nitrogen costs 1.6 to 1.9 times the curve (lab
+# record, task 52, open).
 COSTS: dict[str, tuple[tuple[int, float, float], ...]] = {
     "he": ((21, 2.25, 4.81e-4), (30, 3.10, 6.24e-4), (100, 9.08, 2.06e-3),
            (300, 26.6, 6.43e-3), (1000, 90.4, 2.31e-2), (10000, 1017.0, 0.272)),
