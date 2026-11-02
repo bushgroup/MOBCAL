@@ -579,25 +579,111 @@ def test_a_split_pays_the_prologue_twice():
     assert c.wall() == 410.0 and c.wall(1) == 410.0 and c.wall(40) == 30.0
 
 
+def test_a_split_waits_on_its_costliest_block():
+    c = estimate.Cost(10.0, 400.0, floor=30.0)
+    assert c.wall(10) == 60.0 and c.wall(40) == 50.0  # 2 * 10 + max(400 / W, 30)
+    assert c.widest == pytest.approx(400 / 30) and c.efficiency(10) == pytest.approx(410 / 600)
+    assert estimate.Cost(10.0, 400.0).widest == float("inf")
+    # The floor is the slowest velocity point's block: SLOWEST times the mean block, per set.
+    two = estimate.cost(21, 2, "n2")
+    assert two.floor == pytest.approx(2 * 3.4 * settings.DEFAULTS.imp * 1.148e-2)
+
+
 def test_allocation(tmp_path):
+    """The throughput mode is the rule --split auto had before the modes."""
     jobs = [Job(CHOLINE, "he", s, tmp_path) for s in range(4)]
-    one = estimate.allocate(jobs[:1], cpus=80)
+    most = estimate.THROUGHPUT
+    one = estimate.allocate(jobs[:1], cpus=80, mode=most)
     assert one.workers == 1 and one.jobs[0].split == estimate.MAX_SPLIT
-    four = estimate.allocate(jobs, cpus=80)
+    four = estimate.allocate(jobs, cpus=80, mode=most)
     assert four.workers == 4 and {j.split for j in four.jobs} == {20}
-    many = estimate.allocate(jobs, cpus=4)
+    many = estimate.allocate(jobs, cpus=4, mode=most)
     assert many.workers == 4 and {j.split for j in many.jobs} == {None}
-    two_cores = estimate.allocate(jobs[:1], cpus=2)
+    two_cores = estimate.allocate(jobs[:1], cpus=2, mode=most)
     assert two_cores.jobs[0].split == 2  # 2 * 2.25 + 192 / 2 is well under 0.8 * 194.6
     # The prologue dominating, as in the 2000 release's example at imp 25 with its projection
-    # pass per set: no split however many cores.
+    # pass per set: no split however many cores, in any mode.
     st = settings.resolve(None, imp=1)
-    lean = estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)], cpus=80)
-    assert lean.jobs[0].split is None
-    # A split never exceeds the blocks there are to deal.
-    st = settings.resolve(None, itn=1, inp=5)
-    assert estimate.allocate([Job(CHOLINE, "n2", 1, tmp_path, settings=st)],
-                             cpus=80).jobs[0].split == 5
+    for mode in estimate.MODES:
+        lean = estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)], cpus=80,
+                                 mode=mode)
+        assert lean.jobs[0].split is None
+    # A split never exceeds what its costliest block lets it use, which is never more than
+    # the blocks there are to deal: 5 blocks, the slowest twice the mean in helium, so 3.
+    st = settings.resolve(None, itn=1, inp=5, imp=100_000)
+    assert estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)],
+                             cpus=80).jobs[0].split == 3
+    with pytest.raises(ValueError, match="mode must be one of"):
+        estimate.allocate(jobs, cpus=8, mode="fastest")
+
+
+# (gas, cores, mode) -> (runs at once, split) for 1, 8, 40 and 80 choline runs at the 2012
+# settings; None is one process per run.
+MODES = {
+    ("he", 8, "in-order"): [(1, 8)] * 4,
+    ("he", 8, "balanced"): [(1, 8)] * 4,
+    ("he", 8, "throughput"): [(1, 8), (8, None), (8, None), (8, None)],
+    ("he", 40, "in-order"): [(1, 40)] * 4,
+    ("he", 40, "balanced"): [(1, 40), (3, 13), (3, 13), (3, 13)],
+    ("he", 40, "throughput"): [(1, 40), (8, 5), (40, None), (40, None)],
+    ("n2", 8, "in-order"): [(1, 8)] * 4,
+    ("n2", 8, "balanced"): [(1, 8)] * 4,
+    ("n2", 8, "throughput"): [(1, 8), (8, None), (8, None), (8, None)],
+    ("n2", 40, "in-order"): [(1, 40)] * 4,
+    ("n2", 40, "balanced"): [(1, 40)] * 4,
+    ("n2", 40, "throughput"): [(1, 40), (8, 5), (40, None), (40, None)],
+}
+
+
+@pytest.mark.parametrize("gas, cores, mode", list(MODES))
+def test_each_mode_allocates(tmp_path, gas, cores, mode):
+    for n, (workers, split) in zip((1, 8, 40, 80), MODES[(gas, cores, mode)], strict=True):
+        p = estimate.allocate([Job(CHOLINE, gas, s, tmp_path) for s in range(n)], cpus=cores,
+                              mode=mode)
+        assert (p.workers, {j.split for j in p.jobs}) == (workers, {split}), n
+        assert p.mode == mode and p.processes <= cores
+        assert f"({estimate.MODE_TITLES[mode].lower()})" in estimate.describe(p)
+
+
+def test_the_balanced_mode_keeps_its_efficiency(tmp_path):
+    p = estimate.allocate([Job(CHOLINE, "he", s, tmp_path) for s in range(12)], cpus=40)
+    c = estimate.cost(21, 1, "he")
+    w = p.jobs[0].split
+    assert p.mode == estimate.DEFAULT_MODE == estimate.BALANCED
+    assert c.efficiency(w) >= estimate.BALANCE > c.efficiency(40 // (p.workers - 1))
+
+
+def test_cores_a_run_cannot_use_take_another_run(tmp_path):
+    """Finish in order, a run whose costliest block caps its split leaves cores over, and they
+    take a further run at the same split: 40 blocks, the slowest 3.4 times the mean, so 12."""
+    st = settings.resolve(None, itn=1)
+    jobs = [Job(CHOLINE, "n2", s, tmp_path, settings=st) for s in range(4)]
+    p = estimate.allocate(jobs, cpus=40, mode=estimate.IN_ORDER)
+    assert p.workers == 3 and {j.split for j in p.jobs} == {12}
+
+
+def test_cores_are_physical_with_a_fallback(monkeypatch):
+    monkeypatch.setattr(run.psutil, "cpu_count", lambda logical=True: 40 if not logical else 80)
+    monkeypatch.setattr(run.os, "cpu_count", lambda: 80)
+    assert run.cores() == 40 and run.processors() == 80
+    monkeypatch.setattr(run.psutil, "cpu_count", lambda logical=True: None)
+    assert run.cores() == 80
+    monkeypatch.setattr(run.os, "cpu_count", lambda: None)
+    assert run.cores() == 1 and run.processors() == 1
+    assert estimate.allocate([], mode=estimate.IN_ORDER).cpus == 1
+
+
+def test_the_mode_on_the_command_line(tmp_path):
+    def args(*argv):
+        return cli.parser().parse_args(["run", str(CHOLINE), *argv])
+
+    a = args("--mode", "in-order")
+    assert cli.batch_from_args(a).split == batch.AUTO and a.mode == "in-order"
+    assert cli.batch_from_args(args()).split is None  # no --mode, no --split: one process
+    with pytest.raises(cli.UsageError, match="--mode chooses under --split auto"):
+        cli.batch_from_args(args("--mode", "balanced", "--split", "4"))
+    with pytest.raises(SystemExit):
+        args("--mode", "fastest")
 
 
 def test_the_estimate_follows_the_queue(tmp_path):

@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from mobcal import estimate, methods, parameters
-from mobcal.batch import DEFAULT_SEED
+from mobcal.batch import AUTO, DEFAULT_SEED
 
 
 @dataclass(frozen=True)
@@ -59,11 +59,12 @@ _METHOD = {
 }
 assert set(_METHOD) == set(methods.METHODS)
 
-# How the batch divides the processors when it chooses (mobcal.estimate.allocate), shared by
-# --split auto and the window's check box.
+# How the batch divides the cores when it chooses (mobcal.estimate.allocate), shared by
+# --split auto and the window's check box; the mode's entry says how each mode weighs it.
 AUTO_RULE = ("chooses the runs in flight and the processes per run from the run count, the "
-             "processors and the ion sizes, dividing a run among at most "
-             f"{estimate.MAX_SPLIT} processes and only when that saves at least "
+             "processor cores and the ion sizes, in the mode chosen, dividing a run among at "
+             f"most {estimate.MAX_SPLIT} processes, no more than its slowest block of "
+             "trajectories lets it use, and only when that saves at least "
              f"{1 - estimate.MIN_GAIN:.0%} of its time")
 
 SHARED = {
@@ -113,6 +114,20 @@ SHARED = {
         "helium program alone makes."),
     "inor": Description(
         "The most reflections followed per trajectory of the exact hard-sphere pass."),
+    "mode": Description(
+        "How a batch of more runs than fit at once uses the processor cores. Finish in order "
+        "runs one at a time, divided among every core it can use, so runs complete one after "
+        "another and a pause waits for the run in flight. Balanced runs as many at once as keeps "
+        f"each divided run at least {estimate.BALANCE:.0%} efficient (its time as one process, "
+        "over the processes times its divided time): on a 40-core workstation, three choline "
+        "runs at once in helium and one in nitrogen, and on 8 cores one at a time. Most "
+        "throughput runs one process per run when there are at least as many runs as cores, "
+        "which finishes the batch soonest and no run before the first wave ends. The counts "
+        "are physical cores, not the logical processors hyperthreading doubles, which add a "
+        "quarter to a third more throughput and make every run take about half as long again.",
+        cli=f"in-order, balanced or throughput; given alone, it implies --split {AUTO}.",
+        window="It is a preference of the window, kept for the next launch, and a batch "
+               "waiting in the queue starts under the mode chosen when it starts."),
     "workers": Description(
         "How many runs are in flight at once.",
         window="Set here when the box above is unchecked."),

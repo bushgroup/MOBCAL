@@ -6,26 +6,48 @@ asymmetry scan, in helium the projection and hard-sphere pass (``inum`` trajecto
 orientation, the velocity grid and the b2max search; the second is ``itn * inp * imp``
 trajectories at a cost per trajectory that grows with the atom count. A serial run pays
 ``prologue + trajectories``. A run split across W processes pays the prologue in every worker
-and once more in the combining run, so its wall is ``2 * prologue + trajectories / W``
-(``notes``: within-run parallelism, measured within 10 % of this at W = 10 and 20 for choline
-and at W = 40 for a 1e4-atom ion). Splitting therefore pays when the trajectories dominate and
-not when the prologue does (the 2000 release's example at ``imp`` 25 is the latter), and never
-past about 25 times however many processes are given: the doubled prologue is the floor.
+and once more in the combining run, and its workers, claiming blocks slowest velocity point
+first, end within a fraction of a block of each other unless one block outlasts the even
+share, so its wall is ``2 * prologue + max(trajectories / W, floor)``, the floor being the
+costliest block (the slowest velocity point's, ``SLOWEST`` times the mean block, summed over
+the sets). Measured (lab record, task 47: the claimed dealing on one workstation, choline in
+helium and nitrogen at W = 10, 20 and 40 and a 433-atom protein ion in nitrogen at W = 20 and
+40) this is within -14 to +4 % of every wall given each run's own costs; without the floor the
+protein ion at W = 40 was 39 % under. Splitting therefore pays when the trajectories dominate
+and not when the prologue does (the 2000 release's example at ``imp`` 25 is the latter), not
+past ``trajectories / floor`` processes, and never past about 25 times however many are given.
 
 ``COSTS`` holds the measured points per gas: atoms, the prologue per set at the 2012 ``inum``,
 and seconds per trajectory, on one workstation (Windows 11, 80 threads, MSYS2 gfortran 16.2.0,
 the recorded flags). Between points the model interpolates on log-log axes and beyond them
 extrapolates with the end slope; a gas with fewer points borrows helium's slopes. In helium
 ``PROJECTION_SHARE`` of the prologue scales with ``inum``. A machine slower or faster than that
-workstation scales every number, which is why the estimate is printed as "about".
+workstation scales every number, which is why the estimate is printed as "about". The costs
+hold with a core per process: with every core busy a trajectory costs 11 to 30 % more on that
+workstation, and with every hyperthread busy as well each run takes about 1.5 times as long.
+The carbon globules carry no charge, and a charged protein ion of 433 atoms in nitrogen costs
+1.6 to 1.9 times what the curve gives (lab record, task 52, open).
 
-``allocate`` is ``--split auto`` and the window's default: with at least as many runs as cores,
-one process per run; with fewer, every run at once, each split across its share of the cores
-(at most ``MAX_SPLIT``) when the model says splitting saves at least a fifth of its wall.
+``allocate`` is ``--split auto`` and the window's default, in one of three ``MODES``, counting
+physical cores (``mobcal.run.cores``). A run is split only when the model says that saves at
+least a fifth of its wall (``MIN_GAIN``), and across at most ``MAX_SPLIT`` processes, the
+blocks it has, and ``trajectories / floor`` rounded up.
+
+- ``throughput``: with at least as many runs as cores, one process per run; with fewer, every
+  run at once, each split across its share of the cores. Nothing finishes before the first
+  wave, which on a long batch is hours.
+- ``in-order``: one run at a time across every core it can use; cores it cannot use (the floor
+  cap) take further runs at the same split.
+- ``balanced`` (the default): the fewest runs at once whose share of the cores keeps every
+  run's efficiency, serial wall / (W * split wall), at least ``BALANCE``; a batch of no more
+  runs than that is run as ``throughput`` runs it. On a 40-core workstation choline in helium
+  goes three at a time across 13 processes, in nitrogen one at a time across 40, and the
+  433-atom ion two at a time across 19; on 8 cores each goes one at a time across 8.
+
 Split equals serial to the bit, so the rule moves time and never a number.
 
     from mobcal import estimate
-    plan = estimate.allocate(jobs, cpus=os.cpu_count())
+    plan = estimate.allocate(jobs, mode="balanced")
     print(estimate.describe(plan))
 """
 
@@ -34,12 +56,11 @@ from __future__ import annotations
 import dataclasses
 import heapq
 import math
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from mobcal.io.mfj import Mfj, MfjError
-from mobcal.run import Job
+from mobcal.run import Job, cores
 from mobcal.settings import DEFAULTS, Settings
 
 # (atoms, prologue seconds per coordinate set at inum 250,000, seconds per trajectory). Measured
@@ -55,9 +76,22 @@ COSTS: dict[str, tuple[tuple[int, float, float], ...]] = {
     "n2": ((21, 7.78, 1.148e-2), (30, 11.55, 1.673e-2), (100, 37.5, 5.56e-2),
            (300, 117.3, 0.1744)),
 }
+# (atoms, the slowest velocity point's block over the mean block). Measured 2026-11-01 and -02
+# from the block files of split runs (lab record, tasks 46 and 47): choline 1.96 in helium and
+# 3.0 to 3.4 in nitrogen; a 433-atom protein ion 4+ in nitrogen 4.3 to 4.6.
+SLOWEST: dict[str, tuple[tuple[int, float], ...]] = {
+    "he": ((21, 2.0),),
+    "n2": ((21, 3.4), (433, 4.4)),
+}
 PROJECTION_SHARE = 0.77  # of the helium prologue that scales with inum: 0.72 to 0.78 measured
 MAX_SPLIT = 40  # past this the shares are under ten blocks and the doubled prologue dominates
 MIN_GAIN = 0.8  # split only when the split wall is at most this fraction of the serial wall
+BALANCE = 0.7  # the balanced mode's least efficiency, serial wall / (W * split wall)
+
+IN_ORDER, BALANCED, THROUGHPUT = "in-order", "balanced", "throughput"
+MODES = (IN_ORDER, BALANCED, THROUGHPUT)
+DEFAULT_MODE = BALANCED
+MODE_TITLES = {IN_ORDER: "Finish in order", BALANCED: "Balanced", THROUGHPUT: "Most throughput"}
 
 
 def _interp(points: Sequence[tuple[float, float]], x: float) -> float:
@@ -84,11 +118,27 @@ class Cost:
     """One run's cost on the reference workstation, all coordinate sets."""
     prologue: float  # seconds each process pays before its trajectories
     trajectories: float  # seconds of the trajectory method, serial
+    floor: float = 0.0  # seconds of the costliest block, summed over the sets
 
     def wall(self, split: int | None = None) -> float:
         if not split or split == 1:
             return self.prologue + self.trajectories
-        return 2 * self.prologue + self.trajectories / split
+        return 2 * self.prologue + max(self.trajectories / split, self.floor)
+
+    def efficiency(self, split: int) -> float:
+        """Serial wall / (W * split wall): 1 for a run that loses nothing to the split."""
+        return self.wall() / (split * self.wall(split))
+
+    @property
+    def widest(self) -> float:
+        """The split past which the floor holds the wall: trajectories / floor."""
+        return self.trajectories / self.floor if self.floor else math.inf
+
+
+def slowest(gas: str, atoms: int) -> float:
+    """The slowest velocity point's block over the mean block (``SLOWEST``)."""
+    pts = SLOWEST[gas] if gas in SLOWEST else SLOWEST["he"]
+    return _interp([(float(a), k) for a, k in pts], atoms)
 
 
 def cost(atoms: int, sets: int, gas: str, settings: Settings = DEFAULTS) -> Cost:
@@ -96,7 +146,8 @@ def cost(atoms: int, sets: int, gas: str, settings: Settings = DEFAULTS) -> Cost
     if gas == "he":
         prologue *= (1 - PROJECTION_SHARE) + PROJECTION_SHARE * settings.inum / DEFAULTS.inum
     tau = _curve(gas, 2, atoms)
-    return Cost(sets * prologue, sets * settings.points * tau)
+    return Cost(sets * prologue, sets * settings.points * tau,
+                sets * slowest(gas, atoms) * settings.imp * tau)
 
 
 def job_cost(job: Job, sizes: dict | None = None) -> Cost | None:
@@ -121,6 +172,7 @@ class Plan:
     walls: tuple[float | None, ...]  # each job's estimated wall, None if unknown
     seconds: float  # the batch's estimated wall
     prologue: float  # the longest per-process prologue in the batch
+    mode: str | None = None  # the mode that chose the allocation; None when set by hand
 
     @property
     def processes(self) -> int:
@@ -148,26 +200,56 @@ def plan(jobs: Sequence[Job], workers: int, cpus: int | None = None,
     walls = tuple(None if c is None else c.wall(j.split) for j, c in zip(jobs, costs, strict=True))
     seconds = _makespan([w or 0.0 for w in walls], workers)
     prologue = max((c.prologue for c in costs if c is not None), default=0.0)
-    return Plan(tuple(jobs), workers, cpus or os.cpu_count() or 1, walls, seconds, prologue)
+    return Plan(tuple(jobs), workers, cpus or cores(), walls, seconds, prologue)
 
 
-def allocate(jobs: Sequence[Job], cpus: int | None = None, sizes: dict | None = None) -> Plan:
-    """``--split auto``: how many runs at once and each one's split, with the estimate."""
-    cpus = max(1, cpus or os.cpu_count() or 1)
+def _split(job: Job, c: Cost | None, share: int) -> int | None:
+    """The split a job takes on ``share`` cores, None for one process: at most ``MAX_SPLIT``,
+    its blocks and the floor's widest split, and only when it saves ``1 - MIN_GAIN``."""
+    if c is None:
+        return None
+    w = min(share, MAX_SPLIT, job.settings.blocks_per_set, math.ceil(c.widest))
+    return w if (w > 1 and c.wall(w) <= MIN_GAIN * c.wall()) else None
+
+
+def _balanced_runs(jobs: Sequence[Job], costs: Sequence[Cost | None], cpus: int) -> int:
+    """The fewest runs at once whose share of the cores keeps every job's efficiency at least
+    ``BALANCE``; a job that would not split constrains nothing."""
+    for n in range(1, cpus + 1):
+        splits = [_split(j, c, cpus // n) for j, c in zip(jobs, costs, strict=True)]
+        if all(w is None or c.efficiency(w) >= BALANCE
+               for w, c in zip(splits, costs, strict=True)):
+            return n
+    return cpus
+
+
+def allocate(jobs: Sequence[Job], cpus: int | None = None, sizes: dict | None = None,
+             mode: str = DEFAULT_MODE) -> Plan:
+    """``--split auto``: how many runs at once and each one's split, with the estimate, in one
+    of ``MODES``."""
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {', '.join(MODES)}, not {mode!r}")
+    cpus = max(1, cpus or cores())
     jobs = list(jobs)
     if not jobs:
-        return Plan((), 1, cpus, (), 0.0, 0.0)
-    if len(jobs) >= cpus:
-        return plan([dataclasses.replace(j, split=None) for j in jobs], cpus, cpus, sizes)
-    share = min(cpus // len(jobs), MAX_SPLIT)
+        return Plan((), 1, cpus, (), 0.0, 0.0, mode)
     sizes = {} if sizes is None else sizes
-    out = []
-    for j in jobs:
-        c = job_cost(j, sizes)
-        w = min(share, j.settings.blocks_per_set)
-        split = w if (c is not None and w > 1 and c.wall(w) <= MIN_GAIN * c.wall()) else None
-        out.append(dataclasses.replace(j, split=split))
-    return plan(out, len(out), cpus, sizes)
+    costs = [job_cost(j, sizes) for j in jobs]
+    runs = {IN_ORDER: lambda: 1, BALANCED: lambda: _balanced_runs(jobs, costs, cpus),
+            THROUGHPUT: lambda: len(jobs)}[mode]()
+    if mode != IN_ORDER and len(jobs) <= runs:  # throughput, or balanced with few runs
+        if len(jobs) >= cpus:
+            out = [dataclasses.replace(j, split=None) for j in jobs]
+            return dataclasses.replace(plan(out, cpus, cpus, sizes), mode=mode)
+        share = cpus // len(jobs)
+        out = [dataclasses.replace(j, split=_split(j, c, share))
+               for j, c in zip(jobs, costs, strict=True)]
+        return dataclasses.replace(plan(out, len(out), cpus, sizes), mode=mode)
+    out = [dataclasses.replace(j, split=_split(j, c, cpus // runs))
+           for j, c in zip(jobs, costs, strict=True)]
+    widest = max(j.split or 1 for j in out)
+    workers = min(len(out), max(runs, cpus // widest))  # cores a run cannot use take another
+    return dataclasses.replace(plan(out, workers, cpus, sizes), mode=mode)
 
 
 def duration(seconds: float) -> str:
@@ -191,6 +273,8 @@ def describe(p: Plan) -> str:
         across = splits[0] if len(splits) == 1 else f"{splits[0]} to {splits[-1]}"
         every = all(j.split for j in p.jobs)
         how += f", {'each' if every else 'some'} across {across} processes"
+    if p.mode:
+        how += f" ({MODE_TITLES[p.mode].lower()})"
     if any(w is None for w in p.walls):
         return how + "; no estimate for an input that cannot be read"
     line = f"{how}; about {duration(p.seconds)}"

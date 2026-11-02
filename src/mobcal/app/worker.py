@@ -30,12 +30,14 @@ class BatchWorker(QThread):
     failed = Signal(str)  # the batch could not run at all
 
     def __init__(self, batch: Batch, sizes: dict | None = None,
-                 launcher: Launcher | None = None, cpus: int | None = None) -> None:
+                 launcher: Launcher | None = None, cpus: int | None = None,
+                 mode: str = estimate.DEFAULT_MODE) -> None:
         super().__init__()
         self.batch = batch
         self._sizes = dict(sizes or {})
         self._launcher = launcher
         self._cpus = cpus
+        self._mode = mode
         self._stop = Stop()
         self.summary: Summary | None = None
 
@@ -64,7 +66,8 @@ class BatchWorker(QThread):
                 self.failed.emit("nothing to run: the folder holds every run of this batch "
                                  "complete")
                 return
-            plan: estimate.Plan = self.batch.plan(self._cpus, jobs=jobs, sizes=self._sizes)
+            plan: estimate.Plan = self.batch.plan(self._cpus, jobs=jobs, sizes=self._sizes,
+                                                  mode=self._mode)
             self.planned.emit(plan)
             summary = run_many(plan.jobs, plan.workers, progress=self._landed,
                                launcher=self._launcher, blocks=self._blocks,

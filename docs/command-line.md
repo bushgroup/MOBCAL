@@ -49,9 +49,10 @@ Run calculations in parallel, one process per run.
 
 ```
 usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
-                  [--workers N] [--split W|auto] [--dealing {static,claimed}]
-                  [--parameters PATH|NAME] [--out DIR] [--skip-done] [--settings PATH]
-                  [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
+                  [--workers N] [--split W|auto] [--mode {in-order,balanced,throughput}]
+                  [--dealing {static,claimed}] [--parameters PATH|NAME] [--out DIR]
+                  [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N]
+                  [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
@@ -59,8 +60,9 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
 - `--method KEY|PATH`: A preset of the gas, the element table, the random number generator and the six run settings. The methods are 2012-he, the 2012 release's calculation in helium, its element table and settings under RANLUX; 2012-n2, the same in nitrogen; 2012-philox-he, the 2012 helium table and settings under Philox4x32-10; 2012-philox-n2, the same in nitrogen; 2000-he, the 2000 helium release's calculation, its table at 298 K and 25 trajectories per block under RANLUX; or the path of a method file. A table, generator or setting given beside it overrides it, and the run records custom. Default: 2012-philox-he.
 - `--seeds N[,N...]`: One run of each ion for every seed; the 2012 seed is 5013489. A list of integers separated by commas. Default: 5013489.
 - `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under 2012-philox-he.
-- `--workers N`: How many runs are in flight at once. Default: the number of processors divided by the processes per run, or under `--split` auto, the number it chooses.
-- `--split W|auto`: How many processes each calculation is divided among. A divided run gives the serial result exactly. W processes, or auto, which chooses the runs in flight and the processes per run from the run count, the processors and the ion sizes, dividing a run among at most 40 processes and only when that saves at least 20% of its time. Default: 1, one process per calculation.
+- `--workers N`: How many runs are in flight at once. Default: the number of processor cores divided by the processes per run, or under `--split` auto, the number it chooses.
+- `--split W|auto`: How many processes each calculation is divided among. A divided run gives the serial result exactly. W processes, or auto, which chooses the runs in flight and the processes per run from the run count, the processor cores and the ion sizes, in the mode chosen, dividing a run among at most 40 processes, no more than its slowest block of trajectories lets it use, and only when that saves at least 20% of its time. Default: 1, one process per calculation.
+- `--mode {in-order,balanced,throughput}`: How a batch of more runs than fit at once uses the processor cores. Finish in order runs one at a time, divided among every core it can use, so runs complete one after another and a pause waits for the run in flight. Balanced runs as many at once as keeps each divided run at least 70% efficient (its time as one process, over the processes times its divided time): on a 40-core workstation, three choline runs at once in helium and one in nitrogen, and on 8 cores one at a time. Most throughput runs one process per run when there are at least as many runs as cores, which finishes the batch soonest and no run before the first wave ends. The counts are physical cores, not the logical processors hyperthreading doubles, which add a quarter to a third more throughput and make every run take about half as long again. in-order, balanced or throughput; given alone, it implies `--split` auto. Default: balanced.
 - `--dealing {static,claimed}`: How a divided calculation shares its blocks of trajectories among its processes. Static gives each process a fixed share. Claimed lets each process take the next block no other has taken, so the processes finish together and one slowed by other work does not set the run's time. The result is the same either way. static or claimed. Default: claimed.
 - `--parameters PATH|NAME`: The element table, which gives each atom of the ion its mass and its Lennard-Jones and hard-sphere parameters in the gas: a table the package ships, or a TOML file of one's own for one gas. A path to a table for the method's gas, or a shipped table by name: 2012 (He, N2), 2000 (He). Default: the method's, 2012 under 2012-philox-he.
 - `--out DIR`: The folder for a study: each batch adds its run directories here, and summary.csv and summary.json are rewritten to cover every run it holds. Default: runs/.

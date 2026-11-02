@@ -25,6 +25,7 @@ classifiers = [
 # and only mobcal.app imports it, so `mobcal run` never loads Qt either.
 dependencies = [
     "cclib==1.9rc1",
+    "psutil~=7.1",
     "PySide6-Essentials~=6.11.2",
 ]
 

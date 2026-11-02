@@ -5,7 +5,8 @@
     mobcal build [--gas he|n2] [--out DIR]
     mobcal run INPUT [INPUT ...] [--method KEY|PATH] [--seeds N[,N...]]
                [--rng philox|ranlux] [--parameters PATH|NAME]
-               [--workers N] [--split W|auto] [--dealing static|claimed] [--out DIR]
+               [--workers N] [--split W|auto] [--mode in-order|balanced|throughput]
+               [--dealing static|claimed] [--out DIR]
                [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N]
                [--inum N] [--inor N]
     mobcal methods-text PATH [PATH ...]
@@ -21,7 +22,9 @@ how they will use the cores and about how long they will take (``mobcal.estimate
 whole study. It refuses a run whose directory holds a different input of the same name, and
 with ``--skip-done`` leaves out the runs the folder already holds complete. With ``--split W``
 each calculation runs across W processes and reports the serial result exactly; ``--split
-auto`` lets ``mobcal.estimate.allocate`` choose the runs in flight and each run's split.
+auto`` lets ``mobcal.estimate.allocate`` choose the runs in flight and each run's split, in
+the ``--mode`` given (balanced by default); ``--mode`` alone implies ``--split auto``, and with
+``--split W`` it is refused.
 ``--method`` picks the method (``mobcal.methods``), which carries the gas: a shipped one by its
 key, ``2012-philox-he`` by default, ``2012-he``, ``2012-n2``, ``2012-philox-n2`` or ``2000-he``,
 or a method file by its path. Both gases is two commands. A table, generator or setting given
@@ -144,11 +147,13 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under "
                                          f"{methods.DEFAULT}"))
     r.add_argument("--workers", type=int, default=None, metavar="N",
-                   help=options.cli_help("workers", "the number of processors divided by the "
+                   help=options.cli_help("workers", "the number of processor cores divided by the "
                                          "processes per run, or under --split auto, the "
                                          "number it chooses"))
     r.add_argument("--split", type=_split, default=None, metavar="W|auto",
                    help=options.cli_help("split", "1, one process per calculation"))
+    r.add_argument("--mode", choices=list(estimate.MODES), default=None,
+                   help=options.cli_help("mode", estimate.DEFAULT_MODE))
     r.add_argument("--dealing", choices=list(DEALINGS), default=None,
                    help=options.cli_help("dealing", DEFAULT_DEALING))
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
@@ -401,6 +406,11 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
     except settings.SettingsError as e:
         raise UsageError(str(e)) from None
     s = st or settings.DEFAULTS
+    if isinstance(args.split, int) and args.mode is not None:
+        raise UsageError(f"--mode chooses under --split {AUTO}; --split {args.split} sets the "
+                         "processes per run itself")
+    if args.mode is not None and args.split is None:
+        args.split = AUTO
     if isinstance(args.split, int) and not 1 <= args.split <= s.blocks_per_set:
         raise UsageError(f"--split takes a worker count from 1 to {s.blocks_per_set} "
                          f"(itn {s.itn} * inp {s.inp} blocks per coordinate set) or {AUTO}")
@@ -439,7 +449,7 @@ def _run(args: argparse.Namespace) -> int:
         if not jobs:
             print(f"nothing to run; {args.out}/ holds every run complete")
             return 0
-    plan = batch.plan(jobs=jobs)
+    plan = batch.plan(jobs=jobs, mode=args.mode or estimate.DEFAULT_MODE)
     gen = batch.resolved_generator
     st = batch.resolved_settings
     changed = " ".join(f"{k}={v:g}" for k, v in st.values().items()

@@ -52,7 +52,7 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
-from mobcal import cli, docs, fortran, methods, options  # noqa: E402
+from mobcal import cli, docs, estimate, fortran, methods, options  # noqa: E402
 from mobcal.app import inputs, theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
@@ -245,7 +245,8 @@ def test_the_estimate_and_add_batch(window, qtbot):
     add(qtbot, w, CHOLINE)
     assert w.add_batch_button.isEnabled()
     assert w.estimate_label.text().startswith("MOBCAL 2012 with Philox (He): 1 run on 1 "
-                                              "worker, each across 8 processes; about")
+                                              "worker, each across 8 processes (balanced); "
+                                              "about")
     w.counts["itn"].setValue(100)
     w.counts["inp"].setValue(100)  # 100 * 100 * 1000 points: over the program's 9,999,999
     assert not w.add_batch_button.isEnabled() and "points per coordinate set" in \
@@ -253,6 +254,21 @@ def test_the_estimate_and_add_batch(window, qtbot):
 
 
 # --- running ---------------------------------------------------------------------------
+
+def test_the_mode_is_a_preference_the_estimate_follows(window, qtbot, tmp_path):
+    w = window
+    add(qtbot, w, CHOLINE)
+    w.seeds_spin.setValue(4)
+    assert w.mode == w.store.mode == estimate.BALANCED
+    w.mode_combo.setCurrentIndex(estimate.MODES.index(estimate.IN_ORDER))
+    assert w.store.mode == estimate.IN_ORDER and "(finish in order)" in w.estimate_label.text()
+    assert Store(w.store._s).mode == estimate.IN_ORDER  # kept for the next launch
+    w.auto_cores.setChecked(False)
+    assert not w.mode_combo.isEnabled() and "(finish in order)" not in w.estimate_label.text()
+    w.auto_cores.setChecked(True)
+    assert w.mode_combo.isEnabled()
+    assert w.workers_spin.maximum() >= w.cpus  # up to the logical processors
+
 
 def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     w = window
@@ -947,6 +963,7 @@ def test_the_tooltips_are_the_command_lines_descriptions(window):
     by_key = {"method": w.method_combo, "parameters": w.table_combo,
               "seeds": w.seeds_spin, "temperature": w.temperature, "rng": w.generator_combo,
               "workers": w.workers_spin, "split": w.split_spin, "out": w.out_edit,
+              "mode": w.mode_combo,
               "methods_text": w.methods_button, "inputs": w.inputs.table,
               **{name: spin for name, spin in w.counts.items()}}
     for key, widget in by_key.items():

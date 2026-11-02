@@ -33,14 +33,13 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
-import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from mobcal import estimate, fortran, methods, parameters, settings
 from mobcal.io.infile import DEALINGS, DEFAULT_DEALING
-from mobcal.run import RECORD_JSON, Job
+from mobcal.run import RECORD_JSON, Job, cores
 from mobcal.settings import Settings, Source
 
 FORMAT = 3
@@ -66,7 +65,7 @@ class Batch:
     settings: Settings | None = None  # None: the method's
     split: int | str | None = AUTO  # W, "auto" (mobcal.estimate.allocate), or None: serial
     dealing: str | None = None  # a split run's dealing, static or claimed; None: the default
-    workers: int | None = None  # runs in flight; None: the allocation's, or the CPU count
+    workers: int | None = None  # runs in flight; None: the allocation's, or the cores
     skip_done: bool = False  # leave out, when the batch starts, runs the folder holds complete
     remaining: tuple[str, ...] | None = None  # run labels left, once paused; None: every run
     # the method, read once when the batch is made
@@ -149,18 +148,20 @@ class Batch:
         return [j for j in jobs if j.label not in done]
 
     def plan(self, cpus: int | None = None, jobs: Sequence[Job] | None = None,
-             sizes: dict | None = None) -> estimate.Plan:
+             sizes: dict | None = None, mode: str = estimate.DEFAULT_MODE) -> estimate.Plan:
         """The jobs as they will run, the runs in flight and the estimate; of ``jobs`` (some
         of this batch's, say those the folder does not hold yet) when given. ``sizes`` as
-        ``mobcal.estimate.plan`` takes it."""
+        ``mobcal.estimate.plan`` takes it. ``mode`` is how ``split = auto`` chooses
+        (``mobcal.estimate.MODES``): the window's preference or ``--mode``, not the batch's,
+        so the queue file does not carry it."""
         jobs = self.jobs() if jobs is None else list(jobs)
         if self.split == AUTO:
-            p = estimate.allocate(jobs, cpus, sizes)
+            p = estimate.allocate(jobs, cpus, sizes, mode)
             return p if self.workers is None else estimate.plan(p.jobs, self.workers, cpus,
                                                                 sizes)
         split = self.split if isinstance(self.split, int) and self.split > 1 else None
         jobs = [dataclasses.replace(j, split=split) for j in jobs]
-        workers = self.workers or max(1, (cpus or os.cpu_count() or 1) // (split or 1))
+        workers = self.workers or max(1, (cpus or cores()) // (split or 1))
         return estimate.plan(jobs, max(1, min(workers, len(jobs) or 1)), cpus, sizes)
 
     @property

@@ -42,7 +42,6 @@ from __future__ import annotations
 import csv
 import dataclasses
 import io
-import os
 import subprocess
 import sys
 import time
@@ -90,7 +89,7 @@ from mobcal.app.store import Store
 from mobcal.app.worker import BatchWorker
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError
 from mobcal.io.structure import StructureError
-from mobcal.run import Job, Launcher, Result, Summary
+from mobcal.run import Job, Launcher, Result, Summary, cores, processors
 from mobcal.settings import Settings, Source
 
 GASES = (("He", "he"), ("N2", "n2"))
@@ -149,7 +148,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.store = store or Store()
         self.launcher = launcher  # tests run a stand-in binary
-        self.cpus = cpus or os.cpu_count() or 1
+        self.cpus = cpus or cores()  # what the batch allocates; the spin box allows processors()
         self.worker: BatchWorker | None = None
         self.current: Batch | None = None  # the queue's top row: running, pausing or paused
         self.help: HelpWindow | None = None
@@ -337,8 +336,14 @@ class MainWindow(QMainWindow):
         self.auto_cores = QCheckBox("Choose how the batch uses the cores")
         self.auto_cores.setChecked(True)
         set_tip("auto_cores", self.auto_cores)
+        self.mode_combo = QComboBox()
+        for m in estimate.MODES:
+            self.mode_combo.addItem(estimate.MODE_TITLES[m], m)
+        self.mode_combo.setCurrentIndex(estimate.MODES.index(self.store.mode))
+        set_tip("mode", self.mode_combo)
+        self.mode_combo.currentIndexChanged.connect(self.mode_changed)
         self.workers_spin = QSpinBox()
-        self.workers_spin.setRange(1, max(1, self.cpus))
+        self.workers_spin.setRange(1, max(1, self.cpus, processors()))
         self.split_spin = QSpinBox()
         self.split_spin.setRange(1, 400)
         self.workers_spin.setValue(self.cpus)
@@ -347,8 +352,10 @@ class MainWindow(QMainWindow):
             w.valueChanged.connect(self.update_estimate)
         self.auto_cores.toggled.connect(lambda on: (self.workers_spin.setEnabled(not on),
                                                     self.split_spin.setEnabled(not on),
+                                                    self.mode_combo.setEnabled(on),
                                                     self.update_estimate()))
-        lay.addWidget(self.auto_cores, 4, 0, 1, 4)
+        lay.addWidget(self.auto_cores, 4, 0, 1, 2)
+        lay.addWidget(self.mode_combo, 4, 2, 1, 2)
         for c, (text, key, spin) in enumerate((("Runs at once", "workers", self.workers_spin),
                                                ("Processes per run", "split", self.split_spin))):
             label = QLabel(text)
@@ -614,6 +621,15 @@ class MainWindow(QMainWindow):
     # --- the batch ------------------------------------------------------------------------
 
     @property
+    def mode(self) -> str:
+        """How the batch chooses under the check box: the window's preference."""
+        return str(self.mode_combo.currentData())
+
+    def mode_changed(self) -> None:
+        self.store.mode = self.mode
+        self.update_estimate()
+
+    @property
     def out_dir(self) -> Path:
         return Path(self.out_edit.text().strip() or self.store.default_out_dir())
 
@@ -649,13 +665,13 @@ class MainWindow(QMainWindow):
             self.cores_label.setText("")
             return
         try:
-            p = b.plan(self.cpus, sizes=self.inputs.sizes(self.out_dir))
+            p = b.plan(self.cpus, sizes=self.inputs.sizes(self.out_dir), mode=self.mode)
         except (BatchError, ValueError) as e:
             self.estimate_label.setText(str(e))
             self.add_batch_button.setEnabled(False)
             return
         self.estimate_label.setText(f"{self.method_title()}: {estimate.describe(p)}")
-        self.cores_label.setText(estimate.describe(p).split(";")[0] + f", of {self.cpus} CPUs")
+        self.cores_label.setText(estimate.describe(p).split(";")[0] + f", of {self.cpus} cores")
         self.add_batch_button.setEnabled(True)
 
     def add_batch_clicked(self) -> None:
@@ -732,7 +748,7 @@ class MainWindow(QMainWindow):
     def start(self, b: Batch) -> None:
         """Run a batch as the queue's top row: the first waiting one, or the paused one."""
         self._pin(b)
-        self.worker = BatchWorker(b, {}, self.launcher, self.cpus)
+        self.worker = BatchWorker(b, {}, self.launcher, self.cpus, self.mode)
         self.worker.planned.connect(self._on_planned)
         self.worker.run_started.connect(self._on_started)
         self.worker.run_landed.connect(self._on_landed)
@@ -898,7 +914,7 @@ class MainWindow(QMainWindow):
             jobs = b.to_run()
             if not jobs:
                 return 0.0
-            p = b.plan(self.cpus, jobs=jobs, sizes={})
+            p = b.plan(self.cpus, jobs=jobs, sizes={}, mode=self.mode)
         except (BatchError, ValueError, OSError):
             return None
         return None if any(w is None for w in p.walls) else p.seconds

@@ -68,15 +68,35 @@ standard deviation over them. Advanced holds the generator, the five sampling co
 
 ## How a batch uses the processors, and the estimate
 
-By default the window chooses, by the rule `mobcal run --split auto` uses. With at least as many
-runs as processors, each run is one process. With fewer, every run starts at once, and each is
-divided among its share of the processors, at most 40, when that saves at least a fifth of its
-time. A divided run gives the serial result exactly ([Random numbers](random-numbers.md)), so
-the choice changes how long a batch takes and never a number. Every process of a divided run
+By default the window chooses, by the rule `mobcal run --split auto` uses, in one of three modes
+chosen beside the check box in Advanced. The window counts physical cores, not the logical
+processors that hyperthreading doubles: on a 40-core workstation, 80 runs at once gave 1.28 to
+1.36 times the trajectories per second of 40, and each run took about half as long again.
+
+- **Balanced**, the default, runs as many runs at once as keeps each divided run at least 70%
+  efficient, where efficiency is the run's time as one process over the processes it uses times
+  its divided time. On a 40-core workstation that is three choline runs at once in helium, each
+  across 13 processes, and one at a time in nitrogen across 40; on 8 cores, one at a time.
+- **Finish in order** runs one at a time, divided among every core it can use, so runs complete
+  one after another and Pause queue waits only for the run in flight. Cores a run cannot use
+  take a second run.
+- **Most throughput** runs one process per run when there are at least as many runs as cores,
+  and otherwise starts every run at once, each divided among its share of the cores. It
+  finishes a long batch soonest, and no run finishes before the first wave does.
+
+A batch with fewer runs than Balanced would put in flight runs them all at once, as Most
+throughput does. The mode is a preference of the window, kept for the next launch, and a batch
+waiting in the queue starts under the mode chosen when it starts.
+
+In every mode a run is divided among at most 40 processes, and only when that saves at least a
+fifth of its time. A divided run gives the serial result exactly ([Random numbers](random-numbers.md)),
+so the choice changes how long a batch takes and never a number. Every process of a divided run
 reads the ion and, in helium, repeats the projection and hard-sphere pass before its first
 trajectory, so dividing helps little when that part dominates, as in the 2000 release's example
-at 25 trajectories per block, and never by much more than 25 times. Unchecking the choice in
-Advanced sets the runs at once and the processes per run by hand.
+at 25 trajectories per block. A divided run also cannot finish before its costliest block of
+trajectories, the one at the slowest velocity point, which costs two to four and a half times
+the average block, so a run is never divided among more processes than that block lets it
+use. Unchecking the choice in Advanced sets the runs at once and the processes per run by hand.
 
 Under the form, the window says how the batch will run and about how long it will take. The
 estimate comes from timings of the programs on one workstation for ions from 21 to 10,000 atoms

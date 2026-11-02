@@ -55,6 +55,12 @@ one. A block missing is a failure, with the worker that owed or claimed it and i
 last line as the reason, and the combining run never starts. Stale block and claim files are
 removed before any start.
 
+How many runs go at once by default is ``cores()``: the physical processor cores, psutil's
+count, not the logical processors that hyperthreading doubles (measured on a 40-core
+workstation, 80 serial runs at once give 1.28 to 1.36 times the trajectories per second of 40,
+and each run then takes half as long again). On Apple Silicon the count includes the
+efficiency cores. ``processors()`` is the logical count, the most a user may ask for.
+
 No Qt here. The window calls ``run_many`` from a worker thread and draws from the callbacks.
 
     from mobcal.run import Job, run_many
@@ -83,6 +89,8 @@ from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import psutil
 
 import mobcal
 from mobcal import fortran, methods, parameters, settings
@@ -708,6 +716,17 @@ def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime)
     return out
 
 
+def cores() -> int:
+    """The physical processor cores, the default for every count of runs or processes: psutil's,
+    or ``os.cpu_count()`` where psutil cannot tell."""
+    return psutil.cpu_count(logical=False) or os.cpu_count() or 1
+
+
+def processors() -> int:
+    """The logical processors, hyperthreads counted: the most runs at once a user may set."""
+    return os.cpu_count() or 1
+
+
 Progress = Callable[[Result, int, int], None]
 """Called as each run lands, with the result, how many have landed and how many there are."""
 
@@ -716,7 +735,7 @@ def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress
              launcher: Launcher | None = None, blocks: BlocksProgress | None = None,
              stop: Stop | None = None,
              on_start: Callable[[Job], None] | None = None) -> Summary:
-    """Run the jobs with at most ``workers`` in flight (default: the CPU count).
+    """Run the jobs with at most ``workers`` in flight (default: ``cores()``).
 
     Each job runs in its own directory from a supervising thread; results are returned in the
     jobs' order whatever order they land in. ``on_start`` is called as each job's program is
@@ -727,7 +746,7 @@ def run_many(jobs: Iterable[Job], workers: int | None = None, progress: Progress
     KeyboardInterrupt stops every running binary and is re-raised.
     """
     jobs = list(jobs)
-    workers = max(1, min(workers or os.cpu_count() or 1, len(jobs) or 1))
+    workers = max(1, min(workers or cores(), len(jobs) or 1))
     results: list[Result | None] = [None] * len(jobs)
     running = stop if stop is not None else Stop()
     lock = threading.Lock()

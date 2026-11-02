@@ -1,5 +1,6 @@
 """What the window remembers between launches: the results folder, the method, the method files
-in the Method list (by path and SHA-256), the geometry, and the queue file's place.
+in the Method list (by path and SHA-256), how a batch uses the cores (``mobcal.estimate``'s
+mode), the geometry, and the queue file's place.
 
 ``QSettings`` under an explicit organisation and application name, so the key does not move
 when the executable is renamed. Everything here is a convenience: a window that has forgotten
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, QStandardPaths
 
+from mobcal import estimate
 from mobcal.app import APPLICATION, ORGANISATION
 
 QUEUE_FILE = "queue.json"
@@ -52,6 +54,16 @@ class Store:
     @methods.setter
     def methods(self, value: list[tuple[str, str]]) -> None:
         self._s.setValue("methods", json.dumps([list(v) for v in value]))
+
+    @property
+    def mode(self) -> str:
+        """How ``split = auto`` chooses; the default mode for anything else stored."""
+        v = str(self._s.value("mode", "") or "")
+        return v if v in estimate.MODES else estimate.DEFAULT_MODE
+
+    @mode.setter
+    def mode(self, value: str) -> None:
+        self._s.setValue("mode", value)
 
     @property
     def input_dir(self) -> str:
