@@ -72,7 +72,7 @@ def test_a_worker_that_leaves_a_block_unwritten_fails_the_run(tmp_path):
 
 
 def test_stale_blocks_are_removed_before_a_run(tmp_path):
-    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2)
+    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2, dealing="static")
     assert run_one(job, launcher).ok
     stray = Block(1, 1, 1, 999, 0.0, 0.0, 0).write(job.run_dir)
     stray_w = Block(1, 1, 1, 999, 0.0, 0.0, 0).write(job.worker_dir(1))
