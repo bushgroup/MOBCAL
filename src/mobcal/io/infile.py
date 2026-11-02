@@ -38,7 +38,8 @@ MAX_SEED = 2**31 - 1
 GENERATORS = ("ranlux", "philox")  # the words the program accepts on the seed record
 DEFAULT_GENERATOR = "ranlux"  # what no word means: the 2012 generator
 DEALINGS = ("static", "claimed")  # how a split run's blocks are shared among its workers
-DEFAULT_DEALING = "static"  # what no word on the fourth record means: the fixed (w, W) share
+DEFAULT_DEALING = "claimed"  # the package's default for a split run (lab record, task 46)
+RECORD_DEFAULT_DEALING = "static"  # what no word on the fourth record means: the (w, W) share
 CLAIM_WORD = "claim"  # the word the program reads for the claimed dealing
 _DEALING_WORDS = {"static": "static", CLAIM_WORD: "claimed"}  # the record's words
 
@@ -62,7 +63,7 @@ class InFile:
     seed: int
     split: tuple[int, int] | None = None  # (W, w): worker w of W; w == 0 is the combining run
     generator: str = DEFAULT_GENERATOR  # the word on the seed record: ranlux or philox
-    dealing: str = DEFAULT_DEALING  # static, or claimed (the word claim on the fourth record)
+    dealing: str = RECORD_DEFAULT_DEALING  # static, or claimed (the word claim on the record)
 
     def __post_init__(self) -> None:
         check_name(self.input_name, "input file name")
@@ -112,7 +113,7 @@ class InFile:
         except (IndexError, ValueError):
             raise InFileError(f"seed line {lines[2]!r} is not an integer") from None
         generator = words[1] if len(words) > 1 else DEFAULT_GENERATOR  # as the program reads it
-        split, dealing = None, DEFAULT_DEALING
+        split, dealing = None, RECORD_DEFAULT_DEALING
         rest = [s for s in lines[3:] if s.strip()]
         if rest:
             fields = rest[0].split()

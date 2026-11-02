@@ -135,8 +135,11 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
     out = tmp_path_factory.mktemp("gate")
     jobs = [Job(gate.CHOLINE, g, refs[g].seed, out, name=g, staged_name=refs[g].input_name,
                 generator=refs[g].generator) for g in gases]
+    # the fixed (w, W) share: test_split asserts each worker's own block count (test_claim
+    # covers the claimed dealing, the default)
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"split-{w}",
-                 staged_name=refs["he"].input_name, split=w, generator=refs["he"].generator)
+                 staged_name=refs["he"].input_name, split=w, generator=refs["he"].generator,
+                 dealing="static")
              for w in splits]
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"philox-{w}",
                  staged_name=refs["he"].input_name, split=w or None, generator="philox")

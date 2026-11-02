@@ -404,7 +404,7 @@ def test_a_split_run_at_other_settings_reproduces_the_serial_run(pool, tmp_path,
     jobs = [Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"serial-{generator}",
                 generator=generator, settings=s),
             Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"split-{generator}", split=4,
-                generator=generator, settings=s)]
+                generator=generator, settings=s, dealing="static")]  # fixed shares asserted
     serial, split = run_many(jobs, workers=2, launcher=pool.launcher).results
     assert serial.ok and split.ok, (serial.message, split.message)
     a = shared(OutFile.read(serial.output).lines)

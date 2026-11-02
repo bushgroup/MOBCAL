@@ -266,7 +266,7 @@ def test_a_split_run_renders_into_every_directory(tmp_path):
         assert (job.worker_dir(w) / parameters.RENDERED).read_bytes() == want
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
     assert rec["mobcal_in"] == {"seed": 3, "generator": "philox", "split": 3,
-                                "dealing": "static"}
+                                "dealing": "claimed"}
 
 
 def test_the_record_of_a_run(tmp_path):

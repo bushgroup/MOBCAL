@@ -87,7 +87,15 @@ from pathlib import Path
 import mobcal
 from mobcal import fortran, methods, parameters, settings
 from mobcal.io.block import all_names, block_of_claim, expected_names
-from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, FIELD_WIDTH, GENERATORS, InFile, InFileError
+from mobcal.io.infile import (
+    DEALINGS,
+    DEFAULT_DEALING,
+    FIELD_WIDTH,
+    GENERATORS,
+    RECORD_DEFAULT_DEALING,
+    InFile,
+    InFileError,
+)
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
@@ -127,7 +135,7 @@ class Job:
     parameters: Path | None = None  # the element table; None is the package's for the gas
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
-    dealing: str = DEFAULT_DEALING  # how a split run's blocks are shared: static or claimed
+    dealing: str = DEFAULT_DEALING  # how a split run's blocks are shared: claimed, or static
     # the method the job was made from, which its record names while the job's fields are the
     # method's; None: the record names the shipped method the fields make, or custom
     method_from: methods.Method | None = field(default=None, compare=False, repr=False)
@@ -397,7 +405,7 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
 
 
 def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet,
-             dealing: str = DEFAULT_DEALING) -> None:
+             dealing: str = RECORD_DEFAULT_DEALING) -> None:
     """Make ``d`` ready for one start of the program: the input copied in under its staged name,
     ``mobcal.in`` written, the element table and the settings rendered, and any output, record,
     block file or claim file of an earlier run removed, so that nothing stale is ever read as

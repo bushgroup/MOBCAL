@@ -57,7 +57,8 @@ def test_the_fourth_record(tmp_path):
 
 
 def test_the_dealing_word(tmp_path):
-    assert DEALINGS == ("static", "claimed") and DEFAULT_DEALING == "static"
+    assert DEALINGS == ("static", "claimed") and DEFAULT_DEALING == "claimed"
+    assert InFile("a", "b", 1, (3, 1)).dealing == "static"  # no word: the program's meaning
     i = InFile("Choline_pop.mfj", "mobcal.out", 5013489, (3, 2), "philox", "claimed")
     p = i.write(tmp_path)
     assert p.read_bytes() == b"Choline_pop.mfj\nmobcal.out\n5013489 philox\n3 2 claim\n"

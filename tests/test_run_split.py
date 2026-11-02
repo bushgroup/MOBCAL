@@ -22,7 +22,7 @@ FAKE = Path(__file__).resolve().parent / "fake_mobcal.py"
 
 def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
     inp = write_input(tmp_path / "ok.mfj", "ok")
-    job = Job(inp, "he", 5013489, tmp_path / "runs", split=3)
+    job = Job(inp, "he", 5013489, tmp_path / "runs", split=3, dealing="static")
     seen: list[tuple[int, int]] = []
     r = run_one(job, launcher, blocks=lambda j, n, t: seen.append((n, t)))
     assert r.ok and r.message == "" and r.returncode == 0, r.message
@@ -55,7 +55,8 @@ def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
 
 
 def test_a_split_job_with_several_coordinate_sets(tmp_path):
-    job = Job(write_input(tmp_path / "two.mfj", "sets 2"), "he", 7, tmp_path, split=2)
+    job = Job(write_input(tmp_path / "two.mfj", "sets 2"), "he", 7, tmp_path, split=2,
+              dealing="static")
     r = run_one(job, launcher)
     assert r.ok and len(r.conformers) == 2
     assert len(list(job.run_dir.glob("block-*.dat"))) == 2 * BLOCKS_PER_SET
@@ -63,7 +64,7 @@ def test_a_split_job_with_several_coordinate_sets(tmp_path):
 
 
 def test_a_worker_that_leaves_a_block_unwritten_fails_the_run(tmp_path):
-    job = Job(write_input(tmp_path / "x.mfj", "lazy"), "he", 1, tmp_path, split=2)
+    job = Job(write_input(tmp_path / "x.mfj", "lazy"), "he", 1, tmp_path, split=2, dealing="static")
     r = run_one(job, launcher)
     assert not r.ok and r.output is None and r.cross_sections == {}
     assert r.message.startswith("worker 2: 1 of 200 blocks missing ("), r.message
@@ -172,8 +173,8 @@ def test_stale_claims_are_removed_before_a_run(tmp_path):
 
 
 def test_a_static_job_claims_nothing(tmp_path):
-    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2)
-    assert job.dealing == "static"
+    assert Job(Path("x.mfj"), "he", 1, Path("runs"), split=2).dealing == "claimed"  # the default
+    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2, dealing="static")
     assert run_one(job, launcher).ok
     assert not list(job.run_dir.glob("claim-*"))
     with pytest.raises(ValueError, match="dealing must be one of"):

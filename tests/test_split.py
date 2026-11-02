@@ -121,4 +121,6 @@ def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool,
     split = run_one(Job(water, "he", 5013489, tmp_path, name="split", split=2,
                         generator="ranlux"), pool.launcher)
     assert not split.ok and split.cross_sections == {}
-    assert "blocks missing" in split.message or "reached ifail" in split.message, split.message
+    # a static worker leaves its share short, a claiming one (the default) its claimed block
+    assert ("blocks missing" in split.message or "claimed block not written" in split.message
+            or "reached ifail" in split.message), split.message
