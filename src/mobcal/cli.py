@@ -45,7 +45,9 @@ output or an ``.xyz`` with the charges named by ``--charges`` (refused, listing 
 holds, until one is named), its provenance record inside it; ``mobcal.io.structure`` says what
 it reads and refuses, and an output of a version the import is not tested on is taken with a
 warning. With ``--gas he`` or ``n2`` an element only that gas's table holds is taken; by default
-the file must run in both.
+the file must run in both. A ``.mfj``, the 2012 layout or MobCal-MPI's nine columns, is
+taken with its own charges (``--charges`` and ``--net-charge`` are refused), and written as
+``SOURCE-STEM.ion.json`` by default.
 ``export`` writes the ``.mfj`` the 2012 program reads from an ion file, each element's key from
 the table of each gas asked for (both by default, which must agree), as a run stages it.
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
@@ -204,9 +206,10 @@ def parser() -> argparse.ArgumentParser:
                    help="Write this settings file instead of the 2012 values.")
 
     m = command("import", "Write an ion file from an ORCA or Gaussian output or an .xyz file, "
-                "with the charges you name.")
+                "with the charges you name, or from a .mfj, with its own.")
     m.add_argument("source", type=Path, metavar="SOURCE",
-                   help="An ORCA or Gaussian output, or an .xyz file.")
+                   help="An ORCA or Gaussian output, an .xyz file, or a .mfj (the 2012 "
+                        "layout or MobCal-MPI's nine columns).")
     m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
     m.add_argument("--net-charge", type=int, default=None, metavar="Q",
                    help=options.cli_help("net_charge"))
@@ -361,6 +364,8 @@ def main(argv: list[str] | None = None) -> int:
 def _import(args: argparse.Namespace) -> int:
     from mobcal.io import structure
     gases = tuple(fortran.GASES) if args.gas == "both" else (args.gas,)
+    if args.source.suffix.lower() == ".mfj":
+        return _import_mfj(args, gases)
     try:
         s = structure.read(args.source)
         imp = structure.convert(s, args.charges, args.net_charge, gases)
@@ -377,6 +382,34 @@ def _import(args: argparse.Namespace) -> int:
           + f", {c['choice']} charges summing to {c['sum']:+.6f} (net charge "
           f"{c['net_charge']:+d}), every element in the "
           f"{' and '.join(parameters.GAS[g] for g in gases)} table"
+          f"{'s' if len(gases) > 1 else ''}")
+    return 0
+
+
+def _import_mfj(args: argparse.Namespace, gases: tuple[str, ...]) -> int:
+    from mobcal.io import structure
+    given = [f for f, v in (("--charges", args.charges), ("--net-charge", args.net_charge))
+             if v is not None]
+    try:
+        if given:
+            raise structure.StructureError(
+                f"{args.source.name}: a .mfj carries its charges, which the ion file keeps as "
+                f"read; {' and '.join(given)} {'is' if len(given) == 1 else 'are'} not taken")
+        imp = structure.from_mfj(args.source, gases)
+        out = structure.write(imp, args.out or structure.default_name(args.source, None),
+                              overwrite=args.force)
+    except (structure.StructureError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    i = imp.ion
+    layout = imp.record["source"]["program"]
+    print(f"wrote {out}: {i.atoms} atoms, {len(i.conformers)} conformer"
+          f"{'s' if len(i.conformers) > 1 else ''} from {args.source.name}"
+          + (" (MobCal-MPI layout)" if layout == "MobCal-MPI" else "")
+          + f", {i.charge_mode} mode, "
+          + (f"net charge {i.molecular_charge:+d}" if i.molecular_charge is not None
+             else "no integer net charge")
+          + f", every element in the {' and '.join(parameters.GAS[g] for g in gases)} table"
           f"{'s' if len(gases) > 1 else ''}")
     return 0
 

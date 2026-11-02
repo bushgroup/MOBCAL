@@ -13,7 +13,11 @@ Two conversions, both pure apart from the record of who wrote the file:
   share; a key none defines is refused. Coordinates, units, label, charge mode and correction
   factor are kept as read; a four-field atom line becomes a ``null`` charge; a set whose atom
   order differs from the first keeps its own ``symbols``. z is the common integer of every
-  set's charge sum within ``TOLERANCE``, else ``null``.
+  set's charge sum within ``TOLERANCE``, else ``null``. Given a path to MobCal-MPI's
+  nine-column layout (``mobcal.io.mobcalmpi.detect``), it reads that instead: each element
+  named from its mass, the masses and MMFF94 α N A G kept as declared columns, line 6 (in
+  MobCal-MPI a switch, not a coordinate factor) and the run line kept in ``import.source``, and
+  a correction factor of 1, since MobCal-MPI applies none.
 - ``Ion.mfj``: the ion file back into the ``Mfj`` a run stages, for one element table. Each
   symbol becomes that table's key, so the table, not the file, decides what an atom weighs; an
   element the table lacks is refused, and so is a nitrogen run whose first conformer lacks a
@@ -42,6 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mobcal import __version__, fortran, parameters
+from mobcal.io import mobcalmpi
 from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, MAX_SETS, Atom, Mfj
 
 FORMAT = "mobcal-ion"
@@ -229,7 +234,10 @@ def from_mfj(source: Mfj | Path | str) -> Ion:
     else:
         path = Path(source)
         data = path.read_bytes()
-        m = Mfj.parse(data.decode("latin-1"))
+        text = data.decode("latin-1")
+        if mobcalmpi.detect(text):
+            return _from_mobcalmpi(path, data, text)
+        m = Mfj.parse(text)
     names = key_symbols()
     undefined = sorted({a.key for s in m.sets for a in s} - names.keys())
     if undefined:
@@ -270,6 +278,44 @@ def from_mfj(source: Mfj | Path | str) -> Ion:
     units = {v: k for k, v in UNITS.items()}[m.units]
     return Ion(m.label, z, units, m.correct, m.charge_mode, first, tuple(conformers),
                written_by(), columns, import_record=record, written=now())
+
+
+def _from_mobcalmpi(path: Path, data: bytes, text: str) -> Ion:
+    """``from_mfj`` for MobCal-MPI's nine-column layout (``mobcal.io.mobcalmpi``)."""
+    try:
+        m = mobcalmpi.MobcalMpiMfj.parse(text)
+        symbols = m.symbols()
+    except mobcalmpi.MobcalMpiError as e:
+        raise IonError(f"MobCal-MPI layout: {e}") from None
+    a = m.atoms
+    q = tuple(x.charge for x in a)
+    z = round(math.fsum(q))
+    if abs(math.fsum(q) - z) > TOLERANCE:
+        z = None
+    name = path.name
+    columns = {"charges": {"unit": "e", "source": f"{name}, column 5 ({m.charge_mode} mode)"},
+               "masses": {"unit": "u", "source": f"{name}, column 4 (MobCal-MPI layout)"}}
+    per_atom = {"masses": tuple(x.mass for x in a)}
+    for col, attr, n in (("mmff94_alpha", "alpha", 6), ("mmff94_n", "n", 7),
+                         ("mmff94_a", "a", 8), ("mmff94_g", "g", 9)):
+        columns[col] = {"unit": COLUMNS[col],
+                        "source": f"{name}, column {n} (MobCal-MPI layout)"}
+        per_atom[col] = tuple(getattr(x, attr) for x in a)
+    keys = {s: k for k, s in key_symbols().items()}
+    record = {
+        "source": {"path": str(path.resolve()), "sha256": hashlib.sha256(data).hexdigest(),
+                   "program": "MobCal-MPI", "version": None, "reader": f"mobcal {__version__}",
+                   "line_6": m.line6, "run_line": m.run_line},
+        "charges": {"choice": "column",
+                    "net_charge_from": "charges" if z is not None else None},
+        "elements": {"keys": {s: keys[s] for s in sorted(set(symbols), key=keys.get)},
+                     "tables": {parameters.GAS[g]: {"name": t.name, "sha256": t.sha256}
+                                for g, t in ((g, parameters.shipped(g)) for g in GASES)}},
+    }
+    units = {v: k for k, v in UNITS.items()}[m.units]
+    return Ion(m.label, z, units, 1.0, m.charge_mode, symbols,
+               (Conformer(tuple((x.x, x.y, x.z) for x in a), q),), written_by(), columns,
+               per_atom, import_record=record, written=now())
 
 
 # --- checking ---------------------------------------------------------------------------------

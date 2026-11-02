@@ -4,10 +4,12 @@ The 2012 programs read an ion from a `.mfj` file, which gives, for every atom, i
 coordinates, the integer key of its element, and a partial charge. The 2012 model needs nothing
 else from a structure: no atom types, no bonds and no force-field labels. `mobcal import` writes
 an ion file, `X.ion.json` ([The ion file](ion-file.md)), from an ORCA or Gaussian output or from
-an `.xyz` file, with the charges you name, and the ion file carries the record of where every
-number came from. The ion file has one conformer, coordinates in ångström, each atom's element,
-and charges in `calc` mode, i.e., one explicit charge on every atom, which is the form both 2012
-programs read the same way. The `.mfj` the program reads is written from the ion file.
+an `.xyz` file, with the charges you name, or from a `.mfj` with its own charges
+([below](#a-mfj-as-the-source)), and the ion file carries the record of where every number came
+from. From an output or an `.xyz`, the ion file has one conformer, coordinates in ångström,
+each atom's element, and charges in `calc` mode, i.e., one explicit charge on every atom, which
+is the form both 2012 programs read the same way. The `.mfj` the program reads is written from
+the ion file.
 
 This page describes what the import reads, how the charges are chosen, and what it refuses. It
 does not choose a level of theory or a charge scheme for you;
@@ -147,6 +149,43 @@ element symbol, x, y and z in ångström, and optionally a charge in a fifth col
 file with more than one frame is refused; conformers are separate inputs, which `mobcal run`
 runs side by side.
 
+## A `.mfj` as the source
+
+A `.mfj` already holds an ion with its charges, so `mobcal import` takes one without a choice of
+charges:
+
+```
+mobcal import Choline.mfj
+```
+
+writes `Choline.ion.json`, i.e., the source file's name with `.ion.json` in place of `.mfj`. The
+import reads two layouts. The first is the one the 2012 programs read
+([Reading a `.mfj` into an ion file](ion-file.md#reading-a-mfj-into-an-ion-file)): the label,
+units, charge mode, correction factor, every coordinate set and the charge column are kept as
+read, and each integer key is named as an element from the shipped element tables. The second is
+the nine-column `.mfj` that MobCal-MPI reads, in which line 6 is the switch of MobCal-MPI's
+empirical high-field correction and not a coordinate factor, line 7 is a run line
+(`itn inp imp igas seed T_bath`, optionally followed by T_eff,max and the number of temperature
+points), and each atom line holds x, y, z, a mass, a charge and the MMFF94 parameters α, N, A
+and G of the atom's MMFF94 type. The import recognizes this layout by its run line and by nine
+fields on the first atom line. Each atom's element is the one whose mass in the shipped tables
+lies within 0.25 u of the mass the file gives, a window that holds both the average mass of
+every element the tables hold and its monoisotopic mass, which MobCal-MPI's input generator
+writes for C, N, O and S. A mass in no element's window, or in two, is refused. The masses and
+the four MMFF94 parameters are kept as declared columns of the ion file, and line 6 and the run
+line as written are kept in the record, so the ion file loses nothing the source holds. The
+ion file's correction factor is 1, because MobCal-MPI applies no factor to the coordinates.
+MobCal-MPI reads one coordinate set, and a nine-column file with more is refused.
+
+In both layouts the charges are the file's charge column, the charge mode is the file's, and
+the net charge is the integer every coordinate set's charges sum to within 0.001 e, or none
+when they do not. `--charges` and `--net-charge` are refused. The 2012 programs weigh each atom
+by the mass of its element in the run's element table, and a run from the ion file does so
+too, so a mass column in the source moves no number a run computes. A MobCal-MPI input in
+`equal` mode keeps that mode, which the 2012 helium program reads as 1/N on every atom and the
+nitrogen program as the charge column's sum divided evenly
+([Charges](ion-file.md#charges)).
+
 ## Elements
 
 Each atom's key is its element's key in the element table of each gas
@@ -174,7 +213,13 @@ import adds no element to either table.
 - an element not in the table of a gas asked for;
 - more than 200,000 atoms, the bound the programs are built with;
 - an `.xyz` with more than one frame, a charge on some atoms but not all, or a line that is not
-  an element symbol and three coordinates.
+  an element symbol and three coordinates;
+- a `.mfj` the 2012 program would not read to the end, a key no shipped table defines, or
+  `--charges` or `--net-charge` given with a `.mfj`;
+- a nine-column MobCal-MPI `.mfj` with more than one coordinate set, an atom line of other than
+  nine fields, a run line of other than six to eight fields beginning with five integers, a
+  mass within 0.25 u of no element of the shipped tables or of two, or lines after the last
+  atom.
 
 Each refusal exits with status 2, writes nothing, and says why.
 

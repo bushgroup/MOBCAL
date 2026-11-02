@@ -191,7 +191,7 @@ quantity has one name wherever it is recorded:
 
 | Field | Value |
 |---|---|
-| `import.source` | `path`, `sha256` of the source file's bytes, `program` (`ORCA`, `Gaussian`, `xyz`, `mfj`), `version`, `reader`, and what the source program printed about the job: `keywords`, `input_file_name`, `route`, `comment`, `untested_version` |
+| `import.source` | `path`, `sha256` of the source file's bytes, `program` (`ORCA`, `Gaussian`, `xyz`, `mfj`, `MobCal-MPI`), `version`, `reader`, and what the source program printed about the job: `keywords`, `input_file_name`, `route`, `comment`, `untested_version`, or, for a MobCal-MPI input, its `line_6` and `run_line` as written |
 | `import.charges` | `choice`, `net_charge`, `net_charge_from` (`output`, `given`, or `charges` when z was taken from the charge sum of a `.mfj`), `sum`, `difference`, `tolerance`, `available`, `refused` |
 | `import.elements` | `keys`, the key of each element in the tables the import checked, and `tables`, each table's name and SHA-256 |
 
@@ -242,6 +242,21 @@ the `.mfj`'s name and charge mode as its source, `import.charges.choice` is `col
 coordinate set whose atoms come in another order than the first set's keeps that order in its
 own `symbols`, and an atom line with four fields becomes a `null` charge, so that nothing the
 program reads is lost.
+
+A nine-column `.mfj` written for MobCal-MPI is read by its own layout, which MOBCAL recognizes
+by a run line at line 7 (six to eight fields, the first five integers) and nine fields on the
+first atom line. It holds one coordinate set, whose atom lines give x, y, z, a mass, a charge
+and the MMFF94 parameters α, N, A and G. Each atom's element is the one whose mass in the
+shipped tables lies within 0.25 u of the mass given, and a mass within that window of no
+element, or of two, is refused. The masses become the `masses` column and α, N, A and G the
+`mmff94_alpha`, `mmff94_n`, `mmff94_a` and `mmff94_g` columns, each declared with its column
+of the source as its `source`; the charge column and the charge mode are kept as for a 2012
+file. Line 6, which MobCal-MPI reads as the switch of its empirical high-field correction and
+never applies to the coordinates, and the run line are kept as written under
+`import.source.line_6` and `import.source.run_line`, with `MobCal-MPI` as the program, and
+`correction_factor` is 1. The `.mfj` written from such a file carries the 2012 layout, five
+fields per atom with each element's key from the run's table, so the masses and the MMFF94
+parameters inform the record and move no number a 2012 calculation computes.
 
 ## What a reader refuses
 

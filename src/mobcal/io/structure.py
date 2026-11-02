@@ -33,6 +33,10 @@ where cclib did read the fit the two must agree. Refused, each with its reason: 
 Hu-Lu-Yang and MK-UFF fits (no test output), a fit with radii read from the input
 (``ReadRadii``), and a dipole-constrained or point-dipole fit.
 
+A ``.mfj`` is not a structure with charges to choose: ``from_mfj`` reads it through
+``mobcal.io.ion.from_mfj``, the 2012 layout or MobCal-MPI's nine columns, its charge column,
+charge mode and label as read, and only checks its elements against the tables, as below.
+
 An ``.xyz`` is read here, without cclib: a count, a comment line, then ``symbol x y z`` per
 atom with an optional fifth column, the charges (``column``). One frame only.
 
@@ -65,7 +69,7 @@ from pathlib import Path
 
 from mobcal import __version__, parameters
 from mobcal.io import ion
-from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, Mfj
+from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, Mfj, MfjError
 
 # |sum of the named charges - Q|, in e. ORCA's Hirshfeld charges, integrated on a grid, sum to
 # Q + 2.2e-4 for the 21-atom choline cation; Mulliken, Loewdin and CHELPG to Q at the printed
@@ -535,9 +539,28 @@ def convert(structure: Structure, charges: str | None, net_charge: int | None = 
     return Imported(made, tuple(gases))
 
 
-def default_name(source: Path | str, charges: str) -> Path:
-    """Where ``mobcal import`` writes by default: ``SOURCE-STEM_CHARGES.ion.json``."""
-    return Path(f"{Path(source).stem}_{charges}{ion.SUFFIX}")
+def from_mfj(path: Path | str, gases: tuple[str, ...] = GASES) -> Imported:
+    """The ion file of a ``.mfj``, the 2012 layout or MobCal-MPI's nine columns
+    (``mobcal.io.ion.from_mfj``): its charges as read, its charge mode and label kept, so there
+    is no choice to make. Every element must be in the default table of each gas named."""
+    path = Path(path)
+    try:
+        made = ion.from_mfj(path)
+    except OSError as e:
+        raise StructureError(f"{path}: cannot read: {e.strerror or e}") from None
+    except (ion.IonError, MfjError) as e:
+        raise StructureError(f"{path}: {e}") from None
+    # the first conformer's atoms, counted, then any element only a later conformer holds
+    element_keys([*made.symbols, *(s for c in made.conformers for s in c.symbols or ()
+                                   if s not in made.symbols)], gases)
+    return Imported(made, tuple(gases))
+
+
+def default_name(source: Path | str, charges: str | None) -> Path:
+    """Where ``mobcal import`` writes by default: ``SOURCE-STEM_CHARGES.ion.json``, or
+    ``SOURCE-STEM.ion.json`` for a ``.mfj``, whose charges are not chosen."""
+    stem = Path(source).stem
+    return Path(f"{stem}_{charges}{ion.SUFFIX}" if charges else f"{stem}{ion.SUFFIX}")
 
 
 def write(imported: Imported, out: Path | str, overwrite: bool = False) -> Path:
