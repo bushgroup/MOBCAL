@@ -221,7 +221,9 @@ and every real as the shortest decimal that reads back as the same double.
 `mobcal run X.ion.json` writes this file into each run directory as `X.mfj`, or as `input.mfj`
 when that name is longer than the 30 characters the program reads, from the run's table and
 gas, and the run's record (`record.json`) names the SHA-256 of the ion file and of the `.mfj`
-written from it. A split run gives each of its processes a copy of the same file.
+written from it. The record also keeps the charge mode and, from `import`, the source's
+`program`, `version`, `keywords` or `route`, and `charges.choice`, so that the methods paragraph
+names the charges of a run whose ion file has since moved. A split run gives each of its processes a copy of the same file.
 `mobcal export X.ion.json` writes this file as `X.mfj` beside the ion file, from the default
 table of each gas, or of the gas `--gas` names, or from the table `--parameters` names
 ([Importing a structure and its charges](import.md#the-command)).

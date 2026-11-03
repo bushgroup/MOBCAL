@@ -737,3 +737,76 @@ def test_the_methods_text(tmp_path, capsys):
     one = capsys.readouterr().out
     assert "at seed 1." in one and "nitrogen" not in one
     assert cli.main(["methods-text", str(tmp_path / "nothing")]) == 2
+
+
+QM = Path(__file__).resolve().parent / "data" / "qm"
+
+
+def import_ion(path: Path, source: Path, charges: str) -> Path:
+    """An ion file imported from a quantum chemistry output, labelled for the stand-in."""
+    from mobcal.io import structure
+    return structure.convert(structure.read(source), charges, label="ok").ion.write(path)
+
+
+@pytest.mark.parametrize("inp, said", [
+    ({"charge_mode": "calc", "import": {"source": {"program": "ORCA", "version": "6.1.1",
+                                                   "keywords": ["B3LYP", "def2-TZVP", "CHELPG"]},
+                                        "charges": {"choice": "chelpg"}}},
+     "the CHELPG charges from ORCA 6.1.1 (keywords B3LYP def2-TZVP CHELPG)"),
+    ({"charge_mode": "calc", "import": {"source": {"program": "Gaussian", "version": "16",
+                                                   "route": "#p B3LYP/6-31G(d) Pop=MK"},
+                                        "charges": {"choice": "mk"}}},
+     "the Merz-Kollman charges from Gaussian 16 (route #p B3LYP/6-31G(d) Pop=MK)"),
+    ({"charge_mode": "calc", "import": {"source": {"program": "ORCA", "version": None},
+                                        "charges": {"choice": "lowdin"}}},
+     "the Löwdin charges from ORCA"),
+    ({"charge_mode": "calc", "import": {"source": {"program": "ORCA", "version": "6.1.1"},
+                                        "charges": {"choice": "uniform"}}},
+     "the net charge divided equally among the atoms"),
+    ({"charge_mode": "calc", "import": {"source": {"program": "xyz", "version": None},
+                                        "charges": {"choice": "column"}}},
+     "those given in the .xyz input"),
+    ({"charge_mode": "calc", "import": {"source": {"program": "MobCal-MPI", "version": None},
+                                        "charges": {"choice": "column"}}},
+     "those given in the MobCal-MPI .mfj input"),
+    ({"charge_mode": "equal", "import": {"source": {"program": "mfj", "version": None},
+                                         "charges": {"choice": "column"}}},
+     "+1 e divided equally among the atoms"),
+    ({"charge_mode": "none", "import": {"source": {"program": "mfj", "version": None},
+                                        "charges": {"choice": "column"}}},
+     "not assigned"),
+    ({"charge_mode": "calc"}, None),  # an ion file with no import record
+    ({"path": "a.mfj", "sha256": "0" * 64}, None),  # a .mfj input
+])
+def test_what_a_record_says_the_charges_were(inp, said):
+    assert methods.charges(inp) == said
+
+
+def test_the_methods_text_names_the_charges_when_every_run_records_them(tmp_path):
+    orca = import_ion(tmp_path / "orca.ion.json", QM / "orca" / "choline_sp" / "choline_sp.out",
+                      "chelpg")
+    gaussian = import_ion(tmp_path / "g.ion.json",
+                          QM / "gaussian" / "choline_2012_mk" / "choline_2012_mk.log", "mk")
+    out = tmp_path / "runs"
+    run_many([Job(orca, "he", s, out) for s in (1, 2)], 2, launcher=launcher).write(out)
+    rec = methods.read_records([out])
+    assert rec[0]["input"]["charge_mode"] == "calc"
+    assert rec[0]["input"]["import"] == {
+        "source": {"program": "ORCA", "version": "6.1.1",
+                   "keywords": ["B3LYP", "D3BJ", "def2-TZVP", "CHELPG", "Hirshfeld"]},
+        "charges": {"choice": "chelpg"}}
+    para = methods.text(rec).split("\n\n")[0]
+    assert ("The partial charges on the atoms were the CHELPG charges from ORCA 6.1.1 (keywords "
+            "B3LYP D3BJ def2-TZVP CHELPG Hirshfeld). The helium calculations used") in para
+
+    run_many([Job(gaussian, "he", 1, out)], 1, launcher=launcher).write(out)
+    para = methods.text(methods.read_records([out])).split("\n\n")[0]
+    assert ("The partial charges on the atoms were the Merz-Kollman charges from Gaussian 16 "
+            "Rev. B.01 (route # B3LYP/6-31++G(d,p) SP NoSymm Pop=(MK,Hirshfeld)) for 1 ion "
+            "file and the CHELPG charges from ORCA 6.1.1 (keywords B3LYP D3BJ def2-TZVP CHELPG "
+            "Hirshfeld) for 1 ion file.") in para  # in the records' order, by run name
+
+    # one run whose record cannot say, and the paragraph says nothing of charges
+    run_many([Job(write_input(tmp_path / "a.mfj", "ok"), "he", 1, out)], 1,
+             launcher=launcher).write(out)
+    assert "partial charges" not in methods.text(methods.read_records([out]))

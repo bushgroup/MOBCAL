@@ -348,6 +348,11 @@ REFERENCES = {
 _GAS_WORD = {"he": "helium", "n2": "nitrogen"}
 _GENERATOR = {"ranlux": ("RANLUX at luxury level 3", ("luscher1994", "james1994")),
               "philox": ("Philox4x32-10", ("salmon2011",))}
+# An import's choice of charges (``mobcal.io.structure``) as a methods section names it.
+_SCHEME = {"mulliken": "Mulliken", "lowdin": "Löwdin", "hirshfeld": "Hirshfeld", "cm5": "CM5",
+           "chelpg": "CHELPG", "chelp": "CHELP", "mk": "Merz-Kollman",
+           "natural": "natural population analysis"}
+_INPUT_FILE = {"xyz": ".xyz", "mfj": ".mfj", "MobCal-MPI": "MobCal-MPI .mfj"}
 
 
 def read_records(paths: Iterable[Path | str]) -> list[dict]:
@@ -393,6 +398,33 @@ def _join(words: list[str]) -> str:
     return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
 
 
+def charges(inp: dict) -> str | None:
+    """What a run's partial charges were, as a methods section says it, from its record's
+    ``input`` block; None when the record does not say: a ``.mfj`` input, an ion file without
+    an import record, or a record written before ion files' records carried one."""
+    imp = inp.get("import")
+    if imp is None:
+        return None
+    mode, src = inp["charge_mode"], imp["source"]
+    choice = imp["charges"]["choice"]
+    if mode == "none":
+        return "not assigned"
+    if mode == "equal":  # the 2012 program puts 1/N on every atom, whatever the column holds
+        return "+1 e divided equally among the atoms"
+    if choice == "uniform":
+        return "the net charge divided equally among the atoms"
+    if choice == "column" or choice is None:
+        return f"those given in the {_INPUT_FILE.get(src['program'], src['program'])} input"
+    program = " ".join(p for p in (src["program"], src.get("version")) if p)
+    keywords = src.get("keywords")
+    if isinstance(keywords, list):
+        keywords = " ".join(keywords)
+    job = (f"keywords {keywords}" if keywords else
+           f"route {src['route']}" if src.get("route") else None)
+    return f"the {_SCHEME.get(choice, choice)} charges from {program}" \
+        + (f" ({job})" if job else "")
+
+
 def text(records: list[dict]) -> str:
     """The methods paragraph for these runs, and its references, numbered in order of first
     citation. Runs that share a gas, method, table, settings and generator are described once,
@@ -419,6 +451,18 @@ def text(records: list[dict]) -> str:
                f"MOBCAL {_join(versions)} ({REPOSITORY}), which runs the programs of the "
                f"MOBCAL 2012 release ({_cite(['campuzano2012'], order)}).")
     sentences = [program]
+    said = [charges(d["input"]) for d in done]
+    if all(said):  # every run's charges are on record, or the paragraph says nothing of them
+        inputs: dict[str, set[str]] = {}
+        for d, s in zip(done, said, strict=True):
+            inputs.setdefault(s, set()).add(d["input"]["sha256"])
+        if len(inputs) == 1:
+            sentences.append(f"The partial charges on the atoms were {said[0]}.")
+        else:
+            n = {s: len(v) for s, v in inputs.items()}
+            sentences.append("The partial charges on the atoms were " + _join(
+                [f"{s} for {n[s]} {'ion file' if n[s] == 1 else 'ion files'}"
+                 for s in inputs]) + ".")
     for key, docs in groups.items():
         gas, method, table, _, generator, t, imp, itn, inp, inum, inor = key
         what = {f"2012-{gas}": "the method of the MOBCAL 2012 release",

@@ -445,7 +445,10 @@ def test_a_run_from_an_ion_file(tmp_path):
     assert rec["input"] == {"path": str(inp), "staged_name": "chol.mfj",
                             "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
                             "atoms": 21, "coordinate_sets": 1, "format": "mobcal-ion",
-                            "staged_sha256": hashlib.sha256(staged).hexdigest()}
+                            "staged_sha256": hashlib.sha256(staged).hexdigest(),
+                            "charge_mode": "calc",
+                            "import": {"source": {"program": "mfj", "version": None},
+                                       "charges": {"choice": "column"}}}
     assert run.read_records(tmp_path / "runs")[job.label]["input"] == str(inp)
     assert run.size(inp) == (21, 1)
 

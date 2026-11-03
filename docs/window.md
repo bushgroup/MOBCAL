@@ -162,8 +162,10 @@ puts the table on the clipboard, tab-separated, and Save CSV writes it to a file
 opens the selected row's run directory, and Open output its `mobcal.out`. Copy methods text puts
 a paragraph on the clipboard that describes the completed runs of the batch from their records,
 the program and version, the method, gas, element table, temperature, trajectory counts,
-generator and seeds, with the papers to cite. `mobcal methods-text FOLDER` prints the same for
-any runs.
+generator and seeds, with the papers to cite. When every run is of an ion file that carries its
+import record, the paragraph also names the partial charges: the scheme, and the program,
+version and keywords or route of the calculation they came from. `mobcal methods-text FOLDER`
+prints the same for any runs.
 
 ## Help
 

@@ -163,7 +163,8 @@ SHARED = {
     "methods_text": Description(
         "A methods paragraph for the completed runs, written from their records: the program "
         "and version, method, gas, element table, temperature, trajectory counts, generator "
-        "and seeds, with the papers to cite.",
+        "and seeds, with the papers to cite; and the partial charges, when every run is of an "
+        "ion file that carries its import record.",
         cli="Printed for the run directories, or folders of them, named.",
         window="Copied to the clipboard once a batch has completed runs."),
 }

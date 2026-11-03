@@ -295,6 +295,25 @@ class Staged:
     data: bytes
     sha256: str  # the input file's
     staged_sha256: str  # the staged .mfj's
+    charges: dict | None = None  # an ion file's charge mode and import summary, for the record
+
+
+# What record.json keeps of an ion file's import record, under the same names: enough for the
+# methods text to name the charges, which outlives the ion file moving.
+IMPORT_SOURCE = ("program", "version", "keywords", "route")
+
+
+def ion_charges(i: ion.Ion) -> dict:
+    """The record's account of an ion file's charges: its ``charge_mode`` and, when it carries
+    an import record, ``import``, that record's ``source`` program, version, and keywords or
+    route as given, and its ``charges.choice``."""
+    out: dict = {"charge_mode": i.charge_mode}
+    r = i.import_record
+    if r is not None:
+        out["import"] = {"source": {k: r["source"][k] for k in IMPORT_SOURCE
+                                    if k in r["source"]},
+                         "charges": {"choice": r.get("charges", {}).get("choice")}}
+    return out
 
 
 def stage(path: Path, table: ParameterSet) -> Staged:
@@ -308,13 +327,14 @@ def stage(path: Path, table: ParameterSet) -> Staged:
     sha = hashlib.sha256(data).hexdigest()
     if ion.is_ion(path):
         try:
-            mfj = ion.Ion.parse(data.decode("utf-8-sig")).mfj(table)
+            i = ion.Ion.parse(data.decode("utf-8-sig"))
+            mfj = i.mfj(table)
         except UnicodeDecodeError as e:
             raise IonError(f"{path.name}: not UTF-8: {e}") from None
         except IonError as e:
             raise IonError(f"{path.name}: {e}") from None
         staged = mfj.text().encode("latin-1")
-        return Staged(mfj, staged, sha, hashlib.sha256(staged).hexdigest())
+        return Staged(mfj, staged, sha, hashlib.sha256(staged).hexdigest(), ion_charges(i))
     text = data.decode("latin-1")
     if mobcalmpi.detect(text):
         raise MfjError(f"{path.name} is in MobCal-MPI's nine-column layout, which the 2012 "
@@ -738,13 +758,15 @@ def _write_record(r: Result, command: list[str], staged: Staged, started: dt.dat
 
     The ``input`` block names the file the job was given, its SHA-256, the staged name and the
     size. For an ion file it adds ``format`` (``mobcal-ion``) and ``staged_sha256``, the hash of
-    the ``.mfj`` written from it, which the table decides as much as the file does; a ``.mfj``
-    is staged as it is and its block is what it always was."""
+    the ``.mfj`` written from it, which the table decides as much as the file does, and
+    ``ion_charges``: the charge mode and what the import record says the charges are, for the
+    methods text. A ``.mfj`` is staged as it is and its block is what it always was."""
     j, mfj = r.job, staged.mfj
     inp = {"path": str(j.input), "staged_name": j.staged, "sha256": staged.sha256,
            "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets}
     if j.is_ion:
-        inp |= {"format": ion.FORMAT, "staged_sha256": staged.staged_sha256}
+        inp |= {"format": ion.FORMAT, "staged_sha256": staged.staged_sha256,
+                **(staged.charges or {})}
     exe = Path(command[0])
     build = fortran.read_manifest(exe.parent).get("binaries", {}).get(exe.name)
     doc = {
