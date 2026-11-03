@@ -88,6 +88,7 @@ from mobcal.app.inputs import InputsPanel
 from mobcal.app.store import Store
 from mobcal.app.worker import BatchWorker
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError
+from mobcal.io import ion
 from mobcal.io.structure import StructureError
 from mobcal.run import Job, Launcher, Result, Summary, cores, processors
 from mobcal.settings import Settings, Source
@@ -634,7 +635,7 @@ class MainWindow(QMainWindow):
         return Path(self.out_edit.text().strip() or self.store.default_out_dir())
 
     def form_batch(self) -> Batch:
-        """The batch the form describes, with each import's ``.mfj`` where it will be
+        """The batch the form describes, with each import's ion file where it will be
         written. Raises BatchError or SettingsError."""
         out = self.out_dir
         split: int | str | None = AUTO
@@ -642,7 +643,7 @@ class MainWindow(QMainWindow):
         if not self.auto_cores.isChecked():
             split = self.split_spin.value() if self.split_spin.value() > 1 else None
             workers = self.workers_spin.value()
-        return Batch(tuple(i.mfj_path(out) for i in self.inputs.items), out, self._from,
+        return Batch(tuple(i.run_path(out) for i in self.inputs.items), out, self._from,
                      gas=self.gas, seeds=seeds(self.seeds_spin.value()),
                      parameters=self.table_value(),
                      generator=self.generator_combo.currentData(),
@@ -908,7 +909,7 @@ class MainWindow(QMainWindow):
                 for i in range(self.queue.count()) if not self.queue.item(i).data(PINNED)]
 
     def _estimate(self, b: Batch) -> float | None:
-        """The batch's estimate, in seconds, of the runs it has left, from its ``.mfj`` files
+        """The batch's estimate, in seconds, of the runs it has left, from its input files
         as they are now; None when one cannot be read."""
         try:
             jobs = b.to_run()
@@ -1165,7 +1166,7 @@ class MainWindow(QMainWindow):
         rows = self.result_rows()
         self.results_table.setRowCount(len(rows))
         for i, r in enumerate(rows):
-            cells = (r.input.stem, parameters.GAS[r.gas], r.value("TM"), r.value("PA"),
+            cells = (ion.stem(r.input), parameters.GAS[r.gas], r.value("TM"), r.value("PA"),
                      r.value("EHS"), r.status, estimate.duration(r.seconds) if r.seconds else "")
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
@@ -1186,7 +1187,7 @@ class MainWindow(QMainWindow):
         w = csv.writer(buf, lineterminator="\n")
         w.writerow(CSV_HEADER)
         for r in self.result_rows():
-            w.writerow((r.input.stem, str(r.input), parameters.GAS[r.gas], r.value("TM"),
+            w.writerow((ion.stem(r.input), str(r.input), parameters.GAS[r.gas], r.value("TM"),
                         r.value("PA"), r.value("EHS"), len(r.results), r.status,
                         round(r.seconds, 1), str(r.run_dir.parent), r.message))
         return buf.getvalue()

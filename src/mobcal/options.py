@@ -71,9 +71,9 @@ SHARED = {
     "inputs": Description(
         "The ions to run, one calculation for each input and seed.",
         cli="Paths to .mfj or .ion.json files, or globs.",
-        window=".mfj files run as they are; ORCA and Gaussian outputs and .xyz files are "
-               "imported at Run, "
-               "into imported/ in the results folder. Add files, or drop them here."),
+        window="Ion files (.ion.json) and .mfj files run as they are; ORCA and Gaussian "
+               "outputs and .xyz files are imported at Add batch, into imported/ in the results "
+               "folder. Add files, or drop them here."),
     "method": Description(
         "A preset of the gas, the element table, the random number generator and the six run "
         "settings.",
@@ -179,8 +179,8 @@ WINDOW = {
                 "processors.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "
                   "it.",
-    "add_files": "Adds .mfj files or imports ORCA and Gaussian outputs and .xyz files. Files "
-                 "can also be dropped on the list.",
+    "add_files": "Adds ion files and .mfj files, or imports ORCA and Gaussian outputs and .xyz "
+                 "files. Files can also be dropped on the list.",
     "remove_inputs": "Removes the selected inputs.",
     "choose_folder": "Chooses the results folder.",
     "net_charge_read": "Read from the output, which was computed at this charge.",
@@ -214,12 +214,13 @@ COLUMNS = {
         "File": "The input file; its full path is in the cell's tooltip.",
         "Atoms": "Atoms in the ion.",
         "Sets": "Coordinate sets in the file; a run reports the mean over them.",
-        "Charges": "Which atomic charges the run uses. An .mfj file's row names its charge mode, "
-                   "from file, uniform or none, read from line 5 of the file; an imported "
+        "Charges": "Which atomic charges the run uses. An ion file's or .mfj file's row names "
+                   "its charge mode, from file, uniform or none, read from the file; an imported "
                    "structure's row is where to choose its charges.",
-        "Net charge": "The ion's net charge, in elementary charges. An .mfj file's row shows the "
-                      "charge its calculation uses, read from the file and by gas where helium "
-                      "and nitrogen read it differently; an .xyz file's row asks for it.",
+        "Net charge": "The ion's net charge, in elementary charges. An ion file's or .mfj file's "
+                      "row shows the charge its calculation uses, read from the file and by gas "
+                      "where helium and nitrogen read it differently; an .xyz file's row asks "
+                      "for it.",
         "Status": "ready, or what the input needs before the batch can run; an unreadable "
                   "file's reason is in the cell's tooltip.",
     },

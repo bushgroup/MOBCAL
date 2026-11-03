@@ -1,7 +1,8 @@
 # The window
 
 The window runs the same calculations as the `mobcal` command, for anyone who would rather not use a
-terminal. It takes `.mfj` files, or ORCA and Gaussian outputs and `.xyz` files that it imports, runs
+terminal. It takes ion files and `.mfj` files, or ORCA and Gaussian outputs and `.xyz` files that
+it imports, runs
 them in helium or nitrogen under one of five shipped methods or a method file of one's own, shows
 how long the batch will take and how far it has got, and gives a table of cross sections with the
 run folders, the records and a methods paragraph one click away. Everything the window does, the
@@ -20,25 +21,30 @@ mobcal gui
 
 ## Inputs
 
-Add files with Add files, or drop them on the list. An `.mfj` file runs as it is, and its row
-shows what its fifth line makes of the charges, read-only. Charges names the mode: `calc` reads
+Add files with Add files, or drop them on the list. An ion file, `.ion.json` ([The ion
+file](ion-file.md)), or an `.mfj` file runs as it is, and its row shows what the file makes of the
+charges, read-only: the fifth line of an `.mfj`, the `charge_mode` of an ion file, which keeps the
+line it was read from. Charges names the mode: `calc` reads
 "from file", `equal` "uniform", `none` "none". Net charge gives the charge the calculation uses,
 and the two gases read `equal` differently: helium gives the ion +1 whatever the file's fifth
 column sums to, nitrogen gives it that sum, so an `equal` row reads "+1 He / +2 N2" for a column
 summing to 2. A `calc` row shows the column's sum and a `none` row shows 0. A sum within 0.01 of an
 integer is shown as the integer; the tooltip gives it to six decimals, and for a file of several
 sets lists each one's when they differ. The nitrogen program reads a charge on every atom line
-whatever the mode, so a file with four columns is refused when the batch's gas is nitrogen, and
-its row says so ([Reproducing MOBCAL 2012](mobcal-2012.md)). An ORCA or
+whatever the mode, so a file with four columns, or an ion file with an atom that has no charge,
+is refused when the batch's gas is nitrogen, and its row says so ([Reproducing MOBCAL
+2012](mobcal-2012.md)). An `.mfj` in MobCal-MPI's nine-column layout is refused, as `mobcal run`
+refuses it; `mobcal import` reads it into an ion file, which the window runs. An ORCA or
 Gaussian output or an `.xyz` file is imported as `mobcal import` imports it ([Importing a structure
 and its charges](import.md)), and its row shows the charges the import will use. When an output
 holds an ESP fit it is selected, the Merz-Kollman fit (`mk`, the scheme of the 2012 choline charges)
 before CHELPG; otherwise the row asks for a choice before the batch can run. `uniform`, the net
 charge spread evenly over the atoms, is always offered and never selected for you. An `.xyz` file
-does not carry the ion's net charge, so its row asks for it. At Add batch each import is written as an ion
-file, `.ion.json` ([The ion file](ion-file.md)), into `imported/` in the results folder, with the
-`.mfj` written from it beside it, so the folder holds the file each run read and the record of
-where its charges came from.
+does not carry the ion's net charge, so its row asks for it. At Add batch each import is written
+as an ion file into `imported/` in the results folder, and the batch runs that file, so the folder
+holds the file each run read and the record of where its charges came from; the `.mfj` the program
+reads is written into each run's folder. An ion file already in `imported/` that holds the same ion
+is left as it is, so the runs made from it before are still found complete.
 
 ## Method, Basics and Advanced
 

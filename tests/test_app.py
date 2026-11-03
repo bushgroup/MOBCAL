@@ -52,11 +52,12 @@ from PySide6.QtWidgets import (  # noqa: E402
 
 import mobcal  # noqa: E402
 from mobcal import batch as batches  # noqa: E402
-from mobcal import cli, docs, estimate, fortran, methods, options, parameters  # noqa: E402
+from mobcal import cli, docs, estimate, fortran, methods, options  # noqa: E402
 from mobcal.app import inputs, theme, tip  # noqa: E402
 from mobcal.app import window as win  # noqa: E402
 from mobcal.app.store import Store  # noqa: E402
 from mobcal.app.window import MainWindow  # noqa: E402
+from mobcal.io import ion  # noqa: E402
 from mobcal.io.ion import Ion  # noqa: E402
 from mobcal.io.mfj import Atom, Mfj  # noqa: E402
 from mobcal.run import Job  # noqa: E402
@@ -814,15 +815,15 @@ def test_an_orca_output_with_chelpg_is_preselected_and_imported_at_run(window, q
     combo.setCurrentIndex(combo.findData("mulliken"))
     assert w.add_batch_button.isEnabled()
     b = w.form_batch()
-    assert [p.name for p in b.inputs] == ["choline_sp_chelpg.mfj", "choline_opt_mulliken.mfj"]
+    assert [p.name for p in b.inputs] == ["choline_sp_chelpg.ion.json",
+                                          "choline_opt_mulliken.ion.json"]
     w.launcher = launcher
     for item in w.inputs.items:
         item.write(w.out_dir, (w.gas,))
     imported = w.out_dir / "imported"
     rec = Ion.read(imported / "choline_sp_chelpg.ion.json").import_record
     assert rec["charges"]["choice"] == "chelpg"
-    assert Mfj.read(imported / "choline_sp_chelpg.mfj") == Ion.read(
-        imported / "choline_sp_chelpg.ion.json").mfj(parameters.shipped(w.gas))
+    assert sorted(p.name for p in imported.iterdir()) == [p.name for p in sorted(b.inputs)]
 
 
 def test_a_gaussian_log_preselects_mk_then_chelpg_and_shows_an_untested_version(window, qtbot,
@@ -921,6 +922,80 @@ def test_a_four_column_file_blocks_nitrogen_and_not_helium(window, qtbot, tmp_pa
     assert "fifth column" in w.estimate_label.text()
     w.gas_combo.setCurrentIndex(w.gas_combo.findData("he"))
     assert w.add_batch_button.isEnabled() and w.inputs.table.item(0, 5).text() == "ready"
+
+
+ION = Path(__file__).resolve().parent / "data" / "ion"
+
+
+def ion_file(path: Path, label: str, source: Path = ION / "choline.ion.json") -> Path:
+    """An ion file whose label is a ``fake_mobcal`` instruction, from an ion file or a
+    ``.mfj``."""
+    made = Ion.read(source) if source.name.endswith(".ion.json") else ion.from_mfj(source)
+    return dataclasses.replace(made, label=label).write(path)
+
+
+def test_an_ion_file_runs_where_it_is_and_shows_its_charges(window, qtbot, tmp_path):
+    w = window
+    a = ion_file(tmp_path / "a.ion.json", "ok")
+    add(qtbot, w, a)
+    item = w.inputs.items[0]
+    assert (item.kind, item.atoms, item.sets) == ("ion", 21, 1)
+    assert cells(w, 0) == ("from file", "+1") and w.inputs.table.item(0, 5).text() == "ready"
+    assert w.inputs.table.cellWidget(0, 3) is None
+    assert w.form_batch().inputs == (a,) and w.inputs.sizes(w.out_dir) == {a: (21, 1)}
+    run(w)
+    wait_idle(qtbot, w)
+    row = w.result_rows()[0]
+    assert row.status == "ok" and w.results_table.item(0, 0).text() == "a"
+    assert w.csv_text().splitlines()[1].startswith("a,")
+    rec = json.loads((row.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["input"]["format"] == "mobcal-ion" and Path(rec["input"]["path"]) == a.resolve()
+    assert not (w.out_dir / "imported").exists()
+
+
+def test_an_ion_file_without_charges_blocks_nitrogen(window, qtbot, tmp_path):
+    w = window
+    four = ion_file(tmp_path / "four.ion.json", "ok",
+                    mfj_file(tmp_path, "four.mfj", "equal", [None]))
+    add(qtbot, w, four)
+    assert cells(w, 0) == ("uniform", "+1 He / — N2") and w.add_batch_button.isEnabled()
+    w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
+    assert "fifth column" in w.inputs.table.item(0, 5).text()
+    assert not w.add_batch_button.isEnabled()
+
+
+def test_a_nine_column_mfj_and_a_bad_ion_file_are_refused_saying_why(window, qtbot, tmp_path):
+    w = window
+    bad = tmp_path / "bad.ion.json"
+    bad.write_text('{"format": "mobcal-ion", "version": 2}\n', encoding="utf-8")
+    add(qtbot, w, ION / "choline_mobcalmpi.mfj", bad)
+    nine, two = w.inputs.items
+    assert nine.state == "error" and "nine-column" in nine.error and "mobcal import" in nine.error
+    assert two.state == "error" and "version" in two.error
+    assert not w.add_batch_button.isEnabled()
+
+
+def test_an_import_written_again_keeps_the_ion_file_the_earlier_runs_read(window, qtbot,
+                                                                         monkeypatch):
+    w = window
+    add(qtbot, w, ORCA / "choline_sp" / "choline_sp.out")
+    item = w.inputs.items[0]
+    out = item.write(w.out_dir, ("he",))
+    first = out.read_bytes()
+    monkeypatch.setattr(ion, "now", lambda: "2031-01-01T00:00:00+00:00")
+    assert item.write(w.out_dir, ("n2",)) == out and out.read_bytes() == first
+    item.charges = "mulliken"
+    other = item.write(w.out_dir, ("he",))
+    assert other != out and Ion.read(other).written == "2031-01-01T00:00:00+00:00"
+
+
+def test_a_queued_ion_input_survives_the_queue_file(tmp_path):
+    a = ion_file(tmp_path / "a.ion.json", "ok")
+    b = batches.Batch((a, CHOLINE), tmp_path / "results", method="2012-n2")
+    path = batches.save([b], tmp_path / "queue.json")
+    assert json.loads(path.read_text(encoding="utf-8"))["batches"][0]["format"] == 3
+    assert batches.load(path) == ([b], [])
+    assert [j.label.split("-")[0] for j in b.jobs()] == ["a", "Choline"]
 
 
 def test_an_unreadable_input_says_why(window, qtbot, tmp_path):

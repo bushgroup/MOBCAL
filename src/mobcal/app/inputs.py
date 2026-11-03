@@ -1,20 +1,25 @@
-"""The inputs: ``.mfj`` files, or ORCA and Gaussian outputs and ``.xyz`` files the window
-imports.
+"""The inputs: ion files (``.ion.json``) and ``.mfj`` files, which run where they are, or ORCA and
+Gaussian outputs and ``.xyz`` files the window imports.
 
-Every file is read on the thread pool as it is added: an ``.mfj`` for its atom and set counts (the
-estimate's), anything else through ``mobcal.io.structure.read`` (cclib for an ORCA or Gaussian
-output, whose first import takes seconds). An import's row shows its charge choice: an ESP fit
+Every file is read on the thread pool as it is added: an ion file or an ``.mfj`` for its atom and
+set counts (the estimate's) and its charge column, anything else through
+``mobcal.io.structure.read`` (cclib for an ORCA or Gaussian output, whose first import takes
+seconds). A ``.mfj`` in MobCal-MPI's nine-column layout is refused as ``mobcal run`` refuses it,
+pointing at ``mobcal import``. An import's row shows its charge choice: an ESP fit
 preselected when the file holds one (``PRESELECT``), otherwise nothing until the user picks, and
 ``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for the
 ion's net charge; an output of a version the import is not tested on reads "ready (untested
-version)", with the warning in its tooltip. At Run the import is written as ``mobcal import`` writes
-it, an ``.ion.json``, into ``imported/`` in the results folder, with the ``.mfj`` the run reads
-beside it, written from the ion file as ``mobcal export`` writes it, so the study folder holds
-what was run.
+version)", with the warning in its tooltip. At Add batch the import is written as ``mobcal
+import`` writes it, an ``.ion.json``, into ``imported/`` in the results folder, and the batch runs
+that file, so the study folder holds what was run; the ``.mfj`` each run reads is staged in its
+run directory.
+An ion file already there that holds the same ion is kept, not rewritten, so that its SHA-256,
+which the earlier runs' records name, still matches and those runs read as done.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,15 +40,17 @@ from PySide6.QtWidgets import (
 
 from mobcal import options
 from mobcal.app import tip
-from mobcal.io import ion, structure
+from mobcal.io import ion, mobcalmpi, structure
 from mobcal.io.mfj import Mfj, MfjError
 
 # The ESP fit preselected when the file holds it, first found: Merz-Kollman, the scheme of the
 # 2012 choline column, then CHELPG.
 PRESELECT = ("mk", "chelpg")
 IMPORTED = "imported"
-FILTER = ("Structures (*.mfj *.xyz *.out *.log);;MOBCAL inputs (*.mfj);;"
+FILTER = ("Structures (*.ion.json *.mfj *.xyz *.out *.log);;"
+          "MOBCAL inputs (*.ion.json *.mfj);;"
           "ORCA and Gaussian outputs (*.out *.log);;XYZ files (*.xyz);;All files (*)")
+RUN_AS_IS = ("ion", "mfj")  # the kinds a run reads where they are
 COLUMNS = ("File", "Atoms", "Sets", "Charges", "Net charge", "Status")
 
 MINUS = "−"
@@ -58,6 +65,20 @@ MODE_TIPS = {
 }
 
 
+def ion_charge_sums(i: ion.Ion) -> tuple[float, ...]:
+    """Each conformer's sum of charges, or empty unless every atom of every conformer has one:
+    what ``Mfj.net_charge`` gives, by set, for the ``.mfj`` the ion file is written as."""
+    if any(c.charges is None or None in c.charges for c in i.conformers):
+        return ()
+    return tuple(sum(c.charges) for c in i.conformers)
+
+
+def same_ion(a: ion.Ion, b: ion.Ion) -> bool:
+    """The two hold the same ion, whenever and by whatever they were written."""
+    return (dataclasses.replace(a, written=None, written_by={})
+            == dataclasses.replace(b, written=None, written_by={}))
+
+
 def format_charge(q: float) -> str:
     """A net charge as the cell shows it: the integer, signed, within 0.01 e of one, else the
     decimal to three places, signed."""
@@ -68,9 +89,10 @@ def format_charge(q: float) -> str:
 
 
 def mfj_charge_cells(mode: str, sums: tuple[float, ...]) -> tuple[str, str, str, str]:
-    """An ``.mfj`` row's Charges and Net charge cells, each with its tooltip, as (charges, tip,
-    net charge, tip), from line 5 and each set's column sum (empty when the file has no charge
-    column). The mode decides which charge each gas uses; see ``mobcal.io.mfj``."""
+    """An ``.mfj`` or ion file row's Charges and Net charge cells, each with its tooltip, as
+    (charges, tip, net charge, tip), from line 5 (an ion file's ``charge_mode``) and each set's
+    column sum (empty when the file has no charge column). The mode decides which charge each
+    gas uses; see ``mobcal.io.mfj``."""
     q = sums[0] if sums else None
     if mode == "calc":
         net = format_charge(q)
@@ -90,7 +112,7 @@ def mfj_charge_cells(mode: str, sums: tuple[float, ...]) -> tuple[str, str, str,
 @dataclass
 class Input:
     path: Path
-    kind: str  # "mfj", or "import" for an ORCA or Gaussian output or an .xyz
+    kind: str  # "ion", "mfj", or "import" for an ORCA or Gaussian output or an .xyz
     state: str = "reading"  # reading | ready | error
     error: str = ""
     atoms: int | None = None
@@ -98,8 +120,8 @@ class Input:
     structure: structure.Structure | None = field(default=None, repr=False)
     charges: str | None = None  # an import's choice
     net_charge: int | None = None  # an .xyz's, given by the user
-    charge_mode: str | None = None  # an .mfj's line 5
-    charge_sums: tuple[float, ...] = ()  # an .mfj's column sum of each set; empty without one
+    charge_mode: str | None = None  # an .mfj's line 5, an ion file's charge_mode
+    charge_sums: tuple[float, ...] = ()  # each set's column sum; empty without a column
 
     @property
     def needs_net_charge(self) -> bool:
@@ -115,32 +137,52 @@ class Input:
             return f"{self.path.name}: choose its charges"
         if self.kind == "import" and self.needs_net_charge and self.net_charge is None:
             return f"{self.path.name}: give the ion's net charge"
-        if self.kind == "mfj" and gas == "n2" and not self.charge_sums:
+        if self.kind in RUN_AS_IS and gas == "n2" and not self.charge_sums:
             return (f"{self.path.name}: the nitrogen program needs a fifth column, the charge, "
                     "on every atom line")
         return ""
 
-    def mfj_path(self, out_dir: Path) -> Path:
-        """The file the run reads: the input itself, or where its import is written."""
-        if self.kind == "mfj":
+    def run_path(self, out_dir: Path) -> Path:
+        """The file the run reads: the input itself, or the ion file its import is written as,
+        ``imported/<stem>_<charges>.ion.json``."""
+        if self.kind in RUN_AS_IS:
             return self.path
-        return Path(out_dir) / IMPORTED / f"{self.path.stem}_{self.charges}.mfj"
+        return Path(out_dir) / IMPORTED / structure.default_name(self.path, self.charges)
 
     def write(self, out_dir: Path, gases: tuple[str, ...]) -> Path:
-        """Write an import's ion file and the ``.mfj`` the run reads (replacing earlier ones,
-        which are the same source's same choice); an ``.mfj`` is used where it is. Raises
-        StructureError."""
-        if self.kind == "mfj":
+        """Write an import's ion file, replacing an earlier one of the same source and choice
+        unless it holds the same ion (``same_ion``), which is kept as it is; an ion file or an
+        ``.mfj`` is used where it is. The elements are checked against both gases' default
+        tables where they are in both, so that a helium and a nitrogen batch of one import run
+        one ion file, else against ``gases``'. Raises StructureError."""
+        if self.kind in RUN_AS_IS:
             return self.path
-        imp = structure.convert(self.structure, self.charges, self.net_charge, gases)
-        out = self.mfj_path(out_dir)
+        try:
+            imp = structure.convert(self.structure, self.charges, self.net_charge,
+                                    structure.GASES)
+        except structure.StructureError:
+            imp = structure.convert(self.structure, self.charges, self.net_charge, gases)
+        out = self.run_path(out_dir)
+        try:
+            if same_ion(ion.Ion.read(out), imp.ion):
+                return out
+        except (OSError, ion.IonError):
+            pass
         out.parent.mkdir(parents=True, exist_ok=True)
-        structure.write(imp, out.with_name(out.stem + ion.SUFFIX), overwrite=True)
-        return imp.mfj.write(out)
+        return structure.write(imp, out, overwrite=True)
+
+
+def _read_mfj(path: Path) -> Mfj:
+    """A ``.mfj`` as a run takes it: refused in MobCal-MPI's nine-column layout."""
+    text = path.read_text(encoding="latin-1")
+    if mobcalmpi.detect(text):
+        raise MfjError("MobCal-MPI's nine-column layout, which the 2012 program would misread; "
+                       "`mobcal import` it into an ion file and add that")
+    return Mfj.parse(text)
 
 
 class _Signals(QObject):
-    read = Signal(str, object, str)  # path, Mfj or Structure (None on error), error
+    read = Signal(str, object, str)  # path, Ion, Mfj or Structure (None on error), error
 
 
 class _Read(QRunnable):
@@ -150,9 +192,14 @@ class _Read(QRunnable):
 
     def run(self) -> None:
         try:
-            got = Mfj.read(self.path) if self.kind == "mfj" else structure.read(self.path)
+            if self.kind == "ion":
+                got = ion.Ion.read(self.path)
+            elif self.kind == "mfj":
+                got = _read_mfj(self.path)
+            else:
+                got = structure.read(self.path)
             self.signals.read.emit(str(self.path), got, "")
-        except (OSError, MfjError, structure.StructureError) as e:
+        except (OSError, MfjError, ion.IonError, structure.StructureError) as e:
             self.signals.read.emit(str(self.path), None, str(e))
         except Exception as e:  # cclib on a file it does not expect: shown, not lost
             self.signals.read.emit(str(self.path), None, f"{type(e).__name__}: {e}")
@@ -220,7 +267,8 @@ class InputsPanel(QWidget):
             p = p.resolve()
             if any(i.path == p for i in self.items):
                 continue
-            kind = "mfj" if p.suffix.lower() == ".mfj" else "import"
+            kind = ("ion" if ion.is_ion(p) else "mfj" if p.suffix.lower() == ".mfj"
+                    else "import")
             self.items.append(Input(p, kind))
             self._pool.start(_Read(p, kind, self._signals))
         self._redraw()
@@ -244,6 +292,9 @@ class InputsPanel(QWidget):
             return
         if got is None:
             item.state, item.error = "error", error
+        elif isinstance(got, ion.Ion):
+            item.state, item.atoms, item.sets = "ready", got.atoms, len(got.conformers)
+            item.charge_mode, item.charge_sums = got.charge_mode, ion_charge_sums(got)
         elif isinstance(got, Mfj):
             item.state, item.atoms, item.sets = "ready", got.atoms, got.coordinate_sets
             item.charge_mode = got.charge_mode
@@ -274,8 +325,8 @@ class InputsPanel(QWidget):
 
     def sizes(self, out_dir: Path) -> dict:
         """(atoms, sets) by the path each run will read, for the estimate."""
-        return {i.mfj_path(out_dir): (i.atoms, i.sets) for i in self.items
-                if i.state == "ready" and i.atoms and (i.kind == "mfj" or i.charges)}
+        return {i.run_path(out_dir): (i.atoms, i.sets) for i in self.items
+                if i.state == "ready" and i.atoms and (i.kind in RUN_AS_IS or i.charges)}
 
     # --- drawing --------------------------------------------------------------------------
 
@@ -293,7 +344,7 @@ class InputsPanel(QWidget):
             self.table.removeCellWidget(r, 4)
             self.table.setItem(r, 3, None)
             self.table.setItem(r, 4, None)
-            if item.kind == "mfj" and item.charge_mode is not None:
+            if item.kind in RUN_AS_IS and item.charge_mode is not None:
                 words, words_tip, net, net_tip = mfj_charge_cells(item.charge_mode,
                                                                   item.charge_sums)
                 for c, (text, tooltip) in ((3, (words, words_tip)), (4, (net, net_tip))):
@@ -314,7 +365,7 @@ class InputsPanel(QWidget):
             self.table.setItem(r, 5, cell)
 
     def _charges_widget(self, item: Input) -> QWidget | None:
-        if item.kind == "mfj" or item.structure is None:
+        if item.kind in RUN_AS_IS or item.structure is None:
             return None
         combo = QComboBox()
         combo.setPlaceholderText("choose…")
