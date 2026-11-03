@@ -1,8 +1,9 @@
-"""The methods: everything a calculation depends on but its input and its seed, in one file.
+"""The methods: everything a calculation depends on but its input, in one file.
 
 A method is the gas, the element table, the random number generator and the six run settings
-(``mobcal.settings``). It is a TOML file (``load``, ``save``), and five ship beside this module,
-pinned like the element tables (``SHA256``, ``verify``), each known by its file's stem:
+(``mobcal.settings``), and may carry a seed. It is a TOML file (``load``, ``save``), and five
+ship beside this module, pinned like the element tables (``SHA256``, ``verify``), each known by
+its file's stem:
 
     2012-he, 2012-n2              the calculation of the 2012 release: its tables and settings
                                   under RANLUX, which reproduces the 2012 outputs at the 2012 seed
@@ -22,12 +23,19 @@ A method file of one's own follows the same format, ``format = 1``:
     generator = "philox"        philox or ranlux
     temperature = 301           the six settings; a key left out takes the 2012 value
     imp = 1000  ...
+    seed = 5013489              optional: the first seed of a run made from the method
 
 The first five keys are required and an unknown key is refused by name. A table of one's own
 is named by its path, relative to the method file's folder unless absolute, and its SHA-256:
-loading the method refuses it, saying which, when the table has moved or changed. The seed is
-not part of a method: it belongs to the calculation, and the first seed is the 2012 seed under
-every method.
+loading the method refuses it, saying which, when the table has moved or changed.
+
+``seed`` is optional, a positive integer up to ``infile.MAX_SEED``, and was added to format 1
+without a new format number: a file without it reads as before, so only a file that carries it
+needs this version. A run made from a method with a seed and no ``--seeds`` runs at it (n
+seeds count up from it in the window); ``--seeds`` wins when given. Without one, the first seed
+is the 2012 seed, 5013489 (``Method.first_seed``). The seed is not one of the fields
+``identify`` reads: a run at another seed is still a run of its method, and the shipped
+methods carry none.
 
 ``identify`` names the shipped method a run used from what the run used, so a run made with
 ``--rng ranlux`` and nothing else is a ``2012-he`` run whether or not ``--method 2012-he`` was
@@ -59,7 +67,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from mobcal import parameters, settings
-from mobcal.io.infile import GENERATORS
+from mobcal.io.infile import GENERATORS, MAX_SEED
 from mobcal.settings import DEFAULTS, Settings
 
 METHODS_DIR = Path(__file__).resolve().parent
@@ -79,7 +87,8 @@ SHA256 = {
 
 FORMATS = (1,)
 REQUIRED = ("format", "name", "gas", "parameters", "generator")
-KEYS = (*REQUIRED, *settings.NAMES)
+KEYS = (*REQUIRED, *settings.NAMES, "seed")
+DEFAULT_SEED = 5013489  # the 2012 seed, batch.DEFAULT_SEED; the first seed without a method seed
 MAX_NAME = 60
 
 # What a record written before methods carried their gas says, as the shipped method it was.
@@ -103,6 +112,12 @@ class Method:
     path: Path  # the method file
     sha256: str  # of the method file
     shipped: bool = False
+    seed: int | None = None  # the method's seed, when its file carries one
+
+    @property
+    def first_seed(self) -> int:
+        """The seed a run of this method starts at without ``--seeds``."""
+        return DEFAULT_SEED if self.seed is None else self.seed
 
     @property
     def key(self) -> str:
@@ -196,8 +211,12 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     except settings.SettingsError as e:
         raise MethodError(f"{path}: {e}") from None
     st = Settings(**st.values())  # a method's settings are its own, from no settings file
+    seed = doc.get("seed")
+    if seed is not None and (type(seed) is not int or not 1 <= seed <= MAX_SEED):
+        raise MethodError(f"{path}: seed is {seed!r}; a seed is a positive integer up to "
+                          f"{MAX_SEED}")
     return Method(name, gas, set_name, table, table_sha, generator, st, path,
-                  hashlib.sha256(data).hexdigest(), shipped)
+                  hashlib.sha256(data).hexdigest(), shipped, seed)
 
 
 def _table(value: object, gas: str, path: Path) -> tuple[str | None, Path | None, str | None]:
@@ -234,10 +253,10 @@ def _toml_string(s: str) -> str:
 
 
 def save(path: Path | str, name: str, gas: str, table: str | Path, generator: str,
-         st: Settings) -> Method:
+         st: Settings, seed: int | None = None) -> Method:
     """Write a method file with every key, a table of one's own by its absolute path and its
-    SHA-256 now, and return it as ``load`` reads it back. ``table`` is a shipped set's name or a
-    path. Raises MethodError."""
+    SHA-256 now, and ``seed`` when one is given, and return it as ``load`` reads it back.
+    ``table`` is a shipped set's name or a path. Raises MethodError."""
     path = Path(path)
     _check_name(name, str(path))
     lines = ["format = 1", f"name = {_toml_string(name)}", f"gas = {_toml_string(gas)}"]
@@ -256,6 +275,8 @@ def save(path: Path | str, name: str, gas: str, table: str | Path, generator: st
     lines.append(f"temperature = {st.temperature:g}" if st.temperature == int(st.temperature)
                  else f"temperature = {st.temperature!r}")
     lines += [f"{k} = {getattr(st, k)}" for k in settings.COUNTS]
+    if seed is not None:
+        lines.append(f"seed = {seed}")
     try:
         path.write_text("\n".join(lines + tail) + "\n", encoding="utf-8", newline="\n")
     except OSError as e:
@@ -312,6 +333,8 @@ def verify(methods_dir: Path = METHODS_DIR) -> list[str]:
             continue
         if m.table is not None:
             problems.append(f"{p.name}: names a table by path; a shipped method names a set")
+        if m.seed is not None:
+            problems.append(f"{p.name}: carries a seed; a shipped method carries none")
         if m.name in names:
             problems.append(f"{p.name}: the name {m.name!r} is another shipped method's")
         names.add(m.name)

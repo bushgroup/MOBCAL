@@ -200,6 +200,32 @@ def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtb
     assert "is the name of a shipped method" in w._warnings[-1]
 
 
+def test_a_method_seed_starts_the_seeds_and_save_method_keeps_it(window, tmp_path):
+    w = window
+    w.inputs.add_paths([CHOLINE])
+    assert "seed" not in w.save_method(tmp_path / "plain.toml", "Plain").path.read_text(
+        encoding="utf-8")  # from a method without a seed, Save method writes none
+    seeded = tmp_path / "seeded.toml"
+    seeded.write_text(methods.shipped_path("2012-he").read_text(encoding="utf-8")
+                      .replace("MOBCAL 2012 (He)", "Seeded") + "seed = 42\n",
+                      encoding="utf-8", newline="\n")
+    m = w.load_method(seeded)
+    w.seeds_spin.setValue(3)
+    assert w.seeds_spin.suffix() == ", from seed 42"
+    b = w.form_batch()
+    assert [j.seed for j in b.jobs()] == [42, 43, 44] and b.title() == "Seeded"
+    # An edit makes it Custom (from Seeded), which keeps the method's seed.
+    w.counts["itn"].setValue(6)
+    assert w.method_combo.currentText() == "Custom (from Seeded)"
+    assert [j.seed for j in w.form_batch().jobs()] == [42, 43, 44]
+    again = w.save_method(tmp_path / "again.toml", "Seeded again")
+    assert again.seed == 42 and again.settings.itn == 6
+    # A shipped method goes back to the 2012 seed.
+    w.apply_method("2012-he")
+    assert w.seeds_spin.suffix() == "" and m.seed == 42
+    assert [j.seed for j in w.form_batch().jobs()] == [5013489, 5013490, 5013491]
+
+
 def test_a_method_file_with_its_own_table_fills_the_table(window, tmp_path):
     w = window
     table = tmp_path / "mine_he.toml"

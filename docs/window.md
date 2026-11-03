@@ -68,8 +68,9 @@ added, with a message that says which and why. `mobcal run --method PATH` runs t
 
 Basics holds the gas (He or N2), the element table (the tables shipped for the gas, or a file of
 one's own for the gas, [The element tables](parameters.md)), the number of seeds per ion, and
-the temperature. The first seed is the 2012 seed, 5013489, under every method, and each further
-seed is the next integer; with several seeds, each cross section is shown as the mean and sample
+the temperature. The first seed is the method's seed when its file carries one, which Seeds per
+ion then shows (", from seed 42"), and the 2012 seed, 5013489, otherwise; each further seed is
+the next integer; with several seeds, each cross section is shown as the mean and sample
 standard deviation over them. Advanced holds the generator, the five sampling counts
 ([The run settings](settings.md)), and how the batch uses the processors.
 

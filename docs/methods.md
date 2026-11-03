@@ -1,8 +1,9 @@
 # Methods
 
-A method is everything a calculation depends on except its input and its seed: the buffer gas, the
-element table, the random number generator and the six run settings (the temperature and the five
-sampling counts, [The run settings](settings.md)). The window's Method list and `mobcal run
+A method is everything a calculation depends on except its input: the buffer gas, the element
+table, the random number generator and the six run settings (the temperature and the five
+sampling counts, [The run settings](settings.md)), and, in a method file of one's own, a seed if
+one is wanted. The window's Method list and `mobcal run
 --method` choose one, and every run records the method it used, so a cross section can be traced to
 the calculation that gave it. A batch runs one method, and so one gas; helium and nitrogen are two
 batches, which the window's queue or two commands run one after the other.
@@ -37,8 +38,8 @@ mobcal run choline.mfj --method 2012-n2
 runs choline under `2012-philox-he`, then under the 2012 release's nitrogen calculation. A
 table, generator or setting given beside `--method` replaces that one value, and the run records
 `custom`, or the shipped method its values make: `--method 2012-he --rng philox` is a
-`2012-philox-he` run. The seed is not part of a method, and the first seed is the
-2012 seed, 5013489, under every method.
+`2012-philox-he` run. The shipped methods carry no seed, and a run of one starts at the 2012
+seed, 5013489, unless `--seeds` gives others.
 
 ## Method files
 
@@ -64,7 +65,15 @@ inor = 30
 
 `format`, `name`, `gas` (`he` or `n2`), `parameters` and `generator` (`philox` or `ranlux`) are
 required, and a key the file does not know is refused by name. The six settings are optional,
-and a setting left out takes its 2012 value, as in a settings file. The name is 1 to 60
+and a setting left out takes its 2012 value, as in a settings file.
+
+`seed` is optional too, a positive integer up to 2147483647, such as `seed = 42`. A run of a
+method that carries a seed starts there: `mobcal run --method PATH` runs at that seed, and the
+window's seeds per ion count up from it (42, 43, 44 for three). `--seeds` on the command line
+wins over the method's seed, and the run is still a run of the method, since the seed is not one
+of the fields that identify it. A file without `seed` starts at 5013489, as the shipped methods
+do. Save method writes the seed only when the method the form came from carries one, and then
+writes that seed. The name is 1 to 60
 characters and must differ from the shipped methods' names and from every other file in the
 list. `parameters` is the name of a shipped table for the gas (`2012`, or `2000` in helium), or
 a table of one's own ([The element tables](parameters.md)) named by its path and its SHA-256:

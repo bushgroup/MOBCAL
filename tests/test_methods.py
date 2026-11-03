@@ -228,7 +228,17 @@ def test_a_method_file_names_its_own_table_by_path_and_sha256(tmp_path):
 @pytest.mark.parametrize("body, match", [
     ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\n', "no generator"),
     ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "seed = 1\n", "unknown key 'seed'"),
+     "sead = 1\n", "unknown key 'sead'"),
+    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+     "seed = 0\n", "seed is 0; a seed is a positive integer up to 2147483647"),
+    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+     "seed = 2147483648\n", "seed is 2147483648"),
+    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+     'seed = "42"\n', "seed is '42'"),
+    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+     "seed = 4.2\n", "seed is 4.2"),
+    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+     "seed = true\n", "seed is True"),
     ('format = 2\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n',
      "format is 2"),
     ('format = 1\nname = "X"\ngas = "ar"\nparameters = "2012"\ngenerator = "philox"\n',
@@ -272,6 +282,43 @@ def test_the_record_and_the_summary_carry_the_method(tmp_path):
         == ["2012-philox-he", "2012-he"]
     assert [line.split(",")[5] for line in csv_path.read_text().splitlines()] == \
         ["method", "2012-philox-he", "2012-he"]
+
+
+def test_a_method_seed_is_the_first_seed_and_seeds_wins(tmp_path):
+    """A method's seed is where its runs start without --seeds; --seeds wins when given, and
+    the run is still a run of the method, which the seed does not identify."""
+    assert all(m.seed is None and m.first_seed == batch.DEFAULT_SEED
+               for m in methods.METHODS.values())
+    plain = methods.save(tmp_path / "plain.toml", "Plain", "he", "2012", "ranlux",
+                         settings.DEFAULTS)
+    assert "seed" not in plain.path.read_text(encoding="utf-8") and plain.seed is None
+    m = methods.save(tmp_path / "m.toml", "Seeded", "he", "2012", "ranlux", settings.DEFAULTS,
+                     seed=42)
+    assert m.path.read_text(encoding="utf-8").endswith("inor = 30\nseed = 42\n")
+    assert (m.seed, m.first_seed) == (42, 42) and methods.load(m.path).seed == 42
+    by_method = from_cli(tmp_path, str(CHOLINE), "--method", str(m.path))
+    assert [j.seed for j in by_method.jobs()] == [42]
+    assert {j.method for j in by_method.jobs()} == {"Seeded"}
+    given = from_cli(tmp_path, str(CHOLINE), "--method", str(m.path), "--seeds", "7,8")
+    assert [j.seed for j in given.jobs()] == [7, 8]
+    assert {j.method for j in given.jobs()} == {"Seeded"}
+    assert [j.seed for j in from_cli(tmp_path, str(CHOLINE)).jobs()] == [batch.DEFAULT_SEED]
+    # Shipped methods carry none; verify says so of one that does.
+    shipped = tmp_path / "shipped"
+    shipped.mkdir()
+    for key in methods.SHA256:
+        (shipped / f"{key}.toml").write_bytes(methods.shipped_path(key).read_bytes())
+    with (shipped / "2012-he.toml").open("a", encoding="utf-8", newline="\n") as f:
+        f.write("seed = 42\n")
+    assert "2012-he.toml: carries a seed; a shipped method carries none" in \
+        methods.verify(shipped)
+
+
+def test_a_batch_refuses_a_seed_the_program_cannot_take(tmp_path):
+    with pytest.raises(BatchError, match="seed 0: a seed is a positive integer"):
+        Batch((CHOLINE,), tmp_path / "runs", seeds=(0,))
+    with pytest.raises(cli.UsageError, match="seed 2147483648"):
+        from_cli(tmp_path, str(CHOLINE), "--seeds", "2147483648")
 
 
 def test_a_run_from_a_method_file_records_its_name_and_sha256(tmp_path):

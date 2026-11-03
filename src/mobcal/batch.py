@@ -38,14 +38,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mobcal import estimate, fortran, methods, parameters, settings
-from mobcal.io.infile import DEALINGS, DEFAULT_DEALING
+from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, MAX_SEED
 from mobcal.run import RECORD_JSON, Job, cores
 from mobcal.settings import Settings, Source
 
 FORMAT = 3
 FORMATS = (1, 2, 3)  # what load reads; 1 is the queue file of the version before one method a
 # batch, 2 the one before a batch carried its remaining runs
-DEFAULT_SEED = 5013489  # the seed the shipped mobcal.in carries, at which 2012 was run
+DEFAULT_SEED = methods.DEFAULT_SEED  # the seed the shipped mobcal.in carries, 2012's
 AUTO = "auto"
 
 
@@ -59,7 +59,7 @@ class Batch:
     out_dir: Path
     method: str = methods.DEFAULT  # a shipped method's key or a method file's path
     gas: str | None = None  # None: the method's
-    seeds: tuple[int, ...] = (DEFAULT_SEED,)
+    seeds: tuple[int, ...] | None = None  # None: the method's first seed (Method.first_seed)
     parameters: str | None = None  # a shipped set's name or a file; None: the method's
     generator: str | None = None  # None: the method's
     settings: Settings | None = None  # None: the method's
@@ -75,17 +75,21 @@ class Batch:
         object.__setattr__(self, "inputs", tuple(Path(p) for p in self.inputs))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
         object.__setattr__(self, "method", str(self.method))
-        object.__setattr__(self, "seeds", tuple(int(s) for s in self.seeds))
         if self.remaining is not None:
             object.__setattr__(self, "remaining", tuple(str(r) for r in self.remaining))
         try:
             object.__setattr__(self, "loaded", methods.get(self.method))
         except methods.MethodError as e:
             raise BatchError(str(e)) from None
+        seeds = (self.loaded.first_seed,) if self.seeds is None else self.seeds
+        object.__setattr__(self, "seeds", tuple(int(s) for s in seeds))
         if self.gas is not None and self.gas not in fortran.GASES:
             raise BatchError(f"gas must be one of {fortran.GASES}, not {self.gas!r}")
         if not self.seeds:
             raise BatchError("a batch needs at least one seed")
+        bad = [s for s in self.seeds if not 1 <= s <= MAX_SEED]
+        if bad:
+            raise BatchError(f"seed {bad[0]}: a seed is a positive integer up to {MAX_SEED}")
         if not (self.split in (None, AUTO) or (isinstance(self.split, int) and self.split >= 1)):
             raise BatchError(f"split must be a worker count, {AUTO!r} or None, not "
                              f"{self.split!r}")

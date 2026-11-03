@@ -147,8 +147,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("inputs", nargs="+", metavar="INPUT", help=options.cli_help("inputs"))
     r.add_argument("--method", default=methods.DEFAULT, metavar="KEY|PATH",
                    help=options.cli_help("method", methods.DEFAULT))
-    r.add_argument("--seeds", type=_seeds, default=[DEFAULT_SEED], metavar="N[,N...]",
-                   help=options.cli_help("seeds", str(DEFAULT_SEED)))
+    r.add_argument("--seeds", type=_seeds, default=None, metavar="N[,N...]",
+                   help=options.cli_help("seeds", f"the method's seed, {DEFAULT_SEED} under a "
+                                         "method without one"))
     r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
                    default=None,
                    help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under "
@@ -492,7 +493,8 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
         raise UsageError(f"--split takes a worker count from 1 to {s.blocks_per_set} "
                          f"(itn {s.itn} * inp {s.inp} blocks per coordinate set) or {AUTO}")
     try:
-        batch = Batch(tuple(inputs), args.out, method.ref, seeds=tuple(args.seeds),
+        batch = Batch(tuple(inputs), args.out, method.ref,
+                      seeds=None if args.seeds is None else tuple(args.seeds),
                       parameters=args.parameters, generator=args.rng, settings=st,
                       split=args.split, workers=args.workers, dealing=args.dealing)
         batch.jobs()

@@ -89,10 +89,12 @@ SHARED = {
             f"{set_names()}.",
         window="Other file… opens a table of one's own for the gas chosen."),
     "seeds": Description(
-        f"One run of each ion for every seed; the 2012 seed is {DEFAULT_SEED}.",
-        cli="A list of integers separated by commas.",
-        window=f"The seeds are {DEFAULT_SEED} and each integer after it. With more than one, "
-               "each cross section is the mean ± s.d. over them."),
+        f"One run of each ion for every seed; the 2012 seed is {DEFAULT_SEED}. A method file "
+        "may carry a seed of its own.",
+        cli="A list of integers separated by commas, which wins over the method's seed.",
+        window=f"The seeds are the method's seed, {DEFAULT_SEED} unless the method carries "
+               "one, and each integer after it. With more than one, each cross section is the "
+               "mean ± s.d. over them."),
     "temperature": Description(
         "The buffer gas temperature in kelvin, 301 K in 2012 and 298 K in 2000. It sets the "
         "trajectory method's velocity grid and the conversion of each cross section to a "

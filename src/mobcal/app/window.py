@@ -119,9 +119,10 @@ def form_row(lay: QFormLayout, label: str, widget: QWidget, key: str) -> None:
     set_tip(key, widget, lay.labelForField(widget))
 
 
-def seeds(n: int) -> tuple[int, ...]:
-    """The first ``n`` seeds: the 2012 seed, then each one after it."""
-    return tuple(DEFAULT_SEED + k for k in range(n))
+def seeds(n: int, first: int = DEFAULT_SEED) -> tuple[int, ...]:
+    """The first ``n`` seeds: ``first`` (the method's, the 2012 seed under a method without
+    one), then each one after it."""
+    return tuple(first + k for k in range(n))
 
 
 def reveal(path: Path) -> None:
@@ -488,7 +489,8 @@ class MainWindow(QMainWindow):
     def save_method(self, path: str | Path | None = None,
                     name: str | None = None) -> methods.Method | None:
         """File ▸ Save method…: write the gas, table, generator and settings to a method file,
-        add it to the list and select it."""
+        and the seed of the method the fields came from when it carries one, add it to the list
+        and select it."""
         try:
             st = self.form_settings()
         except settings.SettingsError as e:
@@ -513,7 +515,7 @@ class MainWindow(QMainWindow):
             return None
         try:
             m = methods.save(path, name, self.gas, self.table_value() or parameters.DEFAULT,
-                             self.generator_combo.currentData(), st)
+                             self.generator_combo.currentData(), st, seed=self.method_seed)
         except methods.MethodError as e:
             QMessageBox.warning(self, "Save method", str(e))
             return None
@@ -534,10 +536,22 @@ class MainWindow(QMainWindow):
             for name, spin in self.counts.items():
                 spin.setValue(getattr(m.settings, name))
             self._from = ref
+            self._show_seed()
         finally:
             self._filling = False
         self.store.method = ref
         self.fields_changed()
+
+    @property
+    def method_seed(self) -> int | None:
+        """The seed of the method the fields came from, when its file carries one."""
+        m = self.method(self._from)
+        return None if m is None else m.seed
+
+    def _show_seed(self) -> None:
+        """Seeds per ion says the first seed when the method carries one."""
+        seed = self.method_seed
+        self.seeds_spin.setSuffix("" if seed is None else f", from seed {seed}")
 
     def _method_picked(self, index: int) -> None:
         ref = self.method_combo.itemData(index)
@@ -617,6 +631,7 @@ class MainWindow(QMainWindow):
             self.method_combo.setCurrentIndex(self.method_combo.findData(now))
             if now != self._from:
                 self._from = now
+                self._show_seed()
         self.update_estimate()
 
     # --- the batch ------------------------------------------------------------------------
@@ -644,7 +659,8 @@ class MainWindow(QMainWindow):
             split = self.split_spin.value() if self.split_spin.value() > 1 else None
             workers = self.workers_spin.value()
         return Batch(tuple(i.run_path(out) for i in self.inputs.items), out, self._from,
-                     gas=self.gas, seeds=seeds(self.seeds_spin.value()),
+                     gas=self.gas,
+                     seeds=seeds(self.seeds_spin.value(), self.method_seed or DEFAULT_SEED),
                      parameters=self.table_value(),
                      generator=self.generator_combo.currentData(),
                      settings=self.form_settings(), split=split, workers=workers)
