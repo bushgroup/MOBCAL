@@ -8,8 +8,9 @@ read it. Before a run, MOBCAL writes the `.mfj` input file the 2012 program read
 file and the element table of the run, and keeps that `.mfj` in the run directory beside the
 other files the run used. The ion file is what a user keeps; the `.mfj` is written per run.
 
-> **Draft.** Version 1 is not frozen. Until a release declares it frozen, the format changes
-> as MOBCAL is developed, and a file written by a development version carries no guarantee.
+Version 1 is frozen. Every later version of MOBCAL reads a version 1 file as this page
+describes it, and a change to what the file holds will be a new version number, which a reader
+of version 1 refuses by name.
 
 Three things decide what a calculation computes: the ion file, the method
 ([Methods](methods.md)), and the seed. A run's record names the ion file's SHA-256 and the
