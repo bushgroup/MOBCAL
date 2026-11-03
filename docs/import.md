@@ -37,15 +37,22 @@ wrote choline_sp_chelpg.ion.json: 21 atoms from choline_sp.out (ORCA 6.1.1), che
 `-o NAME.ion.json` names the file instead. The import never replaces an existing file unless
 given `--force`.
 
-To run the imported ion, write its `.mfj` with `mobcal export`, which gives each element its key
-from the element table of each gas (both by default, so the file runs in either) and writes
-`choline_sp_chelpg.mfj` beside the ion file, then run that file like any other input, in helium
+To run the imported ion, give the ion file to `mobcal run` like any other input, in helium
 under the default method and in nitrogen under its nitrogen form:
 
 ```
+mobcal run choline_sp_chelpg.ion.json
+mobcal run choline_sp_chelpg.ion.json --method 2012-philox-n2
+```
+
+Each run writes the `.mfj` the program reads from the ion file and the run's element table, and
+keeps it in the run directory as `choline_sp_chelpg.mfj`
+([Writing the `.mfj`](ion-file.md#writing-the-mfj)). For a `.mfj` beside the ion file, e.g., to
+read in another program, `mobcal export` writes one, with each element's key from the element
+table of each gas (both by default, so the file runs in either):
+
+```
 mobcal export choline_sp_chelpg.ion.json
-mobcal run choline_sp_chelpg.mfj
-mobcal run choline_sp_chelpg.mfj --method 2012-philox-n2
 ```
 
 `mobcal export` takes `--gas he` or `n2` for one gas's table, `--parameters` for another table
@@ -175,7 +182,9 @@ writes for C, N, O and S. A mass in no element's window, or in two, is refused. 
 the four MMFF94 parameters are kept as declared columns of the ion file, and line 6 and the run
 line as written are kept in the record, so the ion file loses nothing the source holds. The
 ion file's correction factor is 1, because MobCal-MPI applies no factor to the coordinates.
-MobCal-MPI reads one coordinate set, and a nine-column file with more is refused.
+MobCal-MPI reads one coordinate set, and a nine-column file with more is refused. `mobcal run`
+refuses a nine-column file given to it directly, before the program starts, since the 2012
+program would read its run line as the first atom; the ion file imported from it runs instead.
 
 In both layouts the charges are the file's charge column, the charge mode is the file's, and
 the net charge is the integer every coordinate set's charges sum to within 0.001 e, or none

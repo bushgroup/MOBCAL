@@ -9,7 +9,8 @@ output without the SUMMARY block that is the evidence the calculation completed,
 last line the file holds as its message (``type not defined for atom number``, ``units not
 specified``, ``masses do not add up``).
 
-A ``Job`` is one calculation: an input file, a gas and a seed, the element table to use, the
+A ``Job`` is one calculation: an input file (a ``.mfj``, or an ion file, ``X.ion.json``,
+``mobcal.io.ion``), a gas and a seed, the element table to use, the
 package's own for the gas unless the job names another, the random number generator,
 Philox4x32-10 unless the job says ``ranlux``, the 2012 generator, which is what reproduces a
 2012 number, and the run settings (``mobcal.settings``: the temperature and the five sampling
@@ -19,11 +20,14 @@ shipped set, ``-lj`` and the first eight hex digits of its SHA-256 for any other
 setting that differs from 2012 (``-t298-imp25``), so the same input and seed under another
 method never share a directory, and one results folder can hold a whole study.
 ``run_one`` checks the table (``mobcal.parameters``) and gives the job the directory
-``<out_dir>/<name>/`` holding a copy of the input (under the name the output will echo), its
+``<out_dir>/<name>/`` holding the ``.mfj`` the program reads (``stage``: a ``.mfj`` input
+copied as it is, an ion file's written for the job's table, which gives each element its key;
+under the name the output will echo, ``<stem>.mfj`` for ``<stem>.ion.json``), its
 ``mobcal.in``, the table rendered as ``parameters.tab``, the settings rendered as
 ``settings.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
 complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
-account of itself: the package, the binary and its build, the input and its hash, the seed, the
+account of itself: the package, the binary and its build, the input and its hash (an ion
+file's and the staged ``.mfj``'s), the seed, the
 parameter set and its hash, the settings and where they came from, the method they make
 (``mobcal.methods``: a shipped method's key such as ``2012-philox-he``, the name of the method
 file the job was made from with that file's path and SHA-256, or ``custom``), the times, the
@@ -68,6 +72,7 @@ No Qt here. The window calls ``run_many`` from a worker thread and draws from th
     summary = run_many(jobs, workers=2, progress=print)
     split = run_one(Job(Path("choline.mfj"), "he", 5013489, Path("runs"), split=8))
     as_2012 = run_one(Job(Path("choline.mfj"), "he", 5013489, Path("runs"), generator="ranlux"))
+    from_ion = run_one(Job(Path("choline.ion.json"), "n2", 5013489, Path("runs")))
 """
 
 from __future__ import annotations
@@ -94,6 +99,7 @@ import psutil
 
 import mobcal
 from mobcal import fortran, methods, parameters, settings
+from mobcal.io import ion, mobcalmpi
 from mobcal.io.block import all_names, block_of_claim, expected_names
 from mobcal.io.infile import (
     DEALINGS,
@@ -104,6 +110,7 @@ from mobcal.io.infile import (
     InFile,
     InFileError,
 )
+from mobcal.io.ion import IonError
 from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
@@ -202,11 +209,16 @@ class Job:
         return m.record() if m is not None else None
 
     @property
+    def is_ion(self) -> bool:
+        """Whether the input is an ion file, whose ``.mfj`` the run writes, not a ``.mfj``."""
+        return ion.is_ion(self.input)
+
+    @property
     def label(self) -> str:
         if self.name:
             return self.name
         rng = "" if self.generator == DEFAULT_RNG else f"-{self.generator}"
-        return (f"{self.input.stem}-{self.gas}-{self.seed}{rng}{self.table_tag}"
+        return (f"{ion.stem(self.input)}-{self.gas}-{self.seed}{rng}{self.table_tag}"
                 f"{self.settings.suffix()}")
 
     @property
@@ -215,10 +227,12 @@ class Job:
 
     @property
     def staged(self) -> str:
-        """The name the input is copied to, and the name the output echoes."""
+        """The name the ``.mfj`` is staged under, and the name the output echoes: a ``.mfj``
+        input's own name, ``<stem>.mfj`` for an ion file."""
         if self.staged_name:
             return self.staged_name
-        return self.input.name if len(self.input.name) <= FIELD_WIDTH else FALLBACK_STAGED_NAME
+        name = f"{ion.stem(self.input)}.mfj" if self.is_ion else self.input.name
+        return name if len(name) <= FIELD_WIDTH else FALLBACK_STAGED_NAME
 
     def worker_dir(self, w: int) -> Path:
         return self.run_dir / f"w{w:02d}"
@@ -270,6 +284,52 @@ class Result:
         cs = "  ".join(f"{k} {v:g}" for k, v in self.cross_sections.items())
         sets = f"  ({len(self.conformers)} sets)" if len(self.conformers) > 1 else ""
         return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}"
+
+
+@dataclass(frozen=True)
+class Staged:
+    """An input as the run stages it: the ``.mfj`` the program reads, its bytes, and the
+    SHA-256 of the input file and of those bytes (one hash for a ``.mfj``, which is staged as
+    it is)."""
+    mfj: Mfj
+    data: bytes
+    sha256: str  # the input file's
+    staged_sha256: str  # the staged .mfj's
+
+
+def stage(path: Path, table: ParameterSet) -> Staged:
+    """The ``.mfj`` a run on ``table`` stages from ``path``: a ``.mfj`` byte for byte, an ion
+    file written by ``Ion.mfj`` for that table. The file is read once, so the hashes are of the
+    bytes the run used. Raises OSError, MfjError (a ``.mfj`` the program would stop on, or
+    MobCal-MPI's nine-column layout, which the 2012 program misreads as an atom per field
+    line) or IonError (an ion file the reader refuses, or one the table cannot write)."""
+    path = Path(path)
+    data = path.read_bytes()
+    sha = hashlib.sha256(data).hexdigest()
+    if ion.is_ion(path):
+        try:
+            mfj = ion.Ion.parse(data.decode("utf-8-sig")).mfj(table)
+        except UnicodeDecodeError as e:
+            raise IonError(f"{path.name}: not UTF-8: {e}") from None
+        except IonError as e:
+            raise IonError(f"{path.name}: {e}") from None
+        staged = mfj.text().encode("latin-1")
+        return Staged(mfj, staged, sha, hashlib.sha256(staged).hexdigest())
+    text = data.decode("latin-1")
+    if mobcalmpi.detect(text):
+        raise MfjError(f"{path.name} is in MobCal-MPI's nine-column layout, which the 2012 "
+                       "program would misread; `mobcal import` it into an ion file and run that")
+    return Staged(Mfj.parse(text), data, sha, sha)
+
+
+def size(path: Path) -> tuple[int, int]:
+    """An input's atoms and coordinate sets, without an element table. Raises OSError,
+    MfjError or IonError."""
+    if ion.is_ion(path):
+        i = ion.Ion.read(path)
+        return i.atoms, len(i.conformers)
+    m = Mfj.read(path)
+    return m.atoms, m.coordinate_sets
 
 
 def _table(gas: str, path: Path | None) -> tuple[str | None, str | None, str]:
@@ -413,8 +473,8 @@ def _failed(job: Job, message: str, returncode: int | None = None, seconds: floa
 
 
 def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSet,
-             dealing: str = RECORD_DEFAULT_DEALING) -> None:
-    """Make ``d`` ready for one start of the program: the input copied in under its staged name,
+             staged: Staged, dealing: str = RECORD_DEFAULT_DEALING) -> None:
+    """Make ``d`` ready for one start of the program: the staged ``.mfj`` written under its name,
     ``mobcal.in`` written, the element table and the settings rendered, and any output, record,
     block file or claim file of an earlier run removed, so that nothing stale is ever read as
     this run's (a stale claim would keep a block from every worker)."""
@@ -424,7 +484,7 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     for glob in (BLOCK_GLOB, CLAIM_GLOB):
         for p in d.glob(glob):
             p.unlink()
-    shutil.copyfile(job.input, d / job.staged)
+    (d / job.staged).write_bytes(staged.data)
     InFile(job.staged, OUTPUT_NAME, job.seed, split, job.generator, dealing).write(d)
     pset.render(d)
     job.settings.render(d)
@@ -480,24 +540,25 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
             on_start: Callable[[Job], None] | None = None) -> Result:
     """Stage one job in its own directory, run the binary there, and read what it wrote.
 
-    The input and the element table are read first, and a file the program would stop on, or
-    a table ``mobcal.parameters`` refuses, is reported as failed without starting the binary or
-    making the run directory. A stale ``mobcal.out`` in the directory is removed before the run,
+    The element table and the input are read first, and a table ``mobcal.parameters``
+    refuses, a file the program would stop on, an ion file with an element the table lacks or
+    a nine-column MobCal-MPI file is reported as failed without starting the binary or making
+    the run directory. A stale ``mobcal.out`` in the directory is removed before the run,
     so that an output is never read from an earlier run. A job with ``split`` runs its workers
     and then the combining run; see the module docstring. Every run that got as far as its
     directory ends with ``record.json`` written there, failed or not. A KeyboardInterrupt
     stops the job's processes and is re-raised.
     """
     try:
-        mfj = Mfj.read(job.input)
-    except OSError as e:
-        return _failed(job, f"cannot read input: {e}")
-    except MfjError as e:
-        return _failed(job, f"input refused: {e}")
-    try:
         pset = parameters.load(job.parameters_path, gas=job.gas)
     except ParameterError as e:
         return _failed(job, f"parameters refused: {e}")
+    try:
+        staged = stage(job.input, pset)
+    except OSError as e:
+        return _failed(job, f"cannot read input: {e}")
+    except (MfjError, IonError) as e:
+        return _failed(job, f"input refused: {e}")
     try:
         InFile(job.staged, OUTPUT_NAME, job.seed, generator=job.generator)
     except InFileError as e:
@@ -517,20 +578,20 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
         on_start(job)
     started = dt.datetime.now().astimezone()
     if job.split:
-        r = _run_split(job, command, mfj.coordinate_sets, pset, _running, blocks)
+        r = _run_split(job, command, staged, pset, _running, blocks)
     else:
-        r = _run_serial(job, command, pset, _running)
+        r = _run_serial(job, command, staged, pset, _running)
     r = dataclasses.replace(r, parameters=pset.record())
     if not r.ok and _running is not None and _running.is_set():
         r = dataclasses.replace(r, stopped=True, message=f"stopped ({r.message})")
-    _write_record(r, command, mfj, started)
+    _write_record(r, command, staged, started)
     return r
 
 
-def _run_serial(job: Job, command: list[str], pset: ParameterSet,
+def _run_serial(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
                 running: Stop | None) -> Result:
     d = job.run_dir
-    _prepare(job, d, None, pset)
+    _prepare(job, d, None, pset, staged)
     t0 = time.perf_counter()
     try:
         proc = _start(command, d, running)
@@ -543,18 +604,19 @@ def _run_serial(job: Job, command: list[str], pset: ParameterSet,
     return _collect(job, d, rc, time.perf_counter() - t0)
 
 
-def _run_split(job: Job, command: list[str], coordinate_sets: int, pset: ParameterSet,
+def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
                running: Stop | None, blocks: BlocksProgress | None) -> Result:
     total, d = job.split, job.run_dir
+    coordinate_sets = staged.mfj.coordinate_sets
     blocks_per_set = job.settings.blocks_per_set
     claimed = job.dealing == "claimed"
     every = all_names(coordinate_sets, blocks_per_set)
     expected = {w: expected_names(coordinate_sets, total, w, blocks_per_set)
                 for w in range(1, total + 1)}
     n_expected = len(every)
-    _prepare(job, d, (total, 0), pset)  # the combining run, which never claims
+    _prepare(job, d, (total, 0), pset, staged)  # the combining run, which never claims
     for w in expected:
-        _prepare(job, job.worker_dir(w), (total, w), pset, job.dealing)
+        _prepare(job, job.worker_dir(w), (total, w), pset, staged, job.dealing)
 
     t0 = time.perf_counter()
     procs: dict[int, subprocess.Popen] = {}
@@ -670,26 +732,26 @@ def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str
     return problems
 
 
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def _write_record(r: Result, command: list[str], mfj: Mfj, started: dt.datetime) -> Path:
+def _write_record(r: Result, command: list[str], staged: Staged, started: dt.datetime) -> Path:
     """Write ``record.json`` into the run's directory: what ran, on what, with which table, and
-    what came of it. Its numbers are the ``Result``'s; the output file stays the evidence."""
-    j = r.job
+    what came of it. Its numbers are the ``Result``'s; the output file stays the evidence.
+
+    The ``input`` block names the file the job was given, its SHA-256, the staged name and the
+    size. For an ion file it adds ``format`` (``mobcal-ion``) and ``staged_sha256``, the hash of
+    the ``.mfj`` written from it, which the table decides as much as the file does; a ``.mfj``
+    is staged as it is and its block is what it always was."""
+    j, mfj = r.job, staged.mfj
+    inp = {"path": str(j.input), "staged_name": j.staged, "sha256": staged.sha256,
+           "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets}
+    if j.is_ion:
+        inp |= {"format": ion.FORMAT, "staged_sha256": staged.staged_sha256}
     exe = Path(command[0])
     build = fortran.read_manifest(exe.parent).get("binaries", {}).get(exe.name)
     doc = {
         "mobcal_version": mobcal.__version__,
         "name": j.label,
         "binary": {"gas": j.gas, "path": str(exe), "command": list(command), "build": build},
-        "input": {"path": str(j.input), "staged_name": j.staged, "sha256": _sha256(j.input),
-                  "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets},
+        "input": inp,
         "mobcal_in": {"seed": j.seed, "generator": j.generator, "split": j.split,
                       "dealing": j.dealing if j.split else None},
         "method": j.method,

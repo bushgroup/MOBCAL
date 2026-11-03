@@ -178,9 +178,8 @@ Gaussian Merz-Kollman row:
 
 ```
 mobcal import tests/data/qm/gaussian/choline_2012_mk/choline_2012_mk.log --charges mk
-mobcal export choline_2012_mk_mk.ion.json
-mobcal run choline_2012_mk_mk.mfj --seeds 5013489,1234567,7654321
-mobcal run choline_2012_mk_mk.mfj --seeds 5013489,1234567,7654321 --method 2012-philox-n2 --split 10
+mobcal run choline_2012_mk_mk.ion.json --seeds 5013489,1234567,7654321
+mobcal run choline_2012_mk_mk.ion.json --seeds 5013489,1234567,7654321 --method 2012-philox-n2 --split 10
 ```
 
 The ORCA rows import `choline_2012_b3lyp.out` and `choline_2012_hf.out`, the `uniform` row

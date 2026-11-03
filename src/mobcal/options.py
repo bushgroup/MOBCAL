@@ -70,7 +70,7 @@ AUTO_RULE = ("chooses the runs in flight and the processes per run from the run 
 SHARED = {
     "inputs": Description(
         "The ions to run, one calculation for each input and seed.",
-        cli="Paths to .mfj files, or globs.",
+        cli="Paths to .mfj or .ion.json files, or globs.",
         window=".mfj files run as they are; ORCA and Gaussian outputs and .xyz files are "
                "imported at Run, "
                "into imported/ in the results folder. Add files, or drop them here."),

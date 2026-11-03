@@ -41,7 +41,7 @@ def from_cli(tmp_path: Path, *argv: str) -> Batch:
 
 def staged(job: Job, d: Path) -> dict[str, bytes]:
     pset = parameters.load(job.parameters_path, gas=job.gas)
-    run._prepare(job, d, None, pset)
+    run._prepare(job, d, None, pset, run.stage(job.input, pset))
     return {p.name: p.read_bytes() for p in sorted(d.iterdir())}
 
 

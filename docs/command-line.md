@@ -57,7 +57,7 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
                   INPUT [INPUT ...]
 ```
 
-- `INPUT`: The ions to run, one calculation for each input and seed. Paths to .mfj files, or globs.
+- `INPUT`: The ions to run, one calculation for each input and seed. Paths to .mfj or .ion.json files, or globs.
 - `--method KEY|PATH`: A preset of the gas, the element table, the random number generator and the six run settings. The methods are 2012-he, the 2012 release's calculation in helium, its element table and settings under RANLUX; 2012-n2, the same in nitrogen; 2012-philox-he, the 2012 helium table and settings under Philox4x32-10; 2012-philox-n2, the same in nitrogen; 2000-he, the 2000 helium release's calculation, its table at 298 K and 25 trajectories per block under RANLUX; or the path of a method file. A table, generator or setting given beside it overrides it, and the run records custom. Default: 2012-philox-he.
 - `--seeds N[,N...]`: One run of each ion for every seed; the 2012 seed is 5013489. A list of integers separated by commas. Default: 5013489.
 - `--rng {philox,ranlux}`: The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. Default: the method's, philox under 2012-philox-he.

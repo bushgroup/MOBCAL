@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import hashlib
 import json
@@ -14,6 +15,7 @@ import pytest
 import mobcal
 from mobcal import cli, fortran, parameters, run
 from mobcal.batch import Batch
+from mobcal.io import ion
 from mobcal.io.infile import InFile
 from mobcal.io.mfj import Mfj
 from mobcal.io.outfile import OutFile
@@ -21,6 +23,8 @@ from mobcal.run import FALLBACK_STAGED_NAME, Job, Result, run_many, run_one
 
 FAKE = Path(__file__).resolve().parent / "fake_mobcal.py"
 CHOLINE = fortran.FORTRAN_DIR / "Choline.mfj"
+ION_DATA = Path(__file__).resolve().parent / "data" / "ion"
+CHOLINE_ION = ION_DATA / "choline.ion.json"
 
 
 def launcher(job: Job) -> list[str]:
@@ -316,7 +320,8 @@ def test_the_record_quotes_the_binarys_build(tmp_path):
     fortran._record(bin_dir, "he", exe, "no-such-gfortran")
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs")
     r = Result(job, True, "", 0, 1.0, None, {}, [], parameters={"name": "x"})
-    run._write_record(r, [str(exe)], Mfj.read(job.input), dt.datetime.now().astimezone())
+    run._write_record(r, [str(exe)], run.stage(job.input, parameters.shipped("he")),
+                      dt.datetime.now().astimezone())
     rec = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
     assert rec["binary"]["build"] == fortran.read_manifest(bin_dir)["binaries"][exe.name]
 
@@ -396,3 +401,98 @@ def test_one_seed_under_both_generators_shares_an_output_directory(tmp_path):
     assert rows[2].startswith("ok-he-5013489-ranlux,")
     assert ",5013489,ranlux,2012-he,301,1000,10,40,250000,30,ok," in rows[2]
     assert str(ranlux).startswith("ok-he-5013489-ranlux  ok  ")
+
+
+# --- an ion file as the input ---------------------------------------------------------------
+
+def write_ion(path: Path, label: str, **change) -> Path:
+    """The choline ion file under another label (what the stand-in reads), and any other
+    field changed."""
+    return dataclasses.replace(ion.Ion.read(CHOLINE_ION), label=label, **change).write(path)
+
+
+@pytest.mark.parametrize("gas", ["he", "n2"])
+def test_the_mfj_staged_from_the_choline_ion_file_is_the_2012_input(gas):
+    # The run's proof that an ion file runs the 2012 calculation: the Fortran is untouched, so
+    # the .mfj it reads, as the program reads it, is all that can differ.
+    s = run.stage(CHOLINE_ION, parameters.shipped(gas))
+    assert s.mfj == Mfj.read(CHOLINE) == Mfj.parse(s.data.decode("latin-1"))
+    assert s.data == (ION_DATA / "choline.mfj").read_bytes()
+    assert s.sha256 == hashlib.sha256(CHOLINE_ION.read_bytes()).hexdigest()
+    assert s.staged_sha256 == hashlib.sha256(s.data).hexdigest() != s.sha256
+
+
+def test_a_mfj_is_staged_as_it_is():
+    s = run.stage(CHOLINE, parameters.shipped("he"))
+    assert s.data == CHOLINE.read_bytes() and s.mfj == Mfj.read(CHOLINE)
+    assert s.sha256 == s.staged_sha256 == hashlib.sha256(s.data).hexdigest()
+
+
+def test_a_run_from_an_ion_file(tmp_path):
+    inp = write_ion(tmp_path / "chol.ion.json", "ok")
+    job = Job(inp, "n2", 5013489, tmp_path / "runs")
+    assert job.is_ion and job.label == "chol-n2-5013489" and job.staged == "chol.mfj"
+    r = run_one(job, launcher)
+    assert r.ok and r.cross_sections == {"TM": 50 + 5013489 % 7 + 0.5}
+    d = job.run_dir
+    staged = (d / "chol.mfj").read_bytes()
+    assert Mfj.parse(staged.decode("latin-1")) == dataclasses.replace(Mfj.read(CHOLINE),
+                                                                      label="ok")
+    assert InFile.read(d / "mobcal.in").input_name == "chol.mfj"
+    assert OutFile.read(r.output).input_name == "chol.mfj"
+    assert not (d / inp.name).exists()  # the ion file stays where it is
+    rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
+    assert rec["input"] == {"path": str(inp), "staged_name": "chol.mfj",
+                            "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
+                            "atoms": 21, "coordinate_sets": 1, "format": "mobcal-ion",
+                            "staged_sha256": hashlib.sha256(staged).hexdigest()}
+    assert run.read_records(tmp_path / "runs")[job.label]["input"] == str(inp)
+    assert run.size(inp) == (21, 1)
+
+
+def test_a_split_run_from_an_ion_file_stages_the_same_mfj_everywhere(tmp_path):
+    job = Job(write_ion(tmp_path / "chol.ion.json", "ok"), "he", 3, tmp_path / "runs", split=3)
+    r = run_one(job, launcher)
+    assert r.ok
+    want = (job.run_dir / "chol.mfj").read_bytes()
+    for w in (1, 2, 3):
+        assert (job.worker_dir(w) / "chol.mfj").read_bytes() == want
+
+
+def test_an_ion_file_staged_name_follows_the_a30_rule(tmp_path):
+    long = "an-ion-file-name-the-a30-field-cannot.ion.json"
+    assert len("an-ion-file-name-the-a30-field-cannot.mfj") > 30
+    assert Job(tmp_path / long, "he", 1, tmp_path).staged == FALLBACK_STAGED_NAME
+    assert Job(tmp_path / "X.ION.JSON", "he", 1, tmp_path).staged == "X.mfj"
+
+
+def test_an_element_the_table_lacks_never_starts_the_binary(tmp_path):
+    # The 2000 helium table has no fluorine; the 2012 program would stop on the key.
+    i = ion.Ion.read(CHOLINE_ION)
+    inp = write_ion(tmp_path / "f.ion.json", "ok", symbols=("F", *i.symbols[1:]))
+    job = Job(inp, "he", 1, tmp_path, parameters=parameters.path_for("2000", "he"))
+    r = run_one(job, launcher)
+    assert not r.ok and r.returncode is None
+    assert r.message.startswith("input refused: f.ion.json: F (1 atom) not in the element "
+                                "table 'MOBCAL 2000 helium'")
+    assert not job.run_dir.exists()
+
+
+def test_an_ion_file_the_reader_refuses_never_starts_the_binary(tmp_path):
+    bad = tmp_path / "bad.ion.json"
+    bad.write_text(CHOLINE_ION.read_text(encoding="utf-8").replace('"version": 1',
+                                                                    '"version": 2'),
+                   encoding="utf-8")
+    r = run_one(Job(bad, "he", 1, tmp_path), launcher)
+    assert not r.ok and r.returncode is None
+    assert r.message.startswith("input refused: bad.ion.json: version")
+    assert not (tmp_path / "bad-he-1").exists()
+
+
+def test_a_nine_column_mfj_is_refused_with_the_way_to_run_it(tmp_path):
+    r = run_one(Job(ION_DATA / "choline_mobcalmpi.mfj", "n2", 1, tmp_path), launcher)
+    assert not r.ok and r.returncode is None
+    assert r.message == ("input refused: choline_mobcalmpi.mfj is in MobCal-MPI's nine-column "
+                         "layout, which the 2012 program would misread; `mobcal import` it "
+                         "into an ion file and run that")
+    assert not any(tmp_path.iterdir())

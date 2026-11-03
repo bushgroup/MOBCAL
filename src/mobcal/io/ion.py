@@ -205,6 +205,17 @@ class Ion:
                    tuple(sets))
 
 
+def is_ion(path: Path | str) -> bool:
+    """Whether a path names an ion file, by its extension (``.ion.json``, any case)."""
+    return Path(path).name.lower().endswith(SUFFIX)
+
+
+def stem(path: Path | str) -> str:
+    """A file's name without ``.ion.json``, or without its last suffix when it is not one."""
+    path = Path(path)
+    return path.name[:-len(SUFFIX)] if is_ion(path) else path.stem
+
+
 def written_by() -> dict:
     """This program, its version and the commit it was built from (None where it knows none)."""
     return {"program": "mobcal", "version": __version__, "commit": fortran._commit() or None}

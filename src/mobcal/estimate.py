@@ -59,8 +59,10 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from mobcal.io.mfj import Mfj, MfjError
+from mobcal.io.ion import IonError
+from mobcal.io.mfj import MfjError
 from mobcal.run import Job, cores
+from mobcal.run import size as input_size
 from mobcal.settings import DEFAULTS, Settings
 
 # (atoms, prologue seconds per coordinate set at inum 250,000, seconds per trajectory). Measured
@@ -160,9 +162,8 @@ def job_cost(job: Job, sizes: dict | None = None) -> Cost | None:
     sizes = {} if sizes is None else sizes
     if job.input not in sizes:
         try:
-            m = Mfj.read(job.input)
-            sizes[job.input] = (m.atoms, m.coordinate_sets)
-        except (OSError, MfjError):
+            sizes[job.input] = input_size(job.input)
+        except (OSError, MfjError, IonError):
             sizes[job.input] = None
     size = sizes[job.input]
     return None if size is None else cost(*size, job.gas, job.settings)

@@ -17,9 +17,10 @@
     mobcal export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
                   [--force]
 
-``run`` takes input files (paths or globs), makes one job per input and seed, prints
-how they will use the cores and about how long they will take (``mobcal.estimate``), runs them
-``--workers`` at a time through ``mobcal.run``, prints each as it lands, and writes
+``run`` takes input files, ``.mfj`` or ion files (paths or globs), makes one job per input and
+seed, prints how they will use the cores and about how long they will take
+(``mobcal.estimate``), runs them ``--workers`` at a time through ``mobcal.run``, prints each
+as it lands, and writes
 ``summary.csv`` and ``summary.json`` covering every run in the output folder, which can hold a
 whole study. It refuses a run whose directory holds a different input of the same name, and
 with ``--skip-done`` leaves out the runs the folder already holds complete. With ``--split W``
@@ -417,9 +418,7 @@ def _import_mfj(args: argparse.Namespace, gases: tuple[str, ...]) -> int:
 def _export(args: argparse.Namespace) -> int:
     from mobcal.io import ion
     gases = tuple(fortran.GASES) if args.gas == "both" else (args.gas,)
-    name = args.ion.name
-    stem = name[:-len(ion.SUFFIX)] if name.endswith(ion.SUFFIX) else args.ion.stem
-    out = args.out or args.ion.with_name(stem + ".mfj")
+    out = args.out or args.ion.with_name(ion.stem(args.ion) + ".mfj")
     try:
         i = ion.Ion.read(args.ion)
         tables = [parameters.load(parameters.path_for(args.parameters, g), gas=g)
