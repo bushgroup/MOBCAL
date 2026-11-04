@@ -260,7 +260,8 @@ def compiler_version(gfortran: str) -> str:
 
 def _git(root: Path, *args: str) -> str | None:
     try:
-        proc = subprocess.run([os.environ.get("MOBCAL_GIT", "git"), "-C", str(root), *args], capture_output=True, text=True,
+        git = os.environ.get("MOBCAL_GIT", "git")
+        proc = subprocess.run([git, "-C", str(root), *args], capture_output=True, text=True,
                               timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return None

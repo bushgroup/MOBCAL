@@ -13,10 +13,9 @@
 3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
    since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
    ORCA and one Gaussian output of the choline cation (``tests/data/qm/``) to ``examples/``,
-   ``LICENSE`` and ``commit.txt`` (the commit the bundle is built at, which
-   ``mobcal version`` prints); on macOS into the ``.app``'s ``Contents/Resources``, after which the bundle
-   is sealed again, ad hoc, since adding files breaks the seal PyInstaller's ad-hoc signature
-   put on it.
+   ``LICENSE`` and ``commit.txt`` (the commit the bundle is built at, which ``mobcal version``
+   prints); on macOS into the ``.app``'s ``Contents/Resources``, after which the bundle is sealed
+   again, ad hoc, since adding files breaks the seal PyInstaller's ad-hoc signature put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
    ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
