@@ -10,14 +10,18 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import re
 import sys
 import time
+import tomllib
 from pathlib import Path
 
+import jsonschema
 import pytest
 
 from mobcal import batch, cli, estimate, fortran, methods, parameters, run, settings
 from mobcal.batch import Batch, BatchError
+from mobcal.io.infile import GENERATORS, MAX_SEED
 from mobcal.run import Job, Stop, run_many
 
 FAKE = Path(__file__).resolve().parent / "fake_mobcal.py"
@@ -225,7 +229,11 @@ def test_a_method_file_names_its_own_table_by_path_and_sha256(tmp_path):
         from_cli(tmp_path, str(CHOLINE), "--method", str(tmp_path / "m.toml"))
 
 
-@pytest.mark.parametrize("body, match", [
+HEAD = 'format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
+OWN = 'format = 1\nname = "X"\ngas = "he"\ngenerator = "philox"\n[parameters]\n'
+
+# A method file the reader refuses, and the start of what it says; the schema refuses each too.
+REFUSED = [
     ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\n', "no generator"),
     ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
      "sead = 1\n", "unknown key 'sead'"),
@@ -251,7 +259,21 @@ def test_a_method_file_names_its_own_table_by_path_and_sha256(tmp_path):
      "name must be 1 to 60"),
     ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
      "itn = 0\n", "itn is 0"),
-])
+    (HEAD.replace("format = 1", "format = true"), "format is True"),
+    (HEAD.replace('"X"', '"X "'), "name must be 1 to 60"),
+    (HEAD.replace('"X"', '"A\\tB"'), "name must be 1 to 60"),
+    (HEAD.replace('"X"', '"' + "x" * 61 + '"'), "name must be 1 to 60"),
+    (HEAD + "temperature = 0\n", "temperature 0 is not a positive number"),
+    (HEAD + 'temperature = "301"\n', "temperature must be a number"),
+    (HEAD + "imp = 1.5\n", "imp must be an integer"),
+    (HEAD + "inor = 101\n", "inor is 101; 1 to 100"),
+    (OWN + 'path = "t.toml"\nsha256 = "' + "A" * 64 + '"\n', "64 lowercase hex digits"),
+    (OWN + 'path = "t.toml"\nsha256 = "' + "a" * 64 + '"\nkind = 1\n',
+     "a table with path and sha256"),
+]
+
+
+@pytest.mark.parametrize("body, match", REFUSED)
 def test_a_method_file_that_cannot_be_used_is_refused_by_key(tmp_path, body, match):
     f = tmp_path / "bad.toml"
     f.write_text(body, encoding="utf-8")
@@ -265,6 +287,75 @@ def test_a_key_left_out_takes_the_2012_value(tmp_path):
                  'generator = "ranlux"\nimp = 500\n', encoding="utf-8")
     m = methods.load(f)
     assert m.settings.values() == {**settings.DEFAULTS.values(), "imp": 500}
+
+
+# --- the schema ----------------------------------------------------------------------------
+
+def schema() -> dict:
+    return json.loads(methods.SCHEMA.read_text(encoding="utf-8"))
+
+
+def validator() -> jsonschema.Draft202012Validator:
+    s = schema()
+    jsonschema.Draft202012Validator.check_schema(s)
+    return jsonschema.Draft202012Validator(s)
+
+
+def test_every_shipped_and_saved_method_is_valid_against_the_schema(tmp_path):
+    v = validator()
+    for key in methods.SHA256:
+        v.validate(tomllib.loads(methods.shipped_path(key).read_text(encoding="utf-8")))
+    table = own_table(tmp_path / "mine_he.toml")
+    st = settings.resolve(None, temperature=298.15, itn=5)
+    for i, (t, seed) in enumerate([("2012", None), ("2000", 42), (table, 7)]):
+        f = tmp_path / f"m{i}.toml"
+        methods.save(f, f"Mine {i}", "he", t, "ranlux", st, seed=seed)
+        v.validate(tomllib.loads(f.read_text(encoding="utf-8")))
+
+
+def test_the_schema_holds_the_readers_keys_bounds_and_defaults():
+    s, v = schema(), validator()
+    p = s["properties"]
+    assert tuple(p) == methods.KEYS and tuple(s["required"]) == methods.REQUIRED
+    assert methods.FORMATS == (p["format"]["const"],)
+    assert p["name"]["maxLength"] == methods.MAX_NAME
+    assert p["gas"]["enum"] == list(parameters.SETS)
+    assert tuple(p["generator"]["enum"]) == GENERATORS
+    names = {n for sets in parameters.SETS.values() for n in sets}
+    assert set(p["parameters"]["oneOf"][0]["enum"]) == names
+    for gas, sets in parameters.SETS.items():  # a shipped table is one the gas has
+        for n in names:
+            doc = {"format": 1, "name": "X", "gas": gas, "parameters": n, "generator": "philox"}
+            assert v.is_valid(doc) == (n in sets), (gas, n)
+    for k, (lo, hi) in settings.BOUNDS.items():
+        assert (p[k]["minimum"], p[k]["maximum"]) == (lo, hi), k
+    assert p["temperature"]["exclusiveMaximum"] == settings.MAX_TEMPERATURE
+    assert p["seed"]["maximum"] == MAX_SEED
+    for k in settings.NAMES:  # the default each description states
+        said = re.search(r"(\d+) when left out", p[k]["description"]).group(1)
+        assert int(said) == getattr(settings.DEFAULTS, k), k
+    assert f"{methods.DEFAULT_SEED}, the 2012 seed" in p["seed"]["description"]
+
+
+@pytest.mark.parametrize("body, match", REFUSED)
+def test_the_schema_refuses_what_the_reader_refuses(body, match):
+    assert not validator().is_valid(tomllib.loads(body))
+
+
+@pytest.mark.parametrize("body, match", [
+    (HEAD + "temperature = nan\n", "temperature nan is not a positive number"),
+    (HEAD + "itn = 100\ninp = 100\n", "at most 9999999 points"),
+    (HEAD.replace('"X"', '"A\\u200bB"'), "name must be 1 to 60 printable"),
+    (OWN + 'path = "gone.toml"\nsha256 = "' + "a" * 64 + '"\n', "gone.toml is not there"),
+])
+def test_what_only_the_reader_refuses(tmp_path, body, match):
+    """The rules the schema's description lists as the reader's: a document the schema accepts
+    and ``load`` refuses."""
+    assert validator().is_valid(tomllib.loads(body))
+    f = tmp_path / "bad.toml"
+    f.write_text(body, encoding="utf-8")
+    with pytest.raises(methods.MethodError, match=match):
+        methods.load(f)
 
 
 # --- the record, the summary and the study folder ------------------------------------------
@@ -335,6 +426,24 @@ def test_a_run_from_a_method_file_records_its_name_and_sha256(tmp_path):
         rec["method_file"]
     para = methods.text(methods.read_records([tmp_path / "runs"]))
     assert "The nitrogen calculations used the method My method: the MOBCAL 2012 nitrogen" in para
+
+
+def test_a_record_holds_every_field_of_its_method(tmp_path):
+    """The record needs no method file to say what the method was: the gas, the generator, the
+    seed, the table by path and SHA-256 and the six settings are each in it, so a method file
+    that moves, changes or goes leaves its runs described."""
+    inp = write_input(tmp_path / "ok.mfj", "ok")
+    table = own_table(tmp_path / "mine_he.toml")
+    m = methods.save(tmp_path / "m.toml", "Mine", "he", table, "ranlux",
+                     settings.resolve(None, temperature=298.15, itn=2), seed=42)
+    b = Batch((inp,), tmp_path / "runs", method=m.ref, split=None)
+    run_many(b.jobs(), 1, launcher=launcher)
+    rec = json.loads((b.jobs()[0].run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["binary"]["gas"] == m.gas
+    assert (rec["mobcal_in"]["generator"], rec["mobcal_in"]["seed"]) == (m.generator, m.seed)
+    assert (rec["parameters"]["path"], rec["parameters"]["sha256"]) == \
+        (str(m.table), m.table_sha256)
+    assert {k: rec["settings"][k] for k in settings.NAMES} == m.settings.values()
 
 
 @pytest.mark.parametrize("old, gas, new", [("current", "he", "2012-philox-he"),

@@ -92,13 +92,35 @@ remembered file that has been moved, deleted or edited since it was added is rem
 list at the next launch, with a message that names it and says why. Loading it again adds it as
 it is now.
 
+The format is also published as a JSON Schema,
+[`src/mobcal/methods/method.schema.json`](../src/mobcal/methods/method.schema.json), for other
+programs and for editors that check a file as it is typed. The schema checks the document a TOML
+reader makes of a method file: every key, its type and its bounds, and which shipped tables each
+gas has. Loading a method also checks what the document alone cannot show, i.e., that a table of
+one's own is still at its path with the same SHA-256, that no other method in the list has the
+name, that the temperature is finite, that `itn` × `inp` × `imp` is at most 9,999,999, and that
+every character of the name is printable. An editor built on Taplo, such as the Even Better TOML
+extension for VS Code, checks a file against the schema when the file's first line names it:
+
+```toml
+#:schema ./method.schema.json
+format = 1
+name = "Choline at 298.15 K"
+```
+
+The comment changes the file's SHA-256 and nothing else, and File ▸ Save method… does not write
+it.
+
 ## What a run records
 
 Every run directory's `record.json` names the method in `method`: a shipped method's key, the
 name of the method file, or `custom` when an option given beside the method changed it. A run
 from a method file also records the file in `method_file`, its path and its SHA-256, which is
 `null` for the other runs. `summary.csv` and `summary.json` carry the same, and the methods
-paragraph (`mobcal methods-text`, the window's Copy methods text) names the method. Run
+paragraph (`mobcal methods-text`, the window's Copy methods text) names the method. The record
+does not depend on the method file to say what the method was: the gas, the generator, the
+seed, the element table by path and SHA-256 and the six settings are each in it, so a run stays
+described after its method file is moved, edited or deleted. Run
 directories are named for the input, the gas, the seed, the generator when it is RANLUX, the
 table when it is not the gas's 2012 table, and each setting that differs from 2012
 (`choline-he-5013486-ranlux-lj2000-t298-imp25`), never for the method, so the same calculation

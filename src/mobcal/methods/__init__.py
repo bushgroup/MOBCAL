@@ -37,6 +37,13 @@ is the 2012 seed, 5013489 (``Method.first_seed``). The seed is not one of the fi
 ``identify`` reads: a run at another seed is still a run of its method, and the shipped
 methods carry none.
 
+``method.schema.json`` beside this module is the format as a JSON Schema (``SCHEMA``), for
+other tools, editors and the tests, never loaded here: it checks the document ``tomllib`` makes
+of a file, and its description lists the rules only ``load`` applies (the table on disk, the
+name against the list, a finite temperature, ``settings.MAX_POINTS``, the name's printable
+characters beyond the controls). The tests hold its keys, enums, bounds and defaults to the
+constants here.
+
 ``identify`` names the shipped method a run used from what the run used, so a run made with
 ``--rng ranlux`` and nothing else is a ``2012-he`` run whether or not ``--method 2012-he`` was
 typed, and a run matching none is ``custom``. A run made from a file of one's own records the
@@ -71,6 +78,7 @@ from mobcal.io.infile import GENERATORS, MAX_SEED
 from mobcal.settings import DEFAULTS, Settings
 
 METHODS_DIR = Path(__file__).resolve().parent
+SCHEMA = METHODS_DIR / "method.schema.json"  # the format for other tools; never loaded here
 DEFAULT = "2012-philox-he"
 CUSTOM = "custom"
 REPOSITORY = "https://github.com/bushgroup/MOBCAL"

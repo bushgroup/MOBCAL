@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/methods/method.schema.json",
+  "title": "MOBCAL method file, format 1",
+  "description": "A method: the buffer gas, the element table, the random number generator, the six run settings and an optional first seed. The file is TOML; this schema checks the document a TOML reader makes of it. docs/methods.md is the specification. The rules that need more than the document are checked by mobcal.methods and listed on that page: a table of one's own must be at its path (a relative one read from the method file's folder) with the SHA-256 given and be a table for the method's gas; the name must differ from the shipped methods' and from every other method in the list; the temperature must be finite; itn x inp x imp is at most 9,999,999; and the name is refused when it holds any character Python's str.isprintable rejects, of which this schema refuses only the controls.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "name", "gas", "parameters", "generator"],
+  "properties": {
+    "format": {"const": 1},
+    "name": {
+      "description": "What the Method list and the run record show: 1 to 60 printable characters, no space at either end.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "pattern": "^[^\\s\\u0000-\\u001f\\u007f-\\u009f](?:[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$"
+    },
+    "gas": {"enum": ["he", "n2"]},
+    "parameters": {
+      "description": "The element table: a shipped table by name (2012 in either gas, 2000 in helium only), or a table of one's own by path and SHA-256.",
+      "oneOf": [
+        {"enum": ["2012", "2000"]},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
+      ]
+    },
+    "generator": {"enum": ["ranlux", "philox"]},
+    "temperature": {
+      "description": "The buffer gas temperature in kelvin; 301 when left out.",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "exclusiveMaximum": 1e300
+    },
+    "imp": {
+      "description": "Trajectories per block of the trajectory method; 1000 when left out.",
+      "type": "integer", "minimum": 1, "maximum": 999999
+    },
+    "itn": {
+      "description": "Cycles of the trajectory method; 10 when left out.",
+      "type": "integer", "minimum": 1, "maximum": 100
+    },
+    "inp": {
+      "description": "Velocity points of the trajectory method; 40 when left out.",
+      "type": "integer", "minimum": 1, "maximum": 100
+    },
+    "inum": {
+      "description": "Trajectories of the projection approximation and exact hard-sphere pass (helium); 250000 when left out.",
+      "type": "integer", "minimum": 1, "maximum": 9999999
+    },
+    "inor": {
+      "description": "Reflections followed per hard-sphere trajectory (helium); 30 when left out.",
+      "type": "integer", "minimum": 1, "maximum": 100
+    },
+    "seed": {
+      "description": "The first seed of a run of this method; 5013489, the 2012 seed, when left out.",
+      "type": "integer", "minimum": 1, "maximum": 2147483647
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"gas": {"const": "n2"}}, "required": ["gas"]},
+      "then": {"properties": {"parameters": {"not": {"const": "2000"}}}}
+    }
+  ]
+}
