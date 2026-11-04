@@ -75,7 +75,14 @@ def test_a_split_run_reproduces_the_serial_output(pool, W):
         conserved += diagnostics(worker.lines) - seen
     assert conserved == diagnostics(serial.lines)
 
-    blocks = [Block.read(p) for p in sorted(r.job.run_dir.glob("block-*.dat"))]
+    # worker folders are scratch: the staged input is gone from each once the run succeeded,
+    # the run directory keeps its own, and everything else the workers wrote stays
+    assert (r.job.run_dir / r.job.staged).is_file()
+    for w in range(1, W + 1):
+        assert not (r.job.worker_dir(w) / r.job.staged).exists()
+        assert (r.job.worker_dir(w) / "mobcal.in").is_file()
+
+    blocks =[Block.read(p) for p in sorted(r.job.run_dir.glob("block-*.dat"))]
     assert len(blocks) == BLOCKS_PER_SET
     assert [b.k for b in blocks] == list(range(1, BLOCKS_PER_SET + 1))
     assert [(b.cycle, b.point) for b in blocks] == [Block.cycle_point(k) for k in range(1, 401)]
@@ -124,3 +131,6 @@ def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool,
     # a static worker leaves its share short, a claiming one (the default) its claimed block
     assert ("blocks missing" in split.message or "claimed block not written" in split.message
             or "reached ifail" in split.message), split.message
+    # a failed run keeps every worker folder as it was, the input included
+    for w in (1, 2):
+        assert (split.job.worker_dir(w) / split.job.staged).is_file()

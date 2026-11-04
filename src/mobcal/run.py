@@ -82,6 +82,7 @@ import dataclasses
 import datetime as dt
 import hashlib
 import json
+import logging
 import os
 import platform
 import shutil
@@ -115,6 +116,8 @@ from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.outfile import OutFile
 from mobcal.parameters import ParameterError, ParameterSet
 from mobcal.settings import Settings
+
+log = logging.getLogger(__name__)
 
 OUTPUT_NAME = "mobcal.out"
 LOG_NAME = "stdout.log"
@@ -708,7 +711,21 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
         rc = _wait(proc)
     finally:
         _finish(proc, running)
-    return _collect(job, d, rc, time.perf_counter() - t0)
+    r = _collect(job, d, rc, time.perf_counter() - t0)
+    if r.ok:
+        _drop_worker_inputs(job, expected)
+    return r
+
+
+def _drop_worker_inputs(job: Job, workers: Iterable[int]) -> None:
+    """Delete each worker folder's copy of the staged input once the combining run has
+    succeeded: the run directory keeps its own, and a failed run keeps every worker folder as it
+    was. A copy that cannot be deleted (locked on Windows) is left, never a failure."""
+    for w in workers:
+        try:
+            (job.worker_dir(w) / job.staged).unlink(missing_ok=True)
+        except OSError as e:
+            log.warning("worker %d: could not delete %s: %s", w, job.staged, e)
 
 
 def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str]) -> list[str]:
