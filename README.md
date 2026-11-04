@@ -136,7 +136,7 @@ records the program and its build, the input and its hash, the seed and the gene
 element table and its hash, the settings and where they came from, the method they make (a
 shipped method's key, a method file's name with its path and hash, or `custom`), the times and
 the result.
-The directory is a
+The directory of a run in one process is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
 run directories, one row per run with its seed, generator and method, its status, its cross
@@ -222,8 +222,18 @@ sums. When all eight
 have landed, the program runs once more in the run directory as the combining run, which
 integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY
 with the same statements the serial run uses. That output is the run's output, read as any
-other; the eight workers' directories, `w01` to `w08`, are kept beside it as records. A worker
-that did not write every block it owed fails the run, and the combining run never starts. Any
+other. A worker that did not write every block it owed fails the run, and the combining run
+never starts, and a run that fails or is stopped keeps every file its processes wrote. A run
+that succeeds writes into `record.json` what only its workers' directories hold (when each
+worker started and ended, how many blocks it integrated and its exit status, which worker
+integrated each block, and the energy-conservation diagnostics a worker printed) and then
+removes the workers' directories, `w01` to `w08`, and the 400 block files, which leaves the
+seven files of a run in one process. With `--scratch zip` the block files are packed into
+`blocks.zip` instead, and unpacked into the run directory they let the program repeat the
+combining run there; with `--scratch keep` every file stays. Choline split 20 ways in helium
+under the claimed dealing left 1,307 files before this rule and leaves 7 under it.
+`mobcal clean DIR` applies the same rule to finished split runs already on disk, listing what it
+would remove until it is given `--apply`. Any
 `--split` from 1 to 400 balances, since the blocks are dealt round robin, and `--workers` then
 counts split calculations in flight, each of them `--split` processes. Without the fourth record
 that `--split` writes to `mobcal.in`, the program runs as one process, and without a generator

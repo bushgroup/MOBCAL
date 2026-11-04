@@ -261,7 +261,8 @@ def test_a_table_for_the_other_gas_is_refused(tmp_path):
 
 
 def test_a_split_run_renders_into_every_directory(tmp_path):
-    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 3, tmp_path / "runs", split=3)
+    job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 3, tmp_path / "runs", split=3,
+              scratch="keep")
     r = run_one(job, launcher)
     assert r.ok
     want = (job.run_dir / parameters.RENDERED).read_bytes()
@@ -453,10 +454,10 @@ def test_a_run_from_an_ion_file(tmp_path):
     assert run.size(inp) == (21, 1)
 
 
-def test_a_split_run_from_an_ion_file_stages_the_same_mfj_everywhere(tmp_path, monkeypatch):
-    # A successful run deletes the workers' copies (test_split); keep them to compare here.
-    monkeypatch.setattr(run, "_drop_worker_inputs", lambda job, workers: None)
-    job = Job(write_ion(tmp_path / "chol.ion.json", "ok"), "he", 3, tmp_path / "runs", split=3)
+def test_a_split_run_from_an_ion_file_stages_the_same_mfj_everywhere(tmp_path):
+    # A successful run deletes the worker folders (test_scratch); keep them to compare here.
+    job = Job(write_ion(tmp_path / "chol.ion.json", "ok"), "he", 3, tmp_path / "runs", split=3,
+              scratch="keep")
     r = run_one(job, launcher)
     assert r.ok
     want = (job.run_dir / "chol.mfj").read_bytes()

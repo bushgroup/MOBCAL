@@ -404,7 +404,8 @@ def test_a_split_run_at_other_settings_reproduces_the_serial_run(pool, tmp_path,
     jobs = [Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"serial-{generator}",
                 generator=generator, settings=s),
             Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"split-{generator}", split=4,
-                generator=generator, settings=s, dealing="static")]  # fixed shares asserted
+                generator=generator, settings=s, dealing="static",  # fixed shares asserted
+                scratch="keep")]
     serial, split = run_many(jobs, workers=2, launcher=pool.launcher).results
     assert serial.ok and split.ok, (serial.message, split.message)
     a = shared(OutFile.read(serial.output).lines)
@@ -461,7 +462,7 @@ def test_the_driver_renders_and_records_other_settings(tmp_path):
     from test_run import launcher, write_input
     s = settings.resolve(None, itn=3, inp=7, imp=100, temperature=298)
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 7, tmp_path / "runs", split=4,
-              settings=s)
+              settings=s, scratch="keep")
     r = run_one(job, launcher)
     assert r.ok, r.message
     assert job.run_dir.name == "ok-he-7-t298-imp100-itn3-inp7"

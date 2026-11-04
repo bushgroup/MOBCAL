@@ -24,6 +24,7 @@ at W = 10 is behind the ``nitrogen`` marker with the serial nitrogen gate it com
 from __future__ import annotations
 
 import difflib
+import json
 from collections import Counter
 
 import pytest
@@ -70,6 +71,20 @@ def check_claimed(r, serial: OutFile, generator: str, sets: int = 1) -> None:
         conserved += diagnostics(worker.lines) - seen
     assert written == Counter(every)
     assert conserved == diagnostics(serial.lines)
+    # the record's harvest says the same as the files: the claim map, each worker's blocks and
+    # the diagnostics the workers printed
+    split = json.loads((d / "record.json").read_text(encoding="utf-8"))["split"]
+    harvested = {n: int(w) for s_, row in enumerate(split["claims"], 1)
+                 for n, w in zip([n for n in every if n.startswith(f"block-{s_:03d}-")],
+                                 row.split(), strict=True)}
+    assert harvested == owners
+    assert [e["blocks"] for e in split["workers"]] == [
+        len(list(job.worker_dir(w).glob("block-*.dat"))) for w in range(1, job.split + 1)]
+    from_record = Counter(seen)
+    for w in range(1, job.split + 1):
+        mine = [ln for e in split["diagnostics"] if e["worker"] == w for ln in e["lines"]]
+        from_record += diagnostics(mine) - seen
+    assert from_record == conserved
     blocks = [Block.read(p) for p in sorted(d.glob("block-*.dat"))]
     assert [b.name for b in blocks] == every
     assert {b.generator for b in blocks} == {generator}
@@ -80,7 +95,7 @@ def _pair(tmp_path, generator: str, settings, W: int, launcher):
     jobs = [Job(gate.CHOLINE, "he", 5013489, tmp_path, name="serial", generator=generator,
                 settings=settings),
             Job(gate.CHOLINE, "he", 5013489, tmp_path, name="claimed", generator=generator,
-                settings=settings, split=W, dealing="claimed")]
+                settings=settings, split=W, dealing="claimed", scratch="keep")]
     serial, claimed = run_many(jobs, workers=2, launcher=launcher).results
     assert serial.ok, serial.message
     return OutFile.read(serial.output), claimed
@@ -120,7 +135,8 @@ def test_forced_contention_claims_every_block_exactly_once(pool, tmp_path, gener
 @pytest.mark.parametrize("WP", [0])  # asks the pool for the serial Philox run as well
 def test_a_claimed_run_at_the_2012_settings_reproduces_the_serial_run(pool, tmp_path, WP):
     jobs = [Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"claimed-{g}", generator=g,
-                split=3, dealing="claimed", staged_name=pool.runs["he"].ref.input_name)
+                split=3, dealing="claimed", staged_name=pool.runs["he"].ref.input_name,
+                scratch="keep")
             for g in ("ranlux", "philox")]
     ranlux, philox = run_many(jobs, workers=2, launcher=pool.launcher).results
     check_claimed(ranlux, pool.runs["he"].new, "ranlux")
@@ -137,5 +153,5 @@ def test_a_claimed_nitrogen_run_reproduces_the_serial_run(pool, tmp_path, cholin
     ref = pool.runs["n2"]
     r = run_one(Job(gate.CHOLINE, "n2", ref.ref.seed, tmp_path, name="claimed-n2",
                     generator=ref.ref.generator, split=10, dealing="claimed",
-                    staged_name=ref.ref.input_name), pool.launcher)
+                    staged_name=ref.ref.input_name, scratch="keep"), pool.launcher)
     check_claimed(r, ref.new, ref.ref.generator)

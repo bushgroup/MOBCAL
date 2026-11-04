@@ -24,8 +24,8 @@ method never share a directory, and one results folder can hold a whole study.
 copied as it is, an ion file's written for the job's table, which gives each element its key;
 under the name the output will echo, ``<stem>.mfj`` for ``<stem>.ion.json``), its
 ``mobcal.in``, the table rendered as ``parameters.tab``, the settings rendered as
-``settings.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so the directory is a
-complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
+``settings.tab``, the binary's ``mobcal.out`` and ``stdout.log``, so a serial run's directory
+is a complete record that reruns by itself; when the run ends it adds ``record.json``, the run's own
 account of itself: the package, the binary and its build, the input and its hash (an ion
 file's and the staged ``.mfj``'s), the seed, the
 parameter set and its hash, the settings and where they came from, the method they make
@@ -52,12 +52,24 @@ where each worker takes the next block no worker has taken, claiming it by creat
 that early finishers keep integrating and a slowed worker does not set the wall. When every
 worker has landed and every block of the run is on disk (each worker's own share under
 ``static``; every block exactly once across the workers under ``claimed``), the block files are
-copied into the run directory and the program runs there once more as the combining run
+moved into the run directory (copied under ``scratch="keep"``) and the program runs there once
+more as the combining run
 (``W 0``): it integrates nothing, reads the blocks back, and makes the sums, the averages and
 the SUMMARY with its own statements. That output is the run's output, read exactly as a serial
 one. A block missing is a failure, with the worker that owed or claimed it and its output's
 last line as the reason, and the combining run never starts. Stale block and claim files are
 removed before any start.
+
+What a split run that succeeds leaves is ``Job.scratch``: ``delete`` (the default) writes
+``record.json`` with ``split``, what only the worker folders hold (``harvest_split``: each
+worker's times, blocks and exit status, the claim map, the ``energy not conserved`` diagnostics
+the workers printed), and then removes the worker folders, the claim files and the block files
+(``clear_scratch``), adding to the record's ``scratch`` what went; ``zip`` packs the block files
+into ``blocks.zip`` instead of deleting them, so that unpacked into the folder they let the
+combining run be repeated; ``keep`` leaves every file, for measurement. A failed, stopped or
+refused run keeps everything. The removal's time is outside ``Result.seconds``, and a file it
+cannot remove is logged and left, never a failure; ``mobcal.clean`` removes it later, and
+applies the same rule to runs written before.
 
 How many runs go at once by default is ``cores()``: the physical processor cores, psutil's
 count, not the logical processors that hyperthreading doubles (measured on a 40-core
@@ -91,6 +103,7 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -101,7 +114,7 @@ import psutil
 import mobcal
 from mobcal import fortran, methods, parameters, settings
 from mobcal.io import ion, mobcalmpi
-from mobcal.io.block import all_names, block_of_claim, expected_names
+from mobcal.io.block import all_names, block_name, block_of_claim, expected_names
 from mobcal.io.infile import (
     DEALINGS,
     DEFAULT_DEALING,
@@ -130,6 +143,13 @@ CSV_COLUMNS = ("name", "input", "gas", "seed", "rng", "method", *settings.NAMES,
 BLOCK_GLOB = "block-*.dat"
 CLAIM_GLOB = "claim-*"  # a claiming worker's claim files, in the run directory
 POLL_SECONDS = 0.25  # how often a split run counts its workers' block files
+# What a successful split run does with its scratch (the worker folders, the claim files and the
+# block files in the run directory): ``delete`` removes all three; ``zip`` removes the first two
+# and packs the block files into BLOCKS_ZIP; ``keep`` leaves everything, for measurement.
+SCRATCH_MODES = ("delete", "zip", "keep")
+DEFAULT_SCRATCH = "delete"
+BLOCKS_ZIP = "blocks.zip"
+UNLINK_THREADS = 16  # how many files the cleanup removes at once
 # The driver's generator. It differs from the run file's on purpose: a mobcal.in without the
 # word is the 2012 run (ranlux), so a file written by hand or shipped means what it meant in
 # 2012; a job the driver writes draws from Philox, whose split runs are exact by construction.
@@ -154,6 +174,9 @@ class Job:
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
     dealing: str = DEFAULT_DEALING  # how a split run's blocks are shared: claimed, or static
+    # what a successful split run leaves of its scratch (SCRATCH_MODES); not a setting of the
+    # calculation, so never in the label, the method or the comparison of two jobs
+    scratch: str = field(default=DEFAULT_SCRATCH, compare=False)
     # the method the job was made from, which its record names while the job's fields are the
     # method's; None: the record names the shipped method the fields make, or custom
     method_from: methods.Method | None = field(default=None, compare=False, repr=False)
@@ -170,6 +193,8 @@ class Job:
             raise ValueError(f"generator must be one of {GENERATORS}, not {self.generator!r}")
         if self.dealing not in DEALINGS:
             raise ValueError(f"dealing must be one of {DEALINGS}, not {self.dealing!r}")
+        if self.scratch not in SCRATCH_MODES:
+            raise ValueError(f"scratch must be one of {SCRATCH_MODES}, not {self.scratch!r}")
         if not isinstance(self.settings, Settings):
             raise ValueError(f"settings must be a mobcal.settings.Settings, not "
                              f"{self.settings!r}")
@@ -504,6 +529,7 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     d.mkdir(parents=True, exist_ok=True)
     (d / OUTPUT_NAME).unlink(missing_ok=True)
     (d / RECORD_JSON).unlink(missing_ok=True)
+    (d / BLOCKS_ZIP).unlink(missing_ok=True)
     for glob in (BLOCK_GLOB, CLAIM_GLOB):
         for p in d.glob(glob):
             p.unlink()
@@ -599,15 +625,26 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
                                    waiting=True)
     if on_start is not None:
         on_start(job)
-    started = dt.datetime.now().astimezone()
+    started = dt.datetime.now().astimezone().replace(microsecond=0)
+    harvest: dict | None = None
     if job.split:
-        r = _run_split(job, command, staged, pset, _running, blocks)
+        r, harvest = _run_split(job, command, staged, pset, _running, blocks, started)
     else:
         r = _run_serial(job, command, staged, pset, _running)
     r = dataclasses.replace(r, parameters=pset.record())
     if not r.ok and _running is not None and _running.is_set():
         r = dataclasses.replace(r, stopped=True, message=f"stopped ({r.message})")
-    _write_record(r, command, staged, started)
+    extra = {}
+    if harvest is not None:
+        extra["split"] = harvest
+    if job.split:
+        extra["scratch"] = {"mode": job.scratch if r.ok else "keep"}
+    path, doc = _write_record(r, command, staged, started, extra)
+    if r.ok and job.split and job.scratch != "keep":
+        # The record, with the harvest, is on disk before anything is removed; a cleanup cut
+        # short leaves a record that says the mode and not what went, which `clean` finishes.
+        doc["scratch"] = clear_scratch(job.run_dir, job.split, job.scratch)
+        dump_record(doc, path)
     return r
 
 
@@ -628,7 +665,11 @@ def _run_serial(job: Job, command: list[str], staged: Staged, pset: ParameterSet
 
 
 def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
-               running: Stop | None, blocks: BlocksProgress | None) -> Result:
+               running: Stop | None, blocks: BlocksProgress | None,
+               started: dt.datetime) -> tuple[Result, dict | None]:
+    """The workers, the judgement of their blocks and the combining run: the result, and the
+    harvest of the worker folders (``harvest_split``) once the blocks are judged complete, None
+    before that."""
     total, d = job.split, job.run_dir
     coordinate_sets = staged.mfj.coordinate_sets
     blocks_per_set = job.settings.blocks_per_set
@@ -643,14 +684,16 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
 
     t0 = time.perf_counter()
     procs: dict[int, subprocess.Popen] = {}
+    starts: dict[int, float] = {}
     try:
         for w in expected:
+            starts[w] = time.time()
             procs[w] = _start(command, job.worker_dir(w), running)
     except OSError as e:
         for p in procs.values():
             p.terminate()
             _finish(p, running)
-        return _failed(job, f"cannot start {command[0]}: {e}")
+        return _failed(job, f"cannot start {command[0]}: {e}"), None
 
     written = -1
     try:
@@ -679,7 +722,7 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
             _kill_tree(p)
             p.wait()
         return _failed(job, "split run ended before its combining run", None,
-                       time.perf_counter() - t0)
+                       time.perf_counter() - t0), None
 
     def why(w: int) -> str:
         out = job.worker_dir(w) / OUTPUT_NAME
@@ -697,35 +740,187 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
         problems = _judge_claimed(job, every, d, why)
     if problems:
         rc = next((p.returncode for p in procs.values() if p.returncode), 0)
-        return _failed(job, "; ".join(problems), rc, time.perf_counter() - t0)
+        return _failed(job, "; ".join(problems), rc, time.perf_counter() - t0), None
 
+    # The blocks go to the run directory for the combining run: moved, unless the scratch is
+    # kept, when they are copied so that each worker's folder still holds what it wrote (the
+    # measurement scripts read the block files' times there).
+    owners: dict[str, int] = {}
+    move = os.replace if job.scratch != "keep" else shutil.copyfile
     for w in expected:
         for p in job.worker_dir(w).glob(BLOCK_GLOB):
-            shutil.copyfile(p, d / p.name)
+            owners[p.name] = w
+            move(p, d / p.name)
     try:
         proc = _start(command, d, running)
     except OSError as e:
         return _failed(job, f"cannot start the combining run: {e}", None,
-                       time.perf_counter() - t0)
+                       time.perf_counter() - t0), None
     try:
         rc = _wait(proc)
     finally:
         _finish(proc, running)
     r = _collect(job, d, rc, time.perf_counter() - t0)
-    if r.ok:
-        _drop_worker_inputs(job, expected)
-    return r
+    harvest = harvest_split(d, total, job.dealing, coordinate_sets, blocks_per_set, started,
+                            owners, starts, {w: p.returncode for w, p in procs.items()})
+    return r, harvest
 
 
-def _drop_worker_inputs(job: Job, workers: Iterable[int]) -> None:
-    """Delete each worker folder's copy of the staged input once the combining run has
-    succeeded: the run directory keeps its own, and a failed run keeps every worker folder as it
-    was. A copy that cannot be deleted (locked on Windows) is left, never a failure."""
-    for w in workers:
+# --- what a split run's workers leave, and its removal ------------------------------------
+
+ENERGY_LINE = " energy not conserved"  # mobil2's diagnostic of a failed trajectory (helium only;
+# the 2012 nitrogen program has it commented out), followed by its gst2/theta/phi/gamma line
+
+
+def _worker_dirs(run_dir: Path, total: int) -> list[tuple[int, Path]]:
+    return [(w, run_dir / f"w{w:02d}") for w in range(1, total + 1)
+            if (run_dir / f"w{w:02d}").is_dir()]
+
+
+def _lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding="latin-1").replace("\r", "").splitlines()
+    except OSError:
+        return []
+
+
+def owners_on_disk(run_dir: Path, total: int) -> dict[str, int]:
+    """Which worker folder holds each block file: who integrated it, for a run whose blocks
+    were copied out (a run under ``keep``, or written before the blocks were moved)."""
+    return {p.name: w for w, wd in _worker_dirs(run_dir, total) for p in wd.glob(BLOCK_GLOB)}
+
+
+def harvest_split(run_dir: Path, total: int, dealing: str, coordinate_sets: int,
+                  blocks_per_set: int, started: dt.datetime, owners: dict[str, int],
+                  starts: dict[int, float] | None = None,
+                  returncodes: dict[int, int | None] | None = None) -> dict:
+    """What ``record.json`` keeps of a split run's worker folders, for its ``split`` block.
+
+    ``workers``: per worker, its start and end in seconds after the record's ``started`` (the
+    start as the driver launched it, or the console log's creation time where the file system
+    keeps one; the end is its ``mobcal.out``'s last write), the blocks it integrated, its exit
+    status (None when not known), and ``console``, the lines of its ``stdout.log`` the run
+    directory's lacks (gfortran's floating-point notes). ``claims``: under the claimed dealing,
+    per coordinate set a string of the worker numbers that integrated blocks 1 to ``itn * inp``
+    in order, space-separated (the static dealing's map is ``(k - 1) % W + 1``, so it is None).
+    ``diagnostics``: each ``energy not conserved`` line of a worker's output and the line after
+    it, with the worker, in worker order: the program prints them in the worker that integrated
+    the trajectory, never in the combined output."""
+    base = started.replace(microsecond=0).timestamp()
+    own = _lines(run_dir / LOG_NAME)
+    per: dict[int, int] = {}
+    for w in owners.values():
+        per[w] = per.get(w, 0) + 1
+    workers, diagnostics = [], []
+    for w in range(1, total + 1):
+        wd = run_dir / f"w{w:02d}"
+        start = (starts or {}).get(w)
+        if start is None:
+            try:
+                st = (wd / LOG_NAME).stat()
+                start = getattr(st, "st_birthtime", None)
+            except OSError:
+                pass
         try:
-            (job.worker_dir(w) / job.staged).unlink(missing_ok=True)
+            end = (wd / OUTPUT_NAME).stat().st_mtime
+        except OSError:
+            end = None
+        console = [ln for ln in _lines(wd / LOG_NAME) if ln.strip() and ln not in own]
+        entry = {"worker": w,
+                 "start": round(start - base, 2) if start is not None else None,
+                 "end": round(end - base, 2) if end is not None else None,
+                 "blocks": per.get(w, 0),
+                 "returncode": (returncodes or {}).get(w)}
+        if console:
+            entry["console"] = console
+        workers.append(entry)
+        out = _lines(wd / OUTPUT_NAME)
+        for i, ln in enumerate(out):
+            if ln.startswith(ENERGY_LINE):
+                diagnostics.append({"worker": w, "lines": out[i:i + 2]})
+    claims = None
+    if dealing == "claimed":
+        claims = [" ".join(str(owners.get(block_name(s, k), 0))
+                           for k in range(1, blocks_per_set + 1))
+                  for s in range(1, coordinate_sets + 1)]
+    return {"workers": workers, "claims": claims, "diagnostics": diagnostics}
+
+
+def scratch_files(run_dir: Path, total: int) -> dict[str, list[Path]]:
+    """A split run's scratch as it stands: its worker folders, claim files and the block files
+    in the run directory."""
+    return {"worker_folders": [wd for _, wd in _worker_dirs(run_dir, total)],
+            "claim_files": sorted(run_dir.glob(CLAIM_GLOB)),
+            "block_files": sorted(run_dir.glob(BLOCK_GLOB))}
+
+
+def clear_scratch(run_dir: Path, total: int, mode: str) -> dict:
+    """Remove a successful split run's scratch under ``mode`` (``delete`` or ``zip``) and say
+    what went, for the record's ``scratch`` block: the mode, the count of each kind removed,
+    under ``zip`` the archive and how many blocks it holds, every path left (relative to the run
+    directory) and the seconds it took. A removal that fails, a file held open by a scanner or
+    an Explorer window on Windows, is logged and left, never an error: ``clean`` takes it
+    later."""
+    if mode not in ("delete", "zip"):
+        raise ValueError(f"scratch mode must be delete or zip, not {mode!r}")
+    t0 = time.perf_counter()
+    found = scratch_files(run_dir, total)
+    left: list[str] = []
+    removed = {k: 0 for k in found}
+    lock = threading.Lock()
+
+    def gone(p: Path, kind: str) -> None:
+        try:
+            p.unlink()
+            with lock:
+                removed[kind] += 1
         except OSError as e:
-            log.warning("worker %d: could not delete %s: %s", w, job.staged, e)
+            log.warning("%s: could not delete %s: %s", run_dir.name, p.name, e)
+            with lock:
+                left.append(p.name)
+
+    def folder(wd: Path) -> None:
+        failed: list[str] = []
+        shutil.rmtree(wd, onexc=lambda _f, path, _e: failed.append(str(path)))
+        if failed or wd.exists():
+            log.warning("%s: could not delete all of %s (%d left)", run_dir.name, wd.name,
+                        len(failed))
+            with lock:
+                left.append(wd.name)
+        else:
+            with lock:
+                removed["worker_folders"] += 1
+
+    out = {"mode": mode}
+    blocks = found["block_files"]
+    # A deletion on Windows waits mostly on the file system's filters (the virus scanner), so
+    # files go from a pool of threads: 20,000 block files in 4 s against 12 s one at a time
+    # (lab record, task 53).
+    with ThreadPoolExecutor(max_workers=UNLINK_THREADS) as pool:
+        jobs = [pool.submit(gone, p, "claim_files") for p in found["claim_files"]]
+        jobs += [pool.submit(folder, wd) for wd in found["worker_folders"]]
+        if mode == "zip" and blocks:
+            z = run_dir / BLOCKS_ZIP
+            try:
+                with zipfile.ZipFile(z, "a", zipfile.ZIP_DEFLATED) as zf:
+                    have = set(zf.namelist())
+                    for p in blocks:
+                        if p.name not in have:
+                            zf.write(p, p.name)
+                    n = len(zf.namelist())
+                out |= {"zip": BLOCKS_ZIP, "zipped": n}
+            except OSError as e:
+                log.warning("%s: could not write %s, block files kept: %s", run_dir.name,
+                            z.name, e)
+                blocks = []
+                left.append(z.name)
+        jobs += [pool.submit(gone, p, "block_files") for p in blocks]
+        for j in jobs:
+            j.result()
+    if not blocks:  # the archive could not be written: every block file stays
+        left += [p.name for p in found["block_files"]]
+    return out | {"removed": removed, "left": sorted(left),
+                  "seconds": round(time.perf_counter() - t0, 2)}
 
 
 def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str]) -> list[str]:
@@ -769,7 +964,8 @@ def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str
     return problems
 
 
-def _write_record(r: Result, command: list[str], staged: Staged, started: dt.datetime) -> Path:
+def _write_record(r: Result, command: list[str], staged: Staged, started: dt.datetime,
+                  extra: dict | None = None) -> tuple[Path, dict]:
     """Write ``record.json`` into the run's directory: what ran, on what, with which table, and
     what came of it. Its numbers are the ``Result``'s; the output file stays the evidence.
 
@@ -777,7 +973,10 @@ def _write_record(r: Result, command: list[str], staged: Staged, started: dt.dat
     size. For an ion file it adds ``format`` (``mobcal-ion``) and ``staged_sha256``, the hash of
     the ``.mfj`` written from it, which the table decides as much as the file does, and
     ``ion_charges``: the charge mode and what the import record says the charges are, for the
-    methods text. A ``.mfj`` is staged as it is and its block is what it always was."""
+    methods text. A ``.mfj`` is staged as it is and its block is what it always was.
+
+    ``extra`` adds a split run's ``split`` block (``harvest_split``) and ``scratch`` block (the
+    mode; ``clear_scratch`` adds what it removed). Returns the path and the document."""
     j, mfj = r.job, staged.mfj
     inp = {"path": str(j.input), "staged_name": j.staged, "sha256": staged.sha256,
            "atoms": mfj.atoms, "coordinate_sets": mfj.coordinate_sets}
@@ -808,13 +1007,18 @@ def _write_record(r: Result, command: list[str], staged: Staged, started: dt.dat
         "console_log": LOG_NAME,
         "platform": platform.platform(),
         "python": sys.version.split()[0],
+        **(extra or {}),
     }
     j.run_dir.mkdir(parents=True, exist_ok=True)
     out = j.run_dir / RECORD_JSON
-    with open(out, "w", encoding="utf-8") as f:
+    dump_record(doc, out)
+    return out, doc
+
+
+def dump_record(doc: dict, path: Path) -> None:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    return out
 
 
 def cores() -> int:

@@ -8,6 +8,7 @@
 - [`mobcal self-check`](#mobcal-self-check): Check that this copy can compute a cross section.
 - [`mobcal build`](#mobcal-build): Compile the 2012 Fortran with gfortran.
 - [`mobcal run`](#mobcal-run): Run calculations in parallel, one process per run.
+- [`mobcal clean`](#mobcal-clean): Remove the files the processes of finished divided runs left, as a run now does when it succeeds.
 - [`mobcal gui`](#mobcal-gui): Open the window.
 - [`mobcal methods-text`](#mobcal-methods-text): Print the methods paragraph for runs.
 - [`mobcal render-parameters`](#mobcal-render-parameters): Write the element table and the settings the program reads into a directory, for running the program there by hand.
@@ -52,8 +53,8 @@ Run calculations in parallel, one process per run.
 usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
                   [--workers N] [--split W|auto] [--mode {in-order,balanced,throughput}]
                   [--dealing {static,claimed}] [--parameters PATH|NAME] [--out DIR]
-                  [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N]
-                  [--inp N] [--inum N] [--inor N]
+                  [--skip-done] [--scratch {delete,zip,keep}] [--settings PATH]
+                  [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
@@ -68,6 +69,7 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
 - `--parameters PATH|NAME`: The element table, which gives each atom of the ion its mass and its Lennard-Jones and hard-sphere parameters in the gas: a table the package ships, or a TOML file of one's own for one gas. A path to a table for the method's gas, or a shipped table by name: 2012 (He, N2), 2000 (He). Default: the method's, 2012 under 2012-philox-he.
 - `--out DIR`: The folder for a study: each batch adds its run directories here, and summary.csv and summary.json are rewritten to cover every run it holds. Default: runs/.
 - `--skip-done`: Leave out the runs the output folder already holds complete.
+- `--scratch {delete,zip,keep}`: What a divided run that succeeds keeps of the files its processes wrote. Delete removes the folder of each process, the claim files and the block files, after writing what only those folders held into the run's record.json. Zip does the same but packs the block files into blocks.zip, which unpacked into the run's folder lets the program redo the combining step there. Keep leaves every file. A run that fails or is stopped keeps every file whatever this says. delete, zip or keep. Default: delete.
 
 ### Run settings
 
@@ -80,6 +82,18 @@ The temperature and the five sampling counts the 2012 programs compiled in. With
 - `--inp N`: Velocity points of the trajectory method's integration over the relative velocity.
 - `--inum N`: Trajectories of the projection-approximation and exact hard-sphere pass, which the helium program alone makes.
 - `--inor N`: The most reflections followed per trajectory of the exact hard-sphere pass.
+
+## mobcal clean
+
+Remove the files the processes of finished divided runs left, as a run now does when it succeeds.
+
+```
+usage: mobcal clean [-h] [--scratch {delete,zip}] [--apply] DIR [DIR ...]
+```
+
+- `DIR`: Run directories, or folders of them.
+- `--scratch {delete,zip}`: Delete the block files, or pack them into blocks.zip in each run's folder. The folder of each process and the claim files go either way. Default: delete.
+- `--apply`: Remove the files. Without it, the command lists what it would remove and removes nothing.
 
 ## mobcal gui
 

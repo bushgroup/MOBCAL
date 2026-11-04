@@ -235,7 +235,15 @@ shipped one, and the name of the rendered table; the run settings, the temperatu
 sampling counts, with where they came from ([The run settings](settings.md)); the start time, the
 wall time, the exit status,
 the verdict and its message; the cross sections and the values for each coordinate set; and the
-names of the output and console files. The program's output file is unchanged by any of this, so
+names of the output and console files. A split run that got as far as its combining run adds
+`split`, what its worker directories alone hold: each worker's start and end in seconds after
+the start time, the blocks it integrated and its exit status, under the claimed dealing the
+worker that integrated each block (one string per coordinate set of worker numbers, block 1
+first), and each energy-conservation diagnostic a worker printed. Every split run adds
+`scratch`, which names what the run kept of its workers' files (`delete`, `zip` or `keep`; a run
+that fails keeps everything) and, once they are removed, how many of each kind went, any file
+that could not be removed, and the seconds the removal took. `mobcal clean` adds `split` to the
+record of an older run that lacks it, and `cleaned`, a list of what each pass removed. The program's output file is unchanged by any of this, so
 it still compares byte for byte with the 2012 references. `summary.json` names each run's table
 and its SHA-256 as well, and both summary files name each run's random number generator in their
 `rng` column ([Random numbers](random-numbers.md)).

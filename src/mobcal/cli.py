@@ -7,8 +7,9 @@
                [--rng philox|ranlux] [--parameters PATH|NAME]
                [--workers N] [--split W|auto] [--mode in-order|balanced|throughput]
                [--dealing static|claimed] [--out DIR]
-               [--skip-done] [--settings PATH] [--temperature T] [--imp N] [--itn N] [--inp N]
-               [--inum N] [--inor N]
+               [--skip-done] [--scratch delete|zip|keep] [--settings PATH] [--temperature T]
+               [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
+    mobcal clean DIR [DIR ...] [--scratch delete|zip] [--apply]
     mobcal methods-text PATH [PATH ...]
     mobcal gui [--check]
     mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
@@ -51,6 +52,9 @@ taken with its own charges (``--charges`` and ``--net-charge`` are refused), and
 ``SOURCE-STEM.ion.json`` by default.
 ``export`` writes the ``.mfj`` the 2012 program reads from an ion file, each element's key from
 the table of each gas asked for (both by default, which must agree), as a run stages it.
+``--scratch`` says what a split run that succeeds keeps of its workers' files
+(``mobcal.run.SCRATCH_MODES``); ``clean`` applies the same rule to finished split runs already
+on disk, a dry run unless ``--apply`` (``mobcal.clean``).
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
@@ -63,6 +67,7 @@ opens the window (``mobcal.app``), which is imported only then: this module impo
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import glob
 import os
 import re
@@ -72,7 +77,7 @@ from pathlib import Path
 from mobcal import ROOT, __version__, estimate, fortran, methods, options, parameters, settings
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError, prior
 from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, GENERATORS
-from mobcal.run import DEFAULT_RNG, Job, Result, run_many
+from mobcal.run import DEFAULT_RNG, DEFAULT_SCRATCH, SCRATCH_MODES, Job, Result, run_many
 
 DEFAULT_OUT = Path("runs")
 
@@ -172,6 +177,15 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("out", f"{DEFAULT_OUT}/"))
     r.add_argument("--skip-done", action="store_true",
                    help="Leave out the runs the output folder already holds complete.")
+    r.add_argument("--scratch", choices=SCRATCH_MODES, default=DEFAULT_SCRATCH,
+                   help="What a divided run that succeeds keeps of the files its processes "
+                        "wrote. Delete removes the folder of each process, the claim files and "
+                        "the block files, after writing what only those folders held into the "
+                        "run's record.json. Zip does the same but packs the block files into "
+                        "blocks.zip, which unpacked into the run's folder lets the program redo "
+                        "the combining step there. Keep leaves every file. A run that fails or "
+                        "is stopped keeps every file whatever this says. delete, zip or keep. "
+                        f"Default: {DEFAULT_SCRATCH}.")
     s = r.add_argument_group(
         "run settings", "The temperature and the five sampling counts the 2012 programs "
         "compiled in. Without these, every run uses its method's values: the 2012 values ("
@@ -184,6 +198,18 @@ def parser() -> argparse.ArgumentParser:
     for name in settings.COUNTS:
         s.add_argument(f"--{name}", type=int, default=None, metavar="N",
                        help=options.cli_help(name))
+
+    k = command("clean", "Remove the files the processes of finished divided runs left, as a "
+                "run now does when it succeeds.")
+    k.add_argument("paths", nargs="+", type=Path, metavar="DIR",
+                   help="Run directories, or folders of them.")
+    k.add_argument("--scratch", choices=("delete", "zip"), default="delete",
+                   help="Delete the block files, or pack them into blocks.zip in each run's "
+                        "folder. The folder of each process and the claim files go either way. "
+                        "Default: delete.")
+    k.add_argument("--apply", action="store_true",
+                   help="Remove the files. Without it, the command lists what it would remove "
+                        "and removes nothing.")
 
     g = command("gui", "Open the window.")
     g.add_argument("--check", action="store_true",
@@ -327,6 +353,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "run":
         return _run(args)
+
+    if args.cmd == "clean":
+        return _clean(args)
 
     if args.cmd == "import":
         return _import(args)
@@ -529,6 +558,7 @@ def _run(args: argparse.Namespace) -> int:
         if not jobs:
             print(f"nothing to run; {args.out}/ holds every run complete")
             return 0
+    jobs = [dataclasses.replace(j, scratch=args.scratch) for j in jobs]
     plan = batch.plan(jobs=jobs, mode=args.mode or estimate.DEFAULT_MODE)
     gen = batch.resolved_generator
     st = batch.resolved_settings
@@ -551,6 +581,29 @@ def _run(args: argparse.Namespace) -> int:
     csv_path, json_path = summary.write(args.out)
     print(f"{summary}; wrote {csv_path} and {json_path}")
     return 1 if summary.failed else 0
+
+
+def _clean(args: argparse.Namespace) -> int:
+    from mobcal import clean
+    todo = clean.plan(args.paths)
+    if not todo:
+        print("nothing to clean: no finished divided run here holds files of its processes")
+        return 0
+    files = sum(c.files for c in todo)
+    for c in todo:
+        print(c, flush=True)
+        if args.apply:
+            entry = clean.apply(c, args.scratch)
+            if entry["left"]:
+                print(f"    left {len(entry['left'])}: {', '.join(entry['left'][:5])}",
+                      flush=True)
+    n = len(todo)
+    runs = f"{n} run{'s' if n != 1 else ''}"
+    if args.apply:
+        print(f"cleaned {runs}, {files} files")
+    else:
+        print(f"{runs}, {files} files would be removed; run again with --apply to remove them")
+    return 0
 
 
 if __name__ == "__main__":

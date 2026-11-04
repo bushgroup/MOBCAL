@@ -22,7 +22,7 @@ FAKE = Path(__file__).resolve().parent / "fake_mobcal.py"
 
 def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
     inp = write_input(tmp_path / "ok.mfj", "ok")
-    job = Job(inp, "he", 5013489, tmp_path / "runs", split=3, dealing="static")
+    job = Job(inp, "he", 5013489, tmp_path / "runs", split=3, dealing="static", scratch="keep")
     seen: list[tuple[int, int]] = []
     r = run_one(job, launcher, blocks=lambda j, n, t: seen.append((n, t)))
     assert r.ok and r.message == "" and r.returncode == 0, r.message
@@ -56,7 +56,7 @@ def test_a_split_job_runs_its_workers_then_the_combining_run(tmp_path):
 
 def test_a_split_job_with_several_coordinate_sets(tmp_path):
     job = Job(write_input(tmp_path / "two.mfj", "sets 2"), "he", 7, tmp_path, split=2,
-              dealing="static")
+              dealing="static", scratch="keep")
     r = run_one(job, launcher)
     assert r.ok and len(r.conformers) == 2
     assert len(list(job.run_dir.glob("block-*.dat"))) == 2 * BLOCKS_PER_SET
@@ -72,7 +72,8 @@ def test_a_worker_that_leaves_a_block_unwritten_fails_the_run(tmp_path):
 
 
 def test_stale_blocks_are_removed_before_a_run(tmp_path):
-    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2, dealing="static")
+    job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2, dealing="static",
+              scratch="keep")
     assert run_one(job, launcher).ok
     stray = Block(1, 1, 1, 999, 0.0, 0.0, 0).write(job.run_dir)
     stray_w = Block(1, 1, 1, 999, 0.0, 0.0, 0).write(job.worker_dir(1))
@@ -106,7 +107,7 @@ def test_a_claimed_split_job_gives_the_serial_result(tmp_path, generator):
     inp = write_input(tmp_path / "ok.mfj", "ok")
     serial = run_one(Job(inp, "he", 5013489, tmp_path / "serial", generator=generator), launcher)
     job = Job(inp, "he", 5013489, tmp_path / "runs", split=3, generator=generator,
-              dealing="claimed")
+              dealing="claimed", scratch="keep")
     seen: list[tuple[int, int]] = []
     r = run_one(job, launcher, blocks=lambda j, n, t: seen.append((n, t)))
     assert r.ok and r.message == "", r.message
@@ -163,7 +164,7 @@ def test_a_block_written_twice_fails_the_run(tmp_path):
 
 def test_stale_claims_are_removed_before_a_run(tmp_path):
     job = Job(write_input(tmp_path / "x.mfj", "ok"), "he", 1, tmp_path, split=2,
-              dealing="claimed")
+              dealing="claimed", scratch="keep")
     assert run_one(job, launcher).ok
     stale = job.run_dir / claim_name(1, 1)
     stale.write_text("   99\n")  # a claim from an earlier run would keep block 1 from everyone

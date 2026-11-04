@@ -136,13 +136,15 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
     jobs = [Job(gate.CHOLINE, g, refs[g].seed, out, name=g, staged_name=refs[g].input_name,
                 generator=refs[g].generator) for g in gases]
     # the fixed (w, W) share: test_split asserts each worker's own block count (test_claim
-    # covers the claimed dealing, the default)
+    # covers the claimed dealing, the default); W = 1 keeps its scratch and W > 1 zips its
+    # block files, which test_split reruns the combining run from
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"split-{w}",
                  staged_name=refs["he"].input_name, split=w, generator=refs["he"].generator,
-                 dealing="static")
+                 dealing="static", scratch="keep" if w == 1 else "zip")
              for w in splits]
     jobs += [Job(gate.CHOLINE, "he", refs["he"].seed, out, name=f"philox-{w}",
-                 staged_name=refs["he"].input_name, split=w or None, generator="philox")
+                 staged_name=refs["he"].input_name, split=w or None, generator="philox",
+                 scratch="keep")
              for w in philox]
     # Nitrogen's one cycle is the longest run of a default session, so it starts first.
     workers = [_Worker(binaries[g], g, refs[g], tmp_path_factory.mktemp(f"cycle-{g}"))

@@ -24,7 +24,10 @@ nitrogen worker alone against the 2012 reference.
 from __future__ import annotations
 
 import difflib
+import json
 import re
+import subprocess
+import zipfile
 from collections import Counter
 
 import pytest
@@ -66,23 +69,46 @@ def test_a_split_run_reproduces_the_serial_output(pool, W):
     assert combined.cross_sections == serial.cross_sections
     assert gate.provenance(0, BLOCKS_PER_SET, 0, 0, W) in combined.lines
 
+    # The diagnostics are conserved, from the record's harvest of the workers' outputs, which
+    # under W = 1's keep must also be what the worker folder holds.
+    d = r.job.run_dir
+    rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
     seen = diagnostics(combined.lines)
     conserved = Counter(seen)
     for w in range(1, W + 1):
-        worker = OutFile.read(r.job.worker_dir(w) / OUTPUT_NAME)
-        mine = len(expected_names(1, W, w))
-        assert gate.provenance(mine, 0, BLOCKS_PER_SET - mine, w, W) in worker.lines
-        conserved += diagnostics(worker.lines) - seen
+        mine = [ln for e in rec["split"]["diagnostics"] if e["worker"] == w for ln in e["lines"]]
+        conserved += diagnostics(mine) - seen
+        assert rec["split"]["workers"][w - 1]["blocks"] == len(expected_names(1, W, w))
+        assert rec["split"]["workers"][w - 1]["returncode"] == 0
     assert conserved == diagnostics(serial.lines)
+    assert rec["split"]["claims"] is None  # the static dealing's map is (k - 1) % W + 1
 
-    # worker folders are scratch: the staged input is gone from each once the run succeeded,
-    # the run directory keeps its own, and everything else the workers wrote stays
-    assert (r.job.run_dir / r.job.staged).is_file()
-    for w in range(1, W + 1):
-        assert not (r.job.worker_dir(w) / r.job.staged).exists()
-        assert (r.job.worker_dir(w) / "mobcal.in").is_file()
+    if r.job.scratch == "keep":
+        for w in range(1, W + 1):
+            worker = OutFile.read(r.job.worker_dir(w) / OUTPUT_NAME)
+            mine = len(expected_names(1, W, w))
+            assert gate.provenance(mine, 0, BLOCKS_PER_SET - mine, w, W) in worker.lines
+            assert diagnostics(worker.lines) == diagnostics(
+                [ln for e in rec["split"]["diagnostics"] if e["worker"] == w
+                 for ln in e["lines"]])
+        assert rec["scratch"] == {"mode": "keep"}
+    else:
+        # zip: the worker folders gone, the blocks packed, and the packed blocks unpacked into
+        # the folder let the program redo the combining run to the same output
+        assert r.job.scratch == "zip"
+        assert not any(d.glob("w0*")) and not any(d.glob("block-*.dat"))
+        assert rec["scratch"]["removed"] == {"worker_folders": W, "claim_files": 0,
+                                             "block_files": BLOCKS_PER_SET}
+        assert rec["scratch"]["left"] == [] and rec["scratch"]["zipped"] == BLOCKS_PER_SET
+        with zipfile.ZipFile(d / "blocks.zip") as z:
+            z.extractall(d)
+        first = (d / OUTPUT_NAME).read_bytes()
+        (d / OUTPUT_NAME).unlink()
+        subprocess.run(pool.launcher(r.job), cwd=d, check=True, stdout=subprocess.DEVNULL)
+        assert (d / OUTPUT_NAME).read_bytes() == first
 
-    blocks =[Block.read(p) for p in sorted(r.job.run_dir.glob("block-*.dat"))]
+    assert (d / r.job.staged).is_file()
+    blocks = [Block.read(p) for p in sorted(d.glob("block-*.dat"))]
     assert len(blocks) == BLOCKS_PER_SET
     assert [b.k for b in blocks] == list(range(1, BLOCKS_PER_SET + 1))
     assert [(b.cycle, b.point) for b in blocks] == [Block.cycle_point(k) for k in range(1, 401)]
@@ -103,7 +129,8 @@ def test_a_split_run_with_two_coordinate_sets(pool, tmp_path):
     two.write_text("\n".join([lines[0], "2", *lines[2:6], *atoms, "", *atoms]) + "\n",
                    encoding="latin-1", newline="\n")
     jobs = [Job(two, "he", 5013489, tmp_path, name="serial", generator="ranlux"),
-            Job(two, "he", 5013489, tmp_path, name="split", split=3, generator="ranlux")]
+            Job(two, "he", 5013489, tmp_path, name="split", split=3, generator="ranlux",
+                scratch="keep")]
     serial, split = run_many(jobs, workers=2, launcher=pool.launcher).results
     assert serial.ok and split.ok, (serial.message, split.message)
     assert len(serial.conformers) == 2 and split.conformers == serial.conformers
@@ -131,6 +158,9 @@ def test_a_run_that_reaches_the_failure_cap_fails_split_as_it_fails_serial(pool,
     # a static worker leaves its share short, a claiming one (the default) its claimed block
     assert ("blocks missing" in split.message or "claimed block not written" in split.message
             or "reached ifail" in split.message), split.message
-    # a failed run keeps every worker folder as it was, the input included
+    # a failed run keeps every worker folder as it was, the input included, and its record
+    # says nothing was removed
     for w in (1, 2):
         assert (split.job.worker_dir(w) / split.job.staged).is_file()
+    rec = json.loads((split.job.run_dir / "record.json").read_text(encoding="utf-8"))
+    assert rec["scratch"] == {"mode": "keep"} and rec["status"] == "failed"

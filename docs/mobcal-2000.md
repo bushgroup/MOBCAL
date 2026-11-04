@@ -116,7 +116,9 @@ combined output carries one line per coordinate set recording the blocks it read
 
 followed by a blank line, and the diagnostic of a failed trajectory (`energy not conserved`, two
 lines and the blank line before them) is printed by the worker that integrated it, in that
-worker's `w01` to `wW` directory, instead of in the combined output. The count of failed
+worker's output, instead of in the combined output. A run that succeeds copies each of those
+pairs, with its worker's number, into the `diagnostics` list of its `record.json` before it
+removes the worker directories (`--scratch keep` leaves them, `w01` to `wW`). The count of failed
 trajectories in the SUMMARY, and every number, are those of the serial run. With those lines set
 aside, a run of the example split 40 ways differs from the reference in the same 42 lines as the
 serial run.
