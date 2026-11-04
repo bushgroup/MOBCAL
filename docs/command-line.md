@@ -4,7 +4,7 @@
 
 `mobcal` is the program the window runs, typed in a terminal: one command with a subcommand for each task, running calculations, writing an input from a quantum chemistry output, writing the methods paragraph for finished runs, checking and building the programs, and opening the window. `mobcal` runs in any terminal once the installation's folder is on the `PATH`, which the Windows installer offers to do, and in the MOBCAL command prompt of the Windows Start menu either way ([Installing MOBCAL](install.md)). The options of `mobcal run` and `mobcal import` that the window also sets carry the same descriptions as its tooltips, from one table in the package, so the two say the same thing about every setting they share ([The window](window.md)). `mobcal COMMAND -h` prints a command's section of this page.
 
-- [`mobcal version`](#mobcal-version): Print the package version.
+- [`mobcal version`](#mobcal-version): Print the package version and the commit it was built from.
 - [`mobcal self-check`](#mobcal-self-check): Check that this copy can compute a cross section.
 - [`mobcal build`](#mobcal-build): Compile the 2012 Fortran with gfortran.
 - [`mobcal run`](#mobcal-run): Run calculations in parallel, one process per run.
@@ -16,7 +16,7 @@
 
 ## mobcal version
 
-Print the package version.
+Print the package version and the commit it was built from.
 
 ```
 usage: mobcal version [-h]

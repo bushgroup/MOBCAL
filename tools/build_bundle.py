@@ -13,7 +13,8 @@
 3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
    since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
    ORCA and one Gaussian output of the choline cation (``tests/data/qm/``) to ``examples/``,
-   and ``LICENSE``; on macOS into the ``.app``'s ``Contents/Resources``, after which the bundle
+   ``LICENSE`` and ``commit.txt`` (the commit the bundle is built at, which
+   ``mobcal version`` prints); on macOS into the ``.app``'s ``Contents/Resources``, after which the bundle
    is sealed again, ad hoc, since adding files breaks the seal PyInstaller's ad-hoc signature
    put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
@@ -145,6 +146,8 @@ def assemble(bin_dir: Path) -> None:
     for example in EXAMPLES:
         shutil.copy2(example, PAYLOAD / "examples" / example.name)
     shutil.copy2(ROOT / "LICENSE", PAYLOAD / "LICENSE")
+    (PAYLOAD / fortran.COMMIT_FILE).write_text(fortran._commit() + "\n", encoding="utf-8",
+                                               newline="\n")
     if sys.platform == "darwin":
         # Not --deep: that would re-sign the Fortran binaries, changing the bytes build.json
         # records. They are already signed (the arm64 linker signs ad hoc), as is everything
@@ -180,8 +183,10 @@ def self_check() -> None:
         out = subprocess.run([str(exe), "version"], env=env, capture_output=True, text=True,
                              check=True).stdout.strip()
         print(f"{label} start: mobcal version -> {out} in {time.perf_counter() - t0:.2f} s")
-        if out != mobcal.__version__:
-            raise SystemExit(f"the built program says {out!r}, the source {mobcal.__version__!r}")
+        commit = fortran.short_commit(fortran._commit())
+        want = f"{mobcal.__version__} ({commit})" if commit else mobcal.__version__
+        if out != want:
+            raise SystemExit(f"the built program says {out!r}, the source {want!r}")
 
 
 def import_check() -> None:

@@ -88,6 +88,9 @@ LINK_FLAGS = {
 }
 
 MANIFEST = "build.json"
+# Beside ``fortran/`` in an installed program: the commit it was packaged from, written by
+# tools/build_bundle.py from ``_commit()`` run on the source tree.
+COMMIT_FILE = "commit.txt"
 
 # Where MSYS2 puts gfortran on Windows. Without this directory on PATH, gfortran
 # invocations fail with exit 1 and no output at all, which reads like a source
@@ -257,7 +260,7 @@ def compiler_version(gfortran: str) -> str:
 
 def _git(root: Path, *args: str) -> str | None:
     try:
-        proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+        proc = subprocess.run([os.environ.get("MOBCAL_GIT", "git"), "-C", str(root), *args], capture_output=True, text=True,
                               timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -265,10 +268,19 @@ def _git(root: Path, *args: str) -> str | None:
 
 
 def _commit(root: Path = ROOT) -> str:
-    """The commit being built: the checkout's HEAD, with ``-dirty`` appended when the tree has
-    changes or untracked files that HEAD does not (as ``git describe --dirty`` marks it), since
-    the binaries then came from code no commit holds. Without git, CI's ``$GITHUB_SHA``; else
-    empty."""
+    """The commit this program is: the one lookup, whoever stamps it into a file.
+
+    In an installed (frozen) program, the commit packaging stamped in ``commit.txt`` beside
+    ``fortran/``, else empty; never git, since an install sits in whatever directory the user
+    chose, which may be inside some other checkout. From a source tree, the checkout's HEAD,
+    with ``-dirty`` appended when the tree has changes or untracked files that HEAD does not (as
+    ``git describe --dirty`` marks it), since the binaries then came from code no commit
+    holds. Without git, CI's ``$GITHUB_SHA``; else empty."""
+    if frozen():
+        try:
+            return (payload_dir() / COMMIT_FILE).read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
     head = _git(root, "rev-parse", "HEAD")
     if head is None:
         return os.environ.get("GITHUB_SHA", "")

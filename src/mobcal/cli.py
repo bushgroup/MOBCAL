@@ -128,7 +128,7 @@ def parser() -> argparse.ArgumentParser:
     def command(name: str, help: str, description: str | None = None) -> argparse.ArgumentParser:
         return sub.add_parser(name, help=help, description=description or help)
 
-    command("version", "Print the package version.")
+    command("version", "Print the package version and the commit it was built from.")
 
     c = command("self-check", "Check that this copy can compute a cross section.")
     c.add_argument("--choline", action="store_true",
@@ -295,7 +295,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
 
     if args.cmd == "version":
-        print(__version__)
+        commit = fortran.short_commit(fortran._commit())
+        print(f"{__version__} ({commit})" if commit else __version__)
         return 0
 
     if args.cmd == "self-check":

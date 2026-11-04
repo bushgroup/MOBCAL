@@ -33,6 +33,10 @@ $bundleArgs = @("tools/build_bundle.py", "--bin-dir", $BinDir)
 if ($SkipPyInstaller) { $bundleArgs += "--skip-pyinstaller" }
 
 $savedPath = $env:PATH
+# The cut PATH hides git, which names the commit the bundle is stamped with (mobcal.fortran._git
+# runs $env:MOBCAL_GIT): resolve it before the cut, as the build does for uv.
+$git = Get-Command git -ErrorAction SilentlyContinue
+if ($git) { $env:MOBCAL_GIT = $git.Source }
 $uvDir = Split-Path -Parent (Get-Command uv).Source
 $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem;$uvDir"
 try {
@@ -40,6 +44,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "tools/build_bundle.py failed (exit $LASTEXITCODE)." }
 } finally {
     $env:PATH = $savedPath
+    Remove-Item Env:MOBCAL_GIT -ErrorAction SilentlyContinue
 }
 
 if ($NoInstaller) { return }

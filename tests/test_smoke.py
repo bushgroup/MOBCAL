@@ -45,4 +45,6 @@ def test_warning_count():
 
 def test_cli_version(capsys):
     assert cli.main(["version"]) == 0
-    assert capsys.readouterr().out.strip() == mobcal.__version__
+    commit = fortran.short_commit(fortran._commit())
+    want = f"{mobcal.__version__} ({commit})" if commit else mobcal.__version__
+    assert capsys.readouterr().out.strip() == want

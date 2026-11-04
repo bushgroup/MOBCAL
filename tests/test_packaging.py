@@ -140,3 +140,23 @@ def test_source_layout(monkeypatch):
 def test_build_refuses_in_an_installed_copy(frozen_at, capsys):
     assert cli.main(["build"]) == 2
     assert "installed copy" in capsys.readouterr().err
+
+
+def test_an_installed_program_reads_its_stamped_commit_and_never_asks_git(tmp_path, monkeypatch):
+    monkeypatch.setattr(fortran, "frozen", lambda: True)
+    monkeypatch.setattr(fortran, "payload_dir", lambda: tmp_path)
+    monkeypatch.setattr(fortran, "_git", lambda *_: pytest.fail("a frozen program asked git"))
+    monkeypatch.setenv("GITHUB_SHA", "e" * 40)
+    assert fortran._commit() == ""  # not stamped: empty, not CI's, not an enclosing checkout's
+    (tmp_path / fortran.COMMIT_FILE).write_text("a" * 40 + "-dirty\n", encoding="utf-8")
+    assert fortran._commit() == "a" * 40 + "-dirty"
+
+
+def test_version_prints_the_short_commit(monkeypatch, capsys):
+    from mobcal import cli
+    monkeypatch.setattr(fortran, "_commit", lambda *a: "97b673deaaf44f605952b8ce86023eebede8f541")
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == f"{cli.__version__} (97b673deaaf4)"
+    monkeypatch.setattr(fortran, "_commit", lambda *a: "")
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out.strip() == cli.__version__
