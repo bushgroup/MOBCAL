@@ -115,6 +115,7 @@ import psutil
 import mobcal
 from mobcal import fortran, methods, parameters, settings
 from mobcal.io import ion, mobcalmpi
+from mobcal.io import result as result_file
 from mobcal.io.block import all_names, block_name, block_of_claim, expected_names
 from mobcal.io.infile import (
     DEALINGS,
@@ -137,13 +138,13 @@ OUTPUT_NAME = "mobcal.out"
 LOG_NAME = "stdout.log"
 RECORD_JSON = "record.json"
 # NAME.result.json, NAME the run directory's: the published result (docs/result-file.md)
-RESULT_SUFFIX = ".result.json"
-RESULT_FORMAT = "ims-result"
+RESULT_SUFFIX = result_file.SUFFIX
+RESULT_FORMAT = result_file.FORMAT  # mobcal.io.result reads it back
 # The format as a JSON Schema, and the schemas of the two inputs it embeds by $ref: what
 # a validator needs to check a whole result file offline, and what the installer ships.
 RESULT_SCHEMA = Path(__file__).resolve().parent / "io" / "result.schema.json"
 SCHEMAS = (RESULT_SCHEMA, ion.SCHEMA, methods.SCHEMA)
-RESULT_VERSION = 1
+RESULT_VERSION = result_file.VERSION
 # Whether a result file carries the ion document (embed) or names the file alone (reference)
 RESULT_ION_MODES = ("embed", "reference")
 DEFAULT_RESULT_ION = "embed"
@@ -351,22 +352,7 @@ class Staged:
     ion_text: str | None = None  # an ion file's text as read, for the result file to embed
 
 
-# What record.json keeps of an ion file's import record, under the same names: enough for the
-# methods text to name the charges, which outlives the ion file moving.
-IMPORT_SOURCE = ("program", "version", "keywords", "route")
-
-
-def ion_charges(i: ion.Ion) -> dict:
-    """The record's account of an ion file's charges: its ``charge_mode`` and, when it carries
-    an import record, ``import``, that record's ``source`` program, version, and keywords or
-    route as given, and its ``charges.choice``."""
-    out: dict = {"charge_mode": i.charge_mode}
-    r = i.import_record
-    if r is not None:
-        out["import"] = {"source": {k: r["source"][k] for k in IMPORT_SOURCE
-                                    if k in r["source"]},
-                         "charges": {"choice": r.get("charges", {}).get("choice")}}
-    return out
+ion_charges = ion.charges_record  # record.json's account of an ion file's charges
 
 
 def stage(path: Path, table: ParameterSet) -> Staged:
@@ -1053,7 +1039,7 @@ def _join_message(a: str, b: str) -> str:
     return f"{a}; {b}" if a else b
 
 
-GAS_FORMULA = {"he": "He", "n2": "N2"}
+GAS_FORMULA = result_file.GAS_FORMULA
 _A2, _INV = "angstrom^2", "V s m^-2"
 _METHOD_KEYS = ("parameters", "generator", *settings.NAMES)  # what a custom method overrides
 

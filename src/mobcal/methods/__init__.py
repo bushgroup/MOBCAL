@@ -227,6 +227,16 @@ def load(path: Path | str, shipped: bool = False) -> Method:
         raise MethodError(f"{path}: not UTF-8 text: {e}") from None
     except strictjson.StrictJSONError as e:
         raise MethodError(f"{path}: {e}") from None
+    return from_document(doc, path, hashlib.sha256(data).hexdigest(), shipped)
+
+
+def from_document(doc: object, path: Path | str, sha256: str, shipped: bool = False,
+                  find_table: bool = True) -> Method:
+    """A method document checked as ``load`` checks a file, ``path`` and ``sha256`` the file's
+    it stands for. With ``find_table`` False, a table of one's own is taken by its path and
+    SHA-256 as written, not looked for: a document embedded in a result file names a table on
+    the computer that ran it. Raises MethodError naming ``path`` and the key."""
+    path = Path(path)
     if not isinstance(doc, dict):
         raise MethodError(f"{path}: not a method file: the file must be one JSON object")
     # format and version first, so that a file of another version is refused for that alone
@@ -259,7 +269,7 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     if not isinstance(generator, str) or generator not in GENERATORS:
         raise MethodError(f"{path}: generator is {generator!r}; the generators are "
                           + ", ".join(GENERATORS))
-    set_name, table, table_sha = _table(doc["parameters"], gas, path)
+    set_name, table, table_sha = _table(doc["parameters"], gas, path, find_table)
     try:
         st = settings.resolve(**{k: doc[k] for k in settings.NAMES if k in doc})
     except settings.SettingsError as e:
@@ -269,11 +279,12 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     if seed is not None and (type(seed) is not int or not 1 <= seed <= MAX_SEED):
         raise MethodError(f"{path}: seed is {seed!r}; a seed is a positive integer up to "
                           f"{MAX_SEED}")
-    return Method(name, gas, set_name, table, table_sha, generator, st, path,
-                  hashlib.sha256(data).hexdigest(), shipped, seed, description)
+    return Method(name, gas, set_name, table, table_sha, generator, st, path, sha256, shipped,
+                  seed, description)
 
 
-def _table(value: object, gas: str, path: Path) -> tuple[str | None, Path | None, str | None]:
+def _table(value: object, gas: str, path: Path,
+           find: bool = True) -> tuple[str | None, Path | None, str | None]:
     if isinstance(value, str):
         if value not in parameters.SETS[gas]:
             raise MethodError(f"{path}: parameters is {value!r}; the shipped "
@@ -289,6 +300,8 @@ def _table(value: object, gas: str, path: Path) -> tuple[str | None, Path | None
     table = Path(value["path"])
     if not table.is_absolute():
         table = path.resolve().parent / table
+    if not find:
+        return None, table, value["sha256"]
     if not table.is_file():
         raise MethodError(f"{path}: its element table {table} is not there; it has moved or "
                           "been deleted")
@@ -456,16 +469,26 @@ _INPUT_FILE = {"xyz": ".xyz", "mfj": ".mfj", "MobCal-MPI": "MobCal-MPI .mfj"}
 
 def read_records(paths: Iterable[Path | str]) -> list[dict]:
     """The ``record.json`` of each run directory named, or of every run directory inside each
-    folder named, in name order within a folder. Raises FileNotFoundError when a path holds no
-    record at all."""
+    folder named, in name order within a folder; and for a result file named, or each one
+    directly inside a folder named, what its record would say (``mobcal.io.result``), so that
+    a result file sent on describes its run without the run directory. Raises
+    FileNotFoundError when a path holds neither, and ResultError for a result file that cannot
+    be read."""
+    from mobcal.io import result  # it reads method documents with this module
+
     docs = []
     for p in map(Path, paths):
+        if p.is_file() and result.is_result(p):
+            docs.append(result.Result.read(p).record())
+            continue
         files = [p / RECORD_JSON] if (p / RECORD_JSON).is_file() else \
             sorted(p.glob(f"*/{RECORD_JSON}"))
-        if not files:
-            raise FileNotFoundError(f"no run record in {p}")
+        loose = [] if (p / RECORD_JSON).is_file() else sorted(p.glob(f"*{result.SUFFIX}"))
+        if not files and not loose:
+            raise FileNotFoundError(f"no run record or result file in {p}")
         for f in files:
             docs.append(json.loads(f.read_text(encoding="utf-8")))
+        docs += [result.Result.read(f).record() for f in loose]
     return docs
 
 

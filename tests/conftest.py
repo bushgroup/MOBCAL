@@ -161,7 +161,7 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
                 p.splits[r.job.split] = r
             else:
                 p.runs[r.job.gas] = gate.GateRun(r.job.gas, refs[r.job.gas],
-                                                 OutFile.read(r.output))
+                                                 OutFile.read(r.output), r.job.result_path)
         for w in workers:
             p.cycles[w.gas] = w.wait()
             W, me = gate.CYCLE

@@ -14,6 +14,7 @@
 - [`mobcal render-parameters`](#mobcal-render-parameters): Write the element table and the settings the program reads into a directory, for running the program there by hand.
 - [`mobcal import`](#mobcal-import): Write an ion file from an ORCA or Gaussian output or an .xyz file, with the charges you name, or from a .mfj, with its own.
 - [`mobcal export`](#mobcal-export): Write the .mfj the 2012 program reads from an ion file.
+- [`mobcal unpack`](#mobcal-unpack): Write a result file's ion and method back as files, to run the calculation again.
 
 ## mobcal version
 
@@ -108,13 +109,13 @@ usage: mobcal gui [-h] [--check]
 
 ## mobcal methods-text
 
-A methods paragraph for the completed runs, written from their records: the program and version, method, gas, element table, temperature, trajectory counts, generator and seeds, with the papers to cite; and the partial charges, when every run is of an ion file that carries its import record. Printed for the run directories, or folders of them, named.
+A methods paragraph for the completed runs, written from their records or result files: the program and version, method, gas, element table, temperature, trajectory counts, generator and seeds, with the papers to cite; and the partial charges, when every run is of an ion file that carries its import record. Printed for the run directories, folders and result files named.
 
 ```
 usage: mobcal methods-text [-h] PATH [PATH ...]
 ```
 
-- `PATH`: Run directories, or folders of them.
+- `PATH`: Run directories, folders of them, result files (NAME.result.json), or folders of result files.
 
 ## mobcal render-parameters
 
@@ -162,3 +163,15 @@ usage: mobcal export [-h] [--gas {he,n2,both}] [--parameters PATH|NAME] [-o OUT.
 - `--parameters PATH|NAME`: This TOML file, or this shipped table by name (2012 (He, N2), 2000 (He)), instead of the gas's default table.
 - `-o OUT.mfj, --out OUT.mfj`: The file to write. Default: ION.mfj beside the ion file.
 - `--force`: Replace OUT.mfj if it exists.
+
+## mobcal unpack
+
+The ion file and the method file of a calculation, written from its result file, which holds both, so that the calculation can be run again from the result file alone. Each file is checked against the SHA-256 the result file records, and the ion against the input the program read. A result file that names its ion by reference holds no ion to write and is refused. Writes NAME.ion.json and NAME.method.json, and prints the command that runs the calculation again.
+
+```
+usage: mobcal unpack [-h] [-o DIR] [--force] RESULT.result.json
+```
+
+- `RESULT.result.json`: The result file.
+- `-o DIR, --out DIR`: The folder to write the two files into. Default: the current directory.
+- `--force`: Replace a file of the same name that holds something else.

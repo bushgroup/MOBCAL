@@ -44,6 +44,7 @@ class GateRun:
     gas: str
     ref: OutFile
     new: OutFile
+    result: Path | None = None  # the run's result file, NAME.result.json
 
 
 @dataclass(frozen=True)

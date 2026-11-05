@@ -324,6 +324,77 @@ holds both inputs. A failure to write the result file is reported with the run a
 The result file is written by this version of MOBCAL and later ones. Run directories made by
 earlier versions have a `record.json` and no result file, and MOBCAL does not add one to them.
 
+## Reading it back
+
+Because a result file holds both inputs, the calculation can be run again from the result file
+alone. `mobcal unpack` writes the ion and the method back as files and prints the command that
+runs them:
+
+```
+mobcal unpack Choline-he-5013489-ranlux.result.json -o again
+```
+
+which, for the choline example above, writes `again/Choline.ion.json` and
+`again/2012-he.method.json` and ends with
+
+```
+to run it again:
+  mobcal run again/Choline.ion.json --method 2012-he --seeds 5013489
+```
+
+The ion file is named for the run's input, `X.ion.json` for an ion file of that name or for a
+`.mfj` named `X.mfj`, so that the run of it lands in a run directory of the same name as the
+original. The method file is named for the method's file, `2012-he.method.json` for a shipped
+method and the file's own name for a method file of one's own. A `custom` run has no method
+file, and its method is written as `NAME.method.json` under the name NAME, the result file's,
+in place of `Custom`, so that the methods of several custom runs can be loaded side by side.
+The command names a shipped method by its key when the method file the run recorded is the one
+this version of MOBCAL ships, and the written file otherwise, and adds `--split W` for a run
+that was divided among W processes, which gives the same numbers as a run in one process.
+
+Each file is checked as it is written, and `unpack` says what each check found:
+
+- **The method** written back has the bytes of the file the run was given, for every method
+  file MOBCAL wrote, and its SHA-256 is then the one the result records. Whatever its bytes, its
+  gas, generator, element table and six settings must be those the `mobcal` block records, and a
+  result file in which they differ is refused.
+- **The ion file** written back has the bytes of the file the run was given when MOBCAL wrote
+  that file, by `mobcal import` or the window, and its SHA-256 is then the recorded one. An ion
+  file laid out otherwise, by hand or by another program, is written back as the same document
+  in MOBCAL's layout, with another SHA-256, and `unpack` reports both hashes.
+- **The input the program read** is checked for an ion file: the `.mfj` the written ion file
+  gives for the run's element table must have the SHA-256 of `mobcal.staged_input`, and a result
+  file for which it does not is refused. A table of one's own is found where the method names it,
+  and when it is not there the check is skipped and `unpack` says so.
+
+A run of a `.mfj` is written back as an ion file, since the result file holds the ion document
+that reading the `.mfj` gives and not the `.mfj` itself, and `unpack` says so. The `.mfj` that
+this ion file gives holds every value the program read from the original, which the program
+reads as numbers and not as text, so the calculation is the same, but it is laid out as MOBCAL
+writes a `.mfj` (`1.0` where the 2012 choline input has `1.0000`, and wider columns), and its
+SHA-256 is not the recorded one, which is the original `.mfj`'s. For the choline input of the
+2012 release, `mobcal unpack` followed by the command it prints reproduces the cross sections of
+the 2012 reference output to the last printed digit, and the tests check this on every change
+to MOBCAL.
+
+A result file that records its ion by reference holds no ion to write, and `unpack` refuses it,
+naming the ion file by the name and SHA-256 the result records, so that the file can be found
+and run with the method again. `unpack` also refuses a file of another format or version, and
+it does not replace a file of the same name with other contents unless given `--force`. A
+file already there with the same bytes is left as it is, so the results of several runs of one
+ion can be unpacked into one folder.
+
+`mobcal methods-text` reads result files as it reads run directories, so a methods paragraph
+can be written for runs whose directories are not at hand:
+
+```
+mobcal methods-text results/*.result.json
+```
+
+A folder named on the command line may hold run directories, result files, or both. The
+paragraph names the partial charges when the result file holds the ion and the ion file carried
+its import record, as for a run directory.
+
 ## The schema
 
 The machine-readable schema is

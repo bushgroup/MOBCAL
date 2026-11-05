@@ -149,7 +149,11 @@ results folder can hold a study: a later command adds its runs beside the earlie
 `--skip-done` leaves out the runs the folder already holds complete, and refuses to run an input
 whose name another input's run directory already carries. `mobcal methods-text runs` prints a
 methods paragraph for the runs in a folder, with the program, version, method, gas, element
-table, temperature, trajectory counts, generator and seeds, and the papers to cite.
+table, temperature, trajectory counts, generator and seeds, and the papers to cite, and it
+reads result files as well as run directories. `mobcal unpack NAME.result.json` writes a run's
+ion file and method file back from its result file, checks each against the hash the result
+records, and prints the command that runs the calculation again
+([Reading it back](docs/result-file.md#reading-it-back)).
 
 `--method` names a calculation as a whole, its gas included, so helium and nitrogen are two
 commands. `--method 2012-he` and `--method 2012-n2` are the calculation of the 2012 release

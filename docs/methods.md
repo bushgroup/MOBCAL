@@ -157,7 +157,8 @@ beside `record.json` ([The result file](result-file.md)). It holds the method as
 document whatever the run was made from: a shipped method's file, a method file of one's own, or,
 for a run made `custom`, the method its gas, table, generator and settings make, with the method
 it was made from and the values that differ. Written to a file, that document is a method that
-makes the run's calculation again.
+makes the run's calculation again, and `mobcal unpack` writes it, beside the ion
+([Reading it back](result-file.md#reading-it-back)).
 
 Runs made before methods carried their gas recorded `current`, `2012` or `2000`. These are read
 as `2012-philox-he` or `2012-philox-n2`, as `2012-he` or `2012-n2`, and as `2000-he`, by the gas

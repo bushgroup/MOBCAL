@@ -176,7 +176,7 @@ the program and version, the method, gas, element table, temperature, trajectory
 generator and seeds, with the papers to cite. When every run is of an ion file that carries its
 import record, the paragraph also names the partial charges: the scheme, and the program,
 version and keywords or route of the calculation they came from. `mobcal methods-text FOLDER`
-prints the same for any runs.
+prints the same for any runs, from their run directories or their result files.
 
 ## Help
 

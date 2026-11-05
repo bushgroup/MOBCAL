@@ -204,6 +204,24 @@ class Ion:
                    tuple(sets))
 
 
+# What record.json keeps of an ion file's import record, under the same names: enough for the
+# methods text to name the charges, which outlives the ion file moving.
+IMPORT_SOURCE = ("program", "version", "keywords", "route")
+
+
+def charges_record(i: Ion) -> dict:
+    """The record's account of an ion file's charges: its ``charge_mode`` and, when it carries
+    an import record, ``import``, that record's ``source`` program, version, and keywords or
+    route as given, and its ``charges.choice``."""
+    out: dict = {"charge_mode": i.charge_mode}
+    r = i.import_record
+    if r is not None:
+        out["import"] = {"source": {k: r["source"][k] for k in IMPORT_SOURCE
+                                    if k in r["source"]},
+                         "charges": {"choice": r.get("charges", {}).get("choice")}}
+    return out
+
+
 def is_ion(path: Path | str) -> bool:
     """Whether a path names an ion file, by its extension (``.ion.json``, any case)."""
     return Path(path).name.lower().endswith(SUFFIX)
@@ -628,3 +646,9 @@ def _dumps(v: object, depth: int) -> str:
             return "[" + ", ".join(_scalar(x) for x in v) + "]"
         return "[\n" + ",\n".join(inner + _dumps(x, depth + 1) for x in v) + "\n" + pad + "]"
     return _scalar(v)
+
+
+def dumps(doc: dict) -> str:
+    """An ion document as ``Ion.text`` lays one out, in the document's own key order: what a
+    file written by this module reads back to, byte for byte."""
+    return _dumps(doc, 0) + "\n"

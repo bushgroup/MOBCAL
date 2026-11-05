@@ -18,6 +18,7 @@
                   [-o OUT.ion.json] [--force]
     mobcal export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
                   [--force]
+    mobcal unpack RESULT.result.json [-o DIR] [--force]
 
 ``run`` takes input files, ``.mfj`` or ion files (paths or globs), makes one job per input and
 seed, prints how they will use the cores and about how long they will take
@@ -59,8 +60,12 @@ the table of each gas asked for (both by default, which must agree), as a run st
 on disk, a dry run unless ``--apply`` (``mobcal.clean``).
 ``--result-ion`` says whether each run's ``NAME.result.json`` embeds the ion document or
 names the file alone (``mobcal.run.RESULT_ION_MODES``, docs/result-file.md).
+``unpack`` writes a result file's ion and method back as an ion file and a method file,
+checks them against the hashes the result recorded (``mobcal.io.result.unpack``) and prints
+the command that runs the calculation again; it refuses a result that names its ion by
+reference, and every refusal exits 1.
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
-directories or folders named (``mobcal.methods.text``).
+directories, folders or result files named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
 driver does into each run directory, for running the program there by hand: the 2012 settings
 and the gas's default table, or with ``--method`` that method's (which must be for the gas),
@@ -232,7 +237,8 @@ def parser() -> argparse.ArgumentParser:
     t = command("methods-text", "Print the methods paragraph for runs.",
                 options.cli_help("methods_text"))
     t.add_argument("paths", nargs="+", type=Path, metavar="PATH",
-                   help="Run directories, or folders of them.")
+                   help="Run directories, folders of them, result files (NAME.result.json), "
+                        "or folders of result files.")
 
     p = command("render-parameters", "Write the element table and the settings the program "
                 "reads into a directory, for running the program there by hand.")
@@ -277,6 +283,21 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
                    help="The file to write. Default: ION.mfj beside the ion file.")
     x.add_argument("--force", action="store_true", help="Replace OUT.mfj if it exists.")
+
+    u = command("unpack", "Write a result file's ion and method back as files, to run the "
+                "calculation again.",
+                "The ion file and the method file of a calculation, written from its result file, "
+                "which holds both, so that the calculation can be run again from the result file "
+                "alone. Each file is checked against the SHA-256 the result file records, and the "
+                "ion against the input the program read. A result file that names its ion by "
+                "reference holds no ion to write and is refused. Writes NAME.ion.json and "
+                "NAME.method.json, and prints the command that runs the calculation again.")
+    u.add_argument("result", type=Path, metavar="RESULT.result.json", help="The result file.")
+    u.add_argument("-o", "--out", type=Path, default=Path("."), metavar="DIR",
+                   help="The folder to write the two files into. Default: the current "
+                        "directory.")
+    u.add_argument("--force", action="store_true",
+                   help="Replace a file of the same name that holds something else.")
     return ap
 
 
@@ -379,6 +400,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "export":
         return _export(args)
+
+    if args.cmd == "unpack":
+        return _unpack(args)
 
     if args.cmd == "gui":
         from mobcal.app import main as gui
@@ -494,6 +518,38 @@ def _export(args: argparse.Namespace) -> int:
     print(f"wrote {m}: {i.atoms} atoms, {len(i.conformers)} conformer"
           f"{'s' if len(i.conformers) > 1 else ''}, keys of the "
           f"{' and '.join(repr(t.name) for t in tables)} table{'s' if len(tables) > 1 else ''}")
+    return 0
+
+
+def _unpack(args: argparse.Namespace) -> int:
+    from mobcal.io import result
+    try:
+        u = result.unpack(result.Result.read(args.result), args.out, args.force)
+    except (result.ResultError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    def said(w: result.Written, what: str, mfj: bool = False) -> str:
+        state = "found unchanged" if w.existed else "wrote"
+        if mfj:
+            check = "converted from the run's .mfj, whose own SHA-256 no ion file can have"
+        elif w.recorded is None:
+            check = "the run was given no file of it, only its values"
+        elif w.identical:
+            check = "the same bytes as the file the run was given (SHA-256 matches)"
+        else:
+            check = (f"the same document as the file the run was given, laid out as MOBCAL "
+                     f"writes it (SHA-256 {w.sha256[:12]}, the given file's {w.recorded[:12]})")
+        return f"{state} {w.path}: {what}, {check}"
+
+    print(said(u.ion, "the ion", u.converted_from == "mfj"))
+    print(said(u.method, "the method"))
+    if u.staged:
+        print("checked: the .mfj this ion file gives for the method's element table is the one "
+              "the program read (SHA-256 matches)")
+    for n in u.notes:
+        print(f"note: {n}")
+    print("to run it again:\n  " + u.command)
     return 0
 
 
