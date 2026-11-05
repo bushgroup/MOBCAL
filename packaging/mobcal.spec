@@ -56,11 +56,18 @@ def _analysis(script):
         binaries=_binaries,
         # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks,
         # the shipped methods beside mobcal/methods/__init__, the window's icon where mobcal.app.ICONS looks, and the
-        # guide's pages in docs/ at the top of the bundle, where mobcal.docs looks.
+        # guide's pages in docs/ at the top of the bundle, where mobcal.docs looks. The three
+        # published schemas (mobcal.run.SCHEMAS: the result file's and the ion and method
+        # files' it refers to) beside the modules that name them, for other programs and
+        # editors to check files against offline; the program itself never loads them.
         datas=[(os.path.join(ROOT, "src", "mobcal", "parameters", "*.toml"),
                 os.path.join("mobcal", "parameters")),
                (os.path.join(ROOT, "src", "mobcal", "methods", "*.method.json"),
                 os.path.join("mobcal", "methods")),
+               (os.path.join(ROOT, "src", "mobcal", "methods", "*.schema.json"),
+                os.path.join("mobcal", "methods")),
+               (os.path.join(ROOT, "src", "mobcal", "io", "*.schema.json"),
+                os.path.join("mobcal", "io")),
                (os.path.join(ROOT, "src", "mobcal", "app", "icons", "*.png"),
                 os.path.join("mobcal", "app", "icons")),
                (os.path.join(ROOT, "docs", "*.md"), "docs")] + collect_data_files("periodictable"),
@@ -146,14 +153,17 @@ if _missing:
                        "could not open the window.")
 
 _tables = {os.path.basename(dest) for dest, *_ in a.datas
-           if dest.endswith((".toml", ".method.json")) and dest.startswith("mobcal")}
+           if dest.endswith((".toml", ".method.json", ".schema.json"))
+           and dest.startswith("mobcal")}
 _want = {"mobcal_He.toml", "mobcal_He_2000.toml", "mobcal_N2.toml",
          "2012-he.method.json", "2012-n2.method.json", "2012-philox-he.method.json",
-         "2012-philox-n2.method.json", "2000-he.method.json"}
+         "2012-philox-n2.method.json", "2000-he.method.json",
+         "result.schema.json", "ion.schema.json", "method.schema.json"}
 if _tables != _want:
     raise RuntimeError(f"Refusing to build: the data files in the bundle are {_tables}, not "
-                       f"{_want}; no run could start without the tables or the methods, and a "
-                       "named set missing would be refused.")
+                       f"{_want}; no run could start without the tables or the methods, a "
+                       "named set missing would be refused, and the published schemas are "
+                       "what docs/result-file.md tells a reader to check a result file with.")
 
 _icons = {os.path.basename(dest) for dest, *_ in g.datas
           if dest.replace("\\", "/").startswith("mobcal/app/icons/")}

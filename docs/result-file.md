@@ -328,7 +328,10 @@ earlier versions have a `record.json` and no result file, and MOBCAL does not ad
 
 The machine-readable schema is
 [`src/mobcal/io/result.schema.json`](../src/mobcal/io/result.schema.json) (JSON Schema, draft
-2020-12), under the same `$id` pattern as the schemas of the ion file and the method file. It
+2020-12), under the same `$id` pattern as the schemas of the ion file and the method file. An
+installed copy of MOBCAL carries all three among its own files, under `mobcal/io/` and
+`mobcal/methods/`, so a result file can be checked against the schemas of the version that
+wrote it without the source code or a network. It
 refuses a key it does not define, a unit string other than its key's, a status that does not
 match its `message` and `results`, and a nitrogen result with a cross section other than `TM`.
 The embedded ion and method documents are checked by reference to their own formats' schemas:

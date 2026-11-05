@@ -25,6 +25,7 @@ Run:  uv run tools/check_public.py
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import re
 import subprocess
@@ -159,6 +160,34 @@ def main() -> int:
                "settings", methods.DEFAULT in methods.METHODS
                and methods.METHODS[methods.DEFAULT].generator == "philox"
                and methods.METHODS[methods.DEFAULT].settings == settings.DEFAULTS)
+
+    section("the published schemas")
+    from urllib.parse import urljoin
+
+    from mobcal import run
+    repo = "https://github.com/bushgroup/MOBCAL/blob/main/"
+    ids = {}
+    for path in run.SCHEMAS:
+        rel = path.relative_to(ROOT).as_posix()
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            check_true(f"{rel} reads as JSON ({e})", False)
+            continue
+        ids[path.name] = doc.get("$id")
+        check_true(f"{rel}: draft 2020-12, $id is its own path in the repository",
+                   doc.get("$schema") == "https://json-schema.org/draft/2020-12/schema"
+                   and doc.get("$id") == repo + rel)
+    result_id = ids.get(run.RESULT_SCHEMA.name, "")
+    check_true("the result schema's $refs resolve to the ion and method schemas' $id",
+               urljoin(result_id, "ion.schema.json") == ids.get("ion.schema.json")
+               and urljoin(result_id, "../methods/method.schema.json")
+               == ids.get("method.schema.json"))
+    with open(os.path.join(ROOT, "packaging", "mobcal.spec"), encoding="utf-8") as f:
+        spec = f.read()
+    check_true("packaging/mobcal.spec ships each schema and refuses to build without it",
+               all(f'"{p.name}"' in spec for p in run.SCHEMAS)
+               and all(f'"{p.parent.name}", "*.schema.json"' in spec for p in run.SCHEMAS))
 
     section("layers")
     lower = []

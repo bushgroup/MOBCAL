@@ -20,15 +20,14 @@ from mobcal.run import Job, Stop, run_many, run_one
 from test_run import CHOLINE_ION, launcher, write_input
 
 SRC = Path(run.__file__).resolve().parent
-SCHEMA = SRC / "io" / "result.schema.json"
+SCHEMA = run.RESULT_SCHEMA
 
 
 @pytest.fixture(scope="module")
 def validator() -> jsonschema.Draft202012Validator:
     """The result schema with the ion and method schemas registered under their $id, so its
     relative $refs resolve with no network."""
-    docs = [json.loads(p.read_text(encoding="utf-8"))
-            for p in (SCHEMA, ion.SCHEMA, methods.SCHEMA)]
+    docs = [json.loads(p.read_text(encoding="utf-8")) for p in run.SCHEMAS]
     jsonschema.Draft202012Validator.check_schema(docs[0])
     registry = Registry().with_resources((d["$id"], Resource.from_contents(d)) for d in docs)
     return jsonschema.Draft202012Validator(docs[0], registry=registry)

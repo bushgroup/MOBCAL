@@ -160,3 +160,15 @@ def test_version_prints_the_short_commit(monkeypatch, capsys):
     monkeypatch.setattr(fortran, "_commit", lambda *a: "")
     assert cli.main(["version"]) == 0
     assert capsys.readouterr().out.strip() == cli.__version__
+
+
+def test_the_installer_ships_the_three_published_schemas():
+    # mobcal.run.SCHEMAS, by the globs packaging/mobcal.spec gives them: every *.schema.json in
+    # the two folders is one of the three, and the spec's guard refuses a bundle without each.
+    from mobcal import run
+    spec = (Path(fortran.ROOT) / "packaging" / "mobcal.spec").read_text(encoding="utf-8")
+    globbed = {p for d in {s.parent for s in run.SCHEMAS} for p in d.glob("*.schema.json")}
+    assert globbed == set(run.SCHEMAS)
+    for s in run.SCHEMAS:
+        assert f'"{s.parent.name}", "*.schema.json"' in spec, s.name
+        assert f'"{s.name}"' in spec, s.name

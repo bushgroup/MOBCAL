@@ -139,6 +139,10 @@ RECORD_JSON = "record.json"
 # NAME.result.json, NAME the run directory's: the published result (docs/result-file.md)
 RESULT_SUFFIX = ".result.json"
 RESULT_FORMAT = "ims-result"
+# The format as a JSON Schema, and the schemas of the two inputs it embeds by $ref: what
+# a validator needs to check a whole result file offline, and what the installer ships.
+RESULT_SCHEMA = Path(__file__).resolve().parent / "io" / "result.schema.json"
+SCHEMAS = (RESULT_SCHEMA, ion.SCHEMA, methods.SCHEMA)
 RESULT_VERSION = 1
 # Whether a result file carries the ion document (embed) or names the file alone (reference)
 RESULT_ION_MODES = ("embed", "reference")

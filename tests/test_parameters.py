@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from mobcal import ROOT, cli, fortran, methods, parameters
+from mobcal import ROOT, cli, fortran, methods, parameters, run
 from mobcal.parameters import ParameterError
 
 # --- the files' literals and the rendered tokens --------------------------------------------
@@ -106,7 +106,8 @@ def test_the_installer_bundles_every_shipped_file():
     spec = (ROOT / "packaging" / "mobcal.spec").read_text(encoding="utf-8")
     want = re.search(r"^_want = \{(.*?)\}$", spec, re.M | re.S).group(1)
     assert {s.strip().strip('"') for s in want.split(",")} == {
-        *parameters.SHA256, *(f"{k}{methods.SUFFIX}" for k in methods.SHA256)}
+        *parameters.SHA256, *(f"{k}{methods.SUFFIX}" for k in methods.SHA256),
+        *(s.name for s in run.SCHEMAS)}
 
 
 def test_verify_catches_a_changed_or_missing_file(tmp_path):
