@@ -309,14 +309,11 @@ def dumps(doc: dict) -> str:
     return json.dumps(ordered, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
-def save(path: Path | str, name: str, gas: str, table: str | Path, generator: str,
-         st: Settings, seed: int | None = None, description: str | None = None) -> Method:
-    """Write a method file with every key, a table of one's own by its absolute path and its
-    SHA-256 now, and ``seed`` and ``description`` when they are given, and return it as
-    ``load`` reads it back. ``table`` is a shipped set's name or a path. The file is named
-    ``NAME.method.json`` (``file_name``), whatever ``path`` ends in. Raises MethodError."""
-    path = file_name(path)
-    _check_name(name, str(path))
+def document(name: str, gas: str, table: str | Path, table_sha256: str | None, generator: str,
+             st: Settings, seed: int | None = None, description: str | None = None) -> dict:
+    """A method document with every key in ``KEYS`` order, as ``save`` writes one: ``table`` a
+    shipped set's name, or a path written absolute beside ``table_sha256``; the temperature an
+    integer when it is one; ``seed`` and ``description`` only when given."""
     doc: dict = {"format": FORMAT, "version": VERSION, "name": name}
     if description:
         doc["description"] = description
@@ -324,12 +321,7 @@ def save(path: Path | str, name: str, gas: str, table: str | Path, generator: st
     if isinstance(table, str) and table in parameters.SETS.get(gas, {}):
         doc["parameters"] = table
     else:
-        t = Path(table).resolve()
-        try:
-            sha = _sha256(t)
-        except OSError as e:
-            raise MethodError(f"{t}: cannot read: {e.strerror or e}") from None
-        doc["parameters"] = {"path": t.as_posix(), "sha256": sha}
+        doc["parameters"] = {"path": Path(table).resolve().as_posix(), "sha256": table_sha256}
     doc["generator"] = generator
     temperature = st.temperature
     doc["temperature"] = int(temperature) if temperature.is_integer() \
@@ -338,6 +330,26 @@ def save(path: Path | str, name: str, gas: str, table: str | Path, generator: st
         doc[k] = getattr(st, k)
     if seed is not None:
         doc["seed"] = seed
+    return doc
+
+
+def save(path: Path | str, name: str, gas: str, table: str | Path, generator: str,
+         st: Settings, seed: int | None = None, description: str | None = None) -> Method:
+    """Write a method file with every key, a table of one's own by its absolute path and its
+    SHA-256 now, and ``seed`` and ``description`` when they are given, and return it as
+    ``load`` reads it back. ``table`` is a shipped set's name or a path. The file is named
+    ``NAME.method.json`` (``file_name``), whatever ``path`` ends in. Raises MethodError."""
+    path = file_name(path)
+    _check_name(name, str(path))
+    if isinstance(table, str) and table in parameters.SETS.get(gas, {}):
+        sha = None
+    else:
+        table = Path(table).resolve()
+        try:
+            sha = _sha256(table)
+        except OSError as e:
+            raise MethodError(f"{table}: cannot read: {e.strerror or e}") from None
+    doc = document(name, gas, table, sha, generator, st, seed, description)
     try:
         path.write_text(dumps(doc), encoding="utf-8", newline="\n")
     except OSError as e:

@@ -36,7 +36,7 @@ def test_delete_leaves_the_inputs_the_output_and_the_record(tmp_path, dealing):
     assert r.ok, r.message
     assert r.cross_sections == serial.cross_sections
     assert _left(job) == {"ok.mfj", "mobcal.in", "mobcal.out", "stdout.log", "parameters.tab",
-                          "settings.tab", "record.json"}
+                          "settings.tab", "record.json", job.result_path.name}
     rec = _record(job)
     s = rec["scratch"]
     assert s["mode"] == "delete" and s["left"] == [] and "zip" not in s
@@ -174,7 +174,8 @@ def test_clean_is_a_dry_run_until_applied_then_finds_nothing(tmp_path, capsys):
     assert cli.main(["clean", str(tmp_path / "study"), "--apply"]) == 0
     assert {p.name for p in ok.run_dir.iterdir()} == {"a.mfj", "mobcal.in", "mobcal.out",
                                                      "stdout.log", "parameters.tab",
-                                                     "settings.tab", "record.json"}
+                                                     "settings.tab", "record.json",
+                                                     ok.result_path.name}
     rec = _record(ok)
     assert {k: rec[k] for k in rec0} == rec0  # no field changed, two added
     assert set(rec) - set(rec0) == {"split", "cleaned"}

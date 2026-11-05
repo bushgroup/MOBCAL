@@ -1,0 +1,398 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/result.schema.json",
+  "title": "ims-result, version 1, as MOBCAL writes it",
+  "description": "One calculation of an ion's collision cross section: the program, both inputs, the gas, the temperature, the seed, how the run ended, the cross sections with their units, and a block of what only MOBCAL reports. The file is JSON, NAME.result.json, written into each run directory beside record.json. docs/result-file.md is the specification. The core keys (every top-level key but mobcal) are the format any ion-mobility program can fill; mobcal is this program's extension block. The embedded ion and method documents are checked here by $ref to the schemas of their formats, which the two relative references below resolve to by those schemas' $id; the rules those formats state beyond their schemas are checked by mobcal.io.ion and mobcal.methods when a document is read back, and are not repeated here. Every unit string is fixed per key in version 1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "status", "message", "software", "started", "finished",
+               "seconds", "gas", "temperature", "seed", "inputs", "results", "mobcal"],
+  "properties": {
+    "format": {"const": "ims-result"},
+    "version": {"const": 1},
+    "status": {
+      "description": "How the run ended: ok when the program completed and printed its summary, failed when it did not, stopped when the user ended it.",
+      "enum": ["ok", "failed", "stopped"]
+    },
+    "message": {
+      "description": "Why the run did not end ok, with the exit status; null when it did.",
+      "type": ["string", "null"]
+    },
+    "software": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "commit", "build"],
+      "properties": {
+        "name": {"const": "mobcal"},
+        "version": {"type": "string", "minLength": 1},
+        "commit": {
+          "description": "The commit the program was built from, with -dirty when the tree held changes no commit holds; null where the program does not know it.",
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}(-dirty)?$"
+        },
+        "build": {
+          "description": "The executable's entry in the build.json written beside it when it was built (compiler, flags, the SHA-256 of each source and of the executable); null when there is none.",
+          "type": ["object", "null"]
+        }
+      }
+    },
+    "started": {"$ref": "#/$defs/time"},
+    "finished": {"$ref": "#/$defs/time"},
+    "seconds": {
+      "description": "Wall time of the program, in seconds (of every process and the combining run, for a divided run).",
+      "type": "number", "minimum": 0
+    },
+    "gas": {"description": "The buffer gas, by formula.", "enum": ["He", "N2"]},
+    "temperature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number", "exclusiveMinimum": 0},
+        "unit": {"const": "K"}
+      }
+    },
+    "seed": {
+      "description": "The seed of the random number generator; mobcal.generator names the generator.",
+      "type": "integer", "minimum": 1, "maximum": 2147483647
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ion", "method"],
+      "properties": {
+        "ion": {"$ref": "#/$defs/ion_input"},
+        "method": {"$ref": "#/$defs/method_input"}
+      }
+    },
+    "results": {
+      "description": "What the program reports, null when it printed no summary.",
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/results"}]
+    },
+    "mobcal": {"$ref": "#/$defs/mobcal"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "ok"}}, "required": ["status"]},
+      "then": {"properties": {"message": {"type": "null"}, "results": {"type": "object"}}},
+      "else": {"properties": {"message": {"type": "string", "minLength": 1}}}
+    },
+    {
+      "if": {"properties": {"gas": {"const": "N2"}}, "required": ["gas"]},
+      "then": {
+        "properties": {
+          "results": {
+            "oneOf": [
+              {"type": "null"},
+              {"properties": {
+                "cross_sections": {"propertyNames": {"const": "TM"}},
+                "conformers": {"items": {"propertyNames": {"enum": ["set", "TM"]}}}
+              }}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "time": {
+      "description": "ISO 8601 date and time to the second, with the offset from UTC.",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d(Z|[+-]\\d\\d:\\d\\d)$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file": {
+      "description": "A file by its name (no folder) and the SHA-256 of its bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "area": {
+      "description": "A cross section in square angstroms.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number", "exclusiveMinimum": 0},
+        "unit": {"const": "angstrom^2"}
+      }
+    },
+    "tm_area": {
+      "description": "A trajectory-method cross section, with the standard deviation of its cycles as a percentage of the mean where the program prints one (one coordinate set).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number", "exclusiveMinimum": 0},
+        "unit": {"const": "angstrom^2"},
+        "standard_deviation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit"],
+          "properties": {
+            "value": {"type": "number", "minimum": 0},
+            "unit": {"const": "percent"}
+          }
+        }
+      }
+    },
+    "inverse_mobility": {
+      "description": "An inverse reduced mobility 1/K0 in V s m^-2, as the 2012 program prints it: at z = 1 whatever the ion's charge, and at the number density of a gas at 273.15 K and 101325 Pa.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number", "exclusiveMinimum": 0},
+        "unit": {"const": "V s m^-2"}
+      }
+    },
+    "ion_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "file", "converted_from", "embedded", "document"],
+      "properties": {
+        "format": {"const": "mobcal-ion"},
+        "file": {"$ref": "#/$defs/file"},
+        "converted_from": {
+          "description": "mfj when the file given was a .mfj, whose ion document is embedded; null for an ion file.",
+          "enum": ["mfj", null]
+        },
+        "embedded": {"type": "boolean"},
+        "document": {
+          "oneOf": [{"type": "null"}, {"$ref": "ion.schema.json"}]
+        }
+      },
+      "if": {"properties": {"embedded": {"const": true}}, "required": ["embedded"]},
+      "then": {"properties": {"document": {"type": "object"}}},
+      "else": {"properties": {"document": {"type": "null"}}}
+    },
+    "method_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "source", "name", "file", "from", "overrides", "embedded",
+                   "document"],
+      "properties": {
+        "format": {"const": "mobcal-method"},
+        "source": {
+          "description": "shipped: a method MOBCAL ships, by its key; file: a method file of one's own; custom: values given beside a method, or in the window, made a method of no file.",
+          "enum": ["shipped", "file", "custom"]
+        },
+        "name": {
+          "description": "What record.json's method says: a shipped method's key, a method file's name, or custom.",
+          "type": "string", "minLength": 1
+        },
+        "file": {
+          "description": "The method file, for a shipped method or a file; null for custom.",
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/file"}]
+        },
+        "from": {
+          "description": "For custom, the method the values were given beside (a shipped key or a method file's name), null when none was; null otherwise.",
+          "type": ["string", "null"]
+        },
+        "overrides": {
+          "description": "For custom, each method-document key whose value differs from the from method's, with the run's value; empty otherwise.",
+          "type": "object",
+          "propertyNames": {"enum": ["parameters", "generator", "temperature", "imp", "itn",
+                                     "inp", "inum", "inor"]}
+        },
+        "embedded": {"const": true},
+        "document": {"$ref": "../methods/method.schema.json"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source": {"const": "custom"}}, "required": ["source"]},
+          "then": {"properties": {"name": {"const": "custom"}, "file": {"type": "null"}}},
+          "else": {"properties": {"file": {"type": "object"}, "from": {"type": "null"},
+                                  "overrides": {"maxProperties": 0}}}
+        }
+      ]
+    },
+    "results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cross_sections", "conformers", "trajectories"],
+      "properties": {
+        "cross_sections": {
+          "description": "The run's cross sections, each the mean over coordinate sets: PA (projection approximation) and EHS (exact hard spheres) in helium, TM (trajectory method) in both gases.",
+          "$ref": "#/$defs/cross_sections",
+          "propertyNames": {"enum": ["PA", "EHS", "TM"]},
+          "minProperties": 1
+        },
+        "conformers": {
+          "description": "One entry per coordinate set, in the input's order.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": ["set"],
+            "properties": {"set": {"type": "integer", "minimum": 1, "maximum": 100}},
+            "$ref": "#/$defs/cross_sections",
+            "unevaluatedProperties": false
+          }
+        },
+        "trajectories": {
+          "description": "The trajectory method's trajectories: itn x inp x imp in all, and those the program counted as failed.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "failed"],
+          "properties": {
+            "total": {"type": "integer", "minimum": 1},
+            "failed": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "cross_sections": {
+      "type": "object",
+      "properties": {
+        "PA": {"$ref": "#/$defs/area"},
+        "EHS": {"$ref": "#/$defs/area"},
+        "TM": {"$ref": "#/$defs/tm_area"}
+      }
+    },
+    "mobcal": {
+      "description": "What only MOBCAL reports: the extension block of the program the software key names.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "split", "settings", "parameters", "staged_input", "files",
+                   "summary"],
+      "properties": {
+        "generator": {"enum": ["ranlux", "philox"]},
+        "split": {
+          "description": "W, the processes the calculation was divided among; null for a serial run.",
+          "type": ["integer", "null"], "minimum": 1
+        },
+        "settings": {
+          "description": "The six run settings, as a method document writes them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperature", "imp", "itn", "inp", "inum", "inor"],
+          "properties": {
+            "temperature": {"type": "number", "exclusiveMinimum": 0},
+            "imp": {"type": "integer", "minimum": 1},
+            "itn": {"type": "integer", "minimum": 1},
+            "inp": {"type": "integer", "minimum": 1},
+            "inum": {"type": "integer", "minimum": 1},
+            "inor": {"type": "integer", "minimum": 1}
+          }
+        },
+        "parameters": {
+          "description": "The element table, by its name and the SHA-256 of the file.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256", "shipped"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "shipped": {"type": "boolean"}
+          }
+        },
+        "staged_input": {
+          "description": "The .mfj the program read, as named in the run directory, and the SHA-256 of its bytes.",
+          "$ref": "#/$defs/file"
+        },
+        "files": {
+          "description": "The names, within the run directory, of the program's output, the run's record and the program's console output.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["output", "record", "console_log"],
+          "properties": {
+            "output": {"type": "string", "minLength": 1},
+            "record": {"type": "string", "minLength": 1},
+            "console_log": {"type": "string", "minLength": 1}
+          }
+        },
+        "summary": {
+          "description": "Everything else the SUMMARY block of the output prints, typed; null exactly when results is null.",
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/summary"}]
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program_version", "input_file_name", "input_label", "hard_sphere",
+                   "trajectory_parameters", "inverse_mobilities", "asymmetry_parameter",
+                   "conformers", "lines"],
+      "properties": {
+        "program_version": {"type": "string"},
+        "input_file_name": {"type": "string"},
+        "input_label": {"type": "string"},
+        "hard_sphere": {
+          "description": "The MOBIL4 pass (helium): its trajectories and the reflections counted; null where it was not run (nitrogen).",
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["trajectories", "minimum_reflections", "maximum_reflections"],
+              "properties": {
+                "trajectories": {"type": "integer", "minimum": 1},
+                "minimum_reflections": {
+                  "description": "Printed for several coordinate sets only; null for one.",
+                  "type": ["integer", "null"], "minimum": 0
+                },
+                "maximum_reflections": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        },
+        "trajectory_parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sw1", "sw2", "dtsf1", "dtsf2"],
+          "properties": {
+            "sw1": {"type": "number"},
+            "sw2": {"type": "number"},
+            "dtsf1": {"type": "number"},
+            "dtsf2": {"type": "number"}
+          }
+        },
+        "inverse_mobilities": {
+          "description": "The inverse mobility of each method the cross sections name: of the average for one set, and the AVGE row, the inverse of the mean mobility, for several.",
+          "$ref": "#/$defs/inverse_mobilities"
+        },
+        "asymmetry_parameter": {
+          "description": "The structural asymmetry parameter: of the one set, or the mean of the sets; null where the summary prints none (nitrogen, several sets).",
+          "type": ["number", "null"]
+        },
+        "conformers": {
+          "description": "One entry per coordinate set, in the order of results.conformers.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["set", "inverse_mobilities", "asymmetry_parameter"],
+            "properties": {
+              "set": {"type": "integer", "minimum": 1, "maximum": 100},
+              "inverse_mobilities": {"$ref": "#/$defs/inverse_mobilities"},
+              "asymmetry_parameter": {"type": ["number", "null"]}
+            }
+          }
+        },
+        "lines": {
+          "description": "The SUMMARY block as printed, from the line SUMMARY to the end of the output, one string per line, end-of-line CR removed.",
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "inverse_mobilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "PA": {"$ref": "#/$defs/inverse_mobility"},
+        "EHS": {"$ref": "#/$defs/inverse_mobility"},
+        "TM": {"$ref": "#/$defs/inverse_mobility"}
+      }
+    }
+  }
+}

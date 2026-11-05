@@ -229,10 +229,10 @@ that succeeds writes into `record.json` what only its workers' directories hold 
 worker started and ended, how many blocks it integrated and its exit status, which worker
 integrated each block, and the energy-conservation diagnostics a worker printed) and then
 removes the workers' directories, `w01` to `w08`, and the 400 block files, which leaves the
-seven files of a run in one process. With `--scratch zip` the block files are packed into
+eight files of a run in one process. With `--scratch zip` the block files are packed into
 `blocks.zip` instead, and unpacked into the run directory they let the program repeat the
 combining run there; with `--scratch keep` every file stays. Choline split 20 ways in helium
-under the claimed dealing left 1,307 files before this rule and leaves 7 under it.
+under the claimed dealing left 1,307 files before this rule and leaves 8 under it.
 `mobcal clean DIR` applies the same rule to finished split runs already on disk, listing what it
 would remove until it is given `--apply`. Any
 `--split` from 1 to 400 balances, since the blocks are dealt round robin, and `--workers` then

@@ -92,6 +92,7 @@ from __future__ import annotations
 import csv
 import dataclasses
 import datetime as dt
+import functools
 import hashlib
 import json
 import logging
@@ -135,6 +136,13 @@ log = logging.getLogger(__name__)
 OUTPUT_NAME = "mobcal.out"
 LOG_NAME = "stdout.log"
 RECORD_JSON = "record.json"
+# NAME.result.json, NAME the run directory's: the published result (docs/result-file.md)
+RESULT_SUFFIX = ".result.json"
+RESULT_FORMAT = "ims-result"
+RESULT_VERSION = 1
+# Whether a result file carries the ion document (embed) or names the file alone (reference)
+RESULT_ION_MODES = ("embed", "reference")
+DEFAULT_RESULT_ION = "embed"
 FALLBACK_STAGED_NAME = "input.mfj"  # for an input whose name would not fit the a30 field
 SUMMARY_CSV = "summary.csv"
 SUMMARY_JSON = "summary.json"
@@ -177,6 +185,9 @@ class Job:
     # what a successful split run leaves of its scratch (SCRATCH_MODES); not a setting of the
     # calculation, so never in the label, the method or the comparison of two jobs
     scratch: str = field(default=DEFAULT_SCRATCH, compare=False)
+    # whether the result file embeds the ion document (RESULT_ION_MODES); like scratch, not a
+    # setting of the calculation
+    result_ion: str = field(default=DEFAULT_RESULT_ION, compare=False)
     # the method the job was made from, which its record names while the job's fields are the
     # method's; None: the record names the shipped method the fields make, or custom
     method_from: methods.Method | None = field(default=None, compare=False, repr=False)
@@ -195,6 +206,9 @@ class Job:
             raise ValueError(f"dealing must be one of {DEALINGS}, not {self.dealing!r}")
         if self.scratch not in SCRATCH_MODES:
             raise ValueError(f"scratch must be one of {SCRATCH_MODES}, not {self.scratch!r}")
+        if self.result_ion not in RESULT_ION_MODES:
+            raise ValueError(f"result_ion must be one of {RESULT_ION_MODES}, not "
+                             f"{self.result_ion!r}")
         if not isinstance(self.settings, Settings):
             raise ValueError(f"settings must be a mobcal.settings.Settings, not "
                              f"{self.settings!r}")
@@ -254,6 +268,11 @@ class Job:
         return self.out_dir / self.label
 
     @property
+    def result_path(self) -> Path:
+        """``NAME.result.json`` in the run directory, NAME the directory's."""
+        return self.run_dir / f"{self.label}{RESULT_SUFFIX}"
+
+    @property
     def staged(self) -> str:
         """The name the ``.mfj`` is staged under, and the name the output echoes: a ``.mfj``
         input's own name, ``<stem>.mfj`` for an ion file."""
@@ -311,7 +330,8 @@ class Result:
             return f"{self.job.label}  {self.status.upper()}  {self.message}{split}"
         cs = "  ".join(f"{k} {v:g}" for k, v in self.cross_sections.items())
         sets = f"  ({len(self.conformers)} sets)" if len(self.conformers) > 1 else ""
-        return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}"
+        note = f"  ({self.message})" if self.message else ""
+        return f"{self.job.label}  ok  {cs} A^2{sets}  {self.seconds:.0f} s{split}{note}"
 
 
 @dataclass(frozen=True)
@@ -324,6 +344,7 @@ class Staged:
     sha256: str  # the input file's
     staged_sha256: str  # the staged .mfj's
     charges: dict | None = None  # an ion file's charge mode and import summary, for the record
+    ion_text: str | None = None  # an ion file's text as read, for the result file to embed
 
 
 # What record.json keeps of an ion file's import record, under the same names: enough for the
@@ -362,7 +383,8 @@ def stage(path: Path, table: ParameterSet) -> Staged:
         except IonError as e:
             raise IonError(f"{path.name}: {e}") from None
         staged = mfj.text().encode("latin-1")
-        return Staged(mfj, staged, sha, hashlib.sha256(staged).hexdigest(), ion_charges(i))
+        return Staged(mfj, staged, sha, hashlib.sha256(staged).hexdigest(), ion_charges(i),
+                      data.decode("utf-8-sig"))
     text = data.decode("latin-1")
     if mobcalmpi.detect(text):
         raise MfjError(f"{path.name} is in MobCal-MPI's nine-column layout, which the 2012 "
@@ -529,6 +551,8 @@ def _prepare(job: Job, d: Path, split: tuple[int, int] | None, pset: ParameterSe
     d.mkdir(parents=True, exist_ok=True)
     (d / OUTPUT_NAME).unlink(missing_ok=True)
     (d / RECORD_JSON).unlink(missing_ok=True)
+    for p in d.glob(f"*{RESULT_SUFFIX}"):
+        p.unlink()
     (d / BLOCKS_ZIP).unlink(missing_ok=True)
     for glob in (BLOCK_GLOB, CLAIM_GLOB):
         for p in d.glob(glob):
@@ -640,6 +664,12 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     if job.split:
         extra["scratch"] = {"mode": job.scratch if r.ok else "keep"}
     path, doc = _write_record(r, command, staged, started, extra)
+    try:
+        write_result(r, staged, doc)
+    except (OSError, ValueError) as e:  # reported with the run; the record stands as written
+        log.warning("%s: result file not written: %s", job.label, e)
+        r = dataclasses.replace(r, message=_join_message(r.message,
+                                                         f"result file not written: {e}"))
     if r.ok and job.split and job.scratch != "keep":
         # The record, with the harvest, is on disk before anything is removed; a cleanup cut
         # short leaves a record that says the mode and not what went, which `clean` finishes.
@@ -1013,6 +1043,187 @@ def _write_record(r: Result, command: list[str], staged: Staged, started: dt.dat
     out = j.run_dir / RECORD_JSON
     dump_record(doc, out)
     return out, doc
+
+
+def _join_message(a: str, b: str) -> str:
+    return f"{a}; {b}" if a else b
+
+
+GAS_FORMULA = {"he": "He", "n2": "N2"}
+_A2, _INV = "angstrom^2", "V s m^-2"
+_METHOD_KEYS = ("parameters", "generator", *settings.NAMES)  # what a custom method overrides
+
+
+@functools.cache
+def _software_commit() -> str | None:
+    """The commit of the program running, looked up once: the code a process runs is the code
+    it loaded, whatever the tree does after (and git costs a process per run otherwise)."""
+    return fortran._commit() or None
+
+
+def _method_doc(m: methods.Method) -> dict:
+    """A method as its document: the file's own JSON while its bytes are those the method was
+    read from, else rendered from the fields read (the same calculation either way)."""
+    try:
+        data = m.path.read_bytes()
+        if hashlib.sha256(data).hexdigest() == m.sha256:
+            return json.loads(data.decode("utf-8-sig"))
+    except (OSError, ValueError):
+        pass
+    table = m.table if m.table is not None else m.parameters
+    return methods.document(m.name, m.gas, table, m.table_sha256, m.generator, m.settings,
+                            m.seed, m.description)
+
+
+def _result_method(j: Job) -> dict:
+    """``inputs.method``: the run's method as a valid method document: shipped, from a file,
+    or custom (the job's fields, named Custom, with what differs from the method it was made
+    from)."""
+    entry = {"format": methods.FORMAT}
+    m = j._from_file()
+    if m is None and j.method in methods.METHODS:
+        m = methods.METHODS[j.method]
+    if m is not None:
+        return entry | {"source": "shipped" if m.shipped else "file", "name": j.method,
+                        "file": {"name": m.path.name, "sha256": m.sha256}, "from": None,
+                        "overrides": {}, "embedded": True, "document": _method_doc(m)}
+    table = j.set_name if j.set_name is not None else j.parameters_path
+    doc = methods.document("Custom", j.gas, table, j.table_sha256, j.generator, j.settings)
+    base = j.method_from
+    overrides = {}
+    if base is not None:
+        was = _method_doc(base)
+        overrides = {k: doc[k] for k in _METHOD_KEYS if doc.get(k) != was.get(k)}
+    return entry | {"source": "custom", "name": j.method, "file": None,
+                    "from": base.key if base is not None else None, "overrides": overrides,
+                    "embedded": True, "document": doc}
+
+
+def _result_ion(j: Job, staged: Staged) -> dict:
+    """``inputs.ion``: the file by name and SHA-256, and its ion document unless the job says
+    reference. A ``.mfj`` is embedded as the ion document reading it gives, its import block
+    naming the file; from the bytes the run staged, without that block, if the file has
+    changed or gone since; and by its file alone when it cannot be read into an ion document
+    (a key no shipped table defines, which the program then refuses)."""
+    embed = j.result_ion == "embed"
+    doc = None
+    if embed and j.is_ion:
+        doc = json.loads(staged.ion_text)
+    elif embed:
+        try:
+            made = ion.from_mfj(j.input)
+            if (made.import_record or {}).get("source", {}).get("sha256") != staged.sha256:
+                made = ion.from_mfj(staged.mfj)
+        except (OSError, IonError, MfjError):
+            try:
+                made = ion.from_mfj(staged.mfj)
+            except IonError:
+                made = None
+        if made is None:
+            embed = False
+        else:
+            doc = json.loads(made.text())
+    return {"format": ion.FORMAT, "file": {"name": j.input.name, "sha256": staged.sha256},
+            "converted_from": None if j.is_ion else "mfj", "embedded": embed, "document": doc}
+
+
+def _value(v: float, unit: str) -> dict:
+    return {"value": v, "unit": unit}
+
+
+def _sections(cs: dict[str, float], sd: float | None) -> dict:
+    out = {k: _value(v, _A2) for k, v in cs.items()}
+    if sd is not None and "TM" in out:
+        out["TM"]["standard_deviation"] = _value(sd, "percent")
+    return out
+
+
+def _inverse(d: dict[str, float]) -> dict:
+    return {k: _value(v, _INV) for k, v in d.items()}
+
+
+def _result_results(o: OutFile) -> tuple[dict | None, dict | None]:
+    """``results`` and ``mobcal.summary`` from the output: every value as printed, both None
+    without a SUMMARY block."""
+    if not o.ok:
+        return None, None
+    sd = o.tm_standard_deviation  # printed for one coordinate set only
+    results = {
+        "cross_sections": _sections(o.cross_sections, sd),
+        "conformers": [{"set": i, **_sections(cs, sd)} for i, cs in enumerate(o.conformers, 1)],
+        "trajectories": {"total": o.total_points, "failed": o.failed_trajectories},
+    }
+    hs = None
+    if o.hard_sphere_trajectories is not None:
+        hs = {"trajectories": o.hard_sphere_trajectories,
+              "minimum_reflections": o.minimum_reflections,
+              "maximum_reflections": o.maximum_reflections}
+    per_set = zip(o.conformer_inverse_mobilities, o.conformer_asymmetry, strict=True)
+    summary = {
+        "program_version": o.program_version,
+        "input_file_name": o.input_name,
+        "input_label": o.input_label,
+        "hard_sphere": hs,
+        "trajectory_parameters": o.trajectory_parameters,
+        "inverse_mobilities": _inverse(o.inverse_mobilities),
+        "asymmetry_parameter": o.asymmetry_parameter,
+        "conformers": [{"set": i, "inverse_mobilities": _inverse(inv), "asymmetry_parameter": a}
+                       for i, (inv, a) in enumerate(per_set, 1)],
+        "lines": o.summary_lines,
+    }
+    return results, summary
+
+
+def result_document(r: Result, staged: Staged, record: dict,
+                    finished: dt.datetime | None = None) -> dict:
+    """The run's result file (``docs/result-file.md``, ims-result version 1) from its
+    ``Result``, its staged input and the ``record.json`` document written for it: the keys in
+    the page's order, every reported value read from the output as printed, none computed."""
+    j = r.job
+    finished = finished or dt.datetime.now().astimezone().replace(microsecond=0)
+    out = OutFile.read(r.output) if r.output is not None and r.output.is_file() else OutFile("")
+    results, summary = _result_results(out)
+    st = methods.document("", j.gas, parameters.DEFAULT, None, j.generator, j.settings)
+    pset = r.parameters
+    return {
+        "format": RESULT_FORMAT,
+        "version": RESULT_VERSION,
+        "status": r.status,
+        "message": r.message or None,
+        "software": {"name": "mobcal", "version": mobcal.__version__,
+                     "commit": _software_commit(),
+                     "build": record["binary"]["build"]},
+        "started": record["started"],
+        "finished": finished.isoformat(timespec="seconds"),
+        "seconds": record["seconds"],
+        "gas": GAS_FORMULA[j.gas],
+        "temperature": _value(st["temperature"], "K"),
+        "seed": j.seed,
+        "inputs": {"ion": _result_ion(j, staged), "method": _result_method(j)},
+        "results": results,
+        "mobcal": {
+            "generator": j.generator,
+            "split": j.split,
+            "settings": {k: st[k] for k in settings.NAMES},
+            "parameters": {"name": pset.get("name"), "sha256": pset.get("sha256"),
+                           "shipped": pset.get("shipped")},
+            "staged_input": {"name": j.staged, "sha256": staged.staged_sha256},
+            "files": {"output": OUTPUT_NAME, "record": RECORD_JSON, "console_log": LOG_NAME},
+            "summary": summary,
+        },
+    }
+
+
+def write_result(r: Result, staged: Staged, record: dict) -> Path:
+    """Write ``NAME.result.json`` into the run's directory (``result_document``), after
+    ``record.json``, and return its path. Raises OSError, or ValueError for a value JSON cannot
+    hold."""
+    path = r.job.result_path
+    text = json.dumps(result_document(r, staged, record), indent=2, ensure_ascii=False,
+                      allow_nan=False)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text + "\n")
+    return path
 
 
 def dump_record(doc: dict, path: Path) -> None:
