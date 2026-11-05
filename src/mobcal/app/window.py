@@ -11,9 +11,11 @@ stands.
 
 Above, a menu bar: File ▸ Load method…, Save method… and Exit, and Help ▸ MOBCAL Help (F1,
 the guide in a window of its own, ``mobcal.app.help``) and About. Load method adds a method file
-to the Method list and Save method writes the form's method fields to one and adds it; the list
-is remembered by path and SHA-256, and a file that has gone or changed is dropped at the next
-launch with a message (``report_dropped_methods``).
+to the Method list and Save method writes the form's method fields to one, ``NAME.method.json``,
+and adds it; a method's description, when it has one, is its tooltip in the list. The list is
+remembered by path and SHA-256, and a file that has gone, changed or no longer loads (a TOML
+method file of 2.0 among them) is dropped at the next launch with a message
+(``report_dropped_methods``).
 
 Right, the queue, the progress and the results. Every batch control is in the Queue box, and
 none has a menu entry or a shortcut. Add batch appends the form's batch to the queue and never
@@ -96,6 +98,7 @@ from mobcal.settings import Settings, Source
 GASES = (("He", "he"), ("N2", "n2"))
 GENERATORS = (("Philox4x32-10", "philox"), ("RANLUX (the 2012 generator)", "ranlux"))
 OTHER_TABLE = "Other file…"
+METHOD_FILTER = f"Method (*{methods.SUFFIX})"
 RESULT_COLUMNS = ("Ion", "Gas", "TM (Å²)", "PA (Å²)", "EHS (Å²)", "Status", "Time")
 CSV_HEADER = ("ion", "input", "gas", "TM", "PA", "EHS", "runs", "status", "seconds", "folder",
               "message")
@@ -414,6 +417,9 @@ class MainWindow(QMainWindow):
         self.method_combo.clear()
         for m in [*methods.METHODS.values(), *self.loaded.values()]:
             self.method_combo.addItem(m.title, m.ref)
+            if m.description:
+                self.method_combo.setItemData(self.method_combo.count() - 1, m.description,
+                                              Qt.ItemDataRole.ToolTipRole)
 
     def _read_remembered_methods(self) -> None:
         """Load the method files the list held at the last close. One that has gone, changed
@@ -471,7 +477,7 @@ class MainWindow(QMainWindow):
         """File ▸ Load method…: add a method file to the list and fill the fields from it."""
         if path is None:
             path, _ = QFileDialog.getOpenFileName(self, "Load method", self.store.input_dir,
-                                                  "Method (*.toml)")
+                                                  METHOD_FILTER)
             if not path:
                 return None
         try:
@@ -489,8 +495,8 @@ class MainWindow(QMainWindow):
     def save_method(self, path: str | Path | None = None,
                     name: str | None = None) -> methods.Method | None:
         """File ▸ Save method…: write the gas, table, generator and settings to a method file,
-        and the seed of the method the fields came from when it carries one, add it to the list
-        and select it."""
+        and the seed and description of the method file the fields came from when it carries
+        them, add it to the list and select it. The file is named ``NAME.method.json``."""
         try:
             st = self.form_settings()
         except settings.SettingsError as e:
@@ -498,13 +504,13 @@ class MainWindow(QMainWindow):
             return None
         if path is None:
             path, _ = QFileDialog.getSaveFileName(self, "Save method", self.store.input_dir,
-                                                  "Method (*.toml)")
+                                                  METHOD_FILTER)
             if not path:
                 return None
-        path = Path(path).resolve()
+        path = methods.file_name(Path(path).resolve())
         if name is None:
             name, ok = QInputDialog.getText(self, "Save method", "Name in the Method list:",
-                                            text=path.stem)
+                                            text=methods.stem(path))
             if not ok:
                 return None
         name = name.strip()
@@ -515,7 +521,8 @@ class MainWindow(QMainWindow):
             return None
         try:
             m = methods.save(path, name, self.gas, self.table_value() or parameters.DEFAULT,
-                             self.generator_combo.currentData(), st, seed=self.method_seed)
+                             self.generator_combo.currentData(), st, seed=self.method_seed,
+                             description=self.method_description)
         except methods.MethodError as e:
             QMessageBox.warning(self, "Save method", str(e))
             return None
@@ -547,6 +554,13 @@ class MainWindow(QMainWindow):
         """The seed of the method the fields came from, when its file carries one."""
         m = self.method(self._from)
         return None if m is None else m.seed
+
+    @property
+    def method_description(self) -> str | None:
+        """The description of the method file the fields came from, when it has one; a
+        shipped method's says what that method is, so Save method does not carry it."""
+        m = self.method(self._from)
+        return None if m is None or m.shipped else m.description
 
     def _show_seed(self) -> None:
         """Seeds per ion says the first seed when the method carries one."""

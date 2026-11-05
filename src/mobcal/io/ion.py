@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mobcal import __version__, fortran, parameters
-from mobcal.io import mobcalmpi
+from mobcal.io import mobcalmpi, strictjson
 from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, MAX_SETS, Atom, Mfj
 
 FORMAT = "mobcal-ion"
@@ -121,10 +121,9 @@ class Ion:
     @classmethod
     def parse(cls, text: str) -> Ion:
         try:
-            data = json.loads(text, object_pairs_hook=_no_duplicates,
-                              parse_constant=_no_constant)
-        except json.JSONDecodeError as e:
-            raise IonError(f"not JSON: {e}") from None
+            data = strictjson.loads(text)
+        except strictjson.StrictJSONError as e:
+            raise IonError(str(e)) from None
         return cls.from_dict(data)
 
     @classmethod
@@ -330,19 +329,6 @@ def _from_mobcalmpi(path: Path, data: bytes, text: str) -> Ion:
 
 
 # --- checking ---------------------------------------------------------------------------------
-
-def _no_duplicates(pairs: list) -> dict:
-    d = {}
-    for k, v in pairs:
-        if k in d:
-            raise IonError(f"key {k!r} appears twice in one object")
-        d[k] = v
-    return d
-
-
-def _no_constant(name: str):
-    raise IonError(f"{name} is not a JSON number")
-
 
 def _fail(where: str, why: str):
     raise IonError(f"{where}: {why}")

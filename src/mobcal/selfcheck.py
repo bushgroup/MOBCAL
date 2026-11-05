@@ -5,8 +5,8 @@ back on, and run the same way from a source checkout. Each stage prints one time
 failure names the stage that failed:
 
     version     the package version, and whether this is an installed copy or a checkout
-    parameters  the two element tables (``mobcal.parameters``) and the 2012 settings file
-                (``mobcal.settings``) are the files pinned by their SHA-256, and each loads
+    parameters  the element tables (``mobcal.parameters``) and the five shipped methods
+                (``mobcal.methods``) are the files pinned by their SHA-256, and each loads
                 and passes the checks a run puts it through
     binaries   both binaries are in ``fortran.binary_dir()``, are the files recorded in its
                 ``build.json`` when they were built, were built from the pinned sources (by their
@@ -34,7 +34,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import mobcal
-from mobcal import fortran, parameters, settings
+from mobcal import fortran, methods, parameters
 from mobcal.io.outfile import OutFile
 from mobcal.run import Job, run_one
 
@@ -87,9 +87,9 @@ def _parameters() -> tuple[bool, str, list[str]]:
     problems = parameters.verify(d)
     if problems:
         return False, f"element tables in {d}", problems
-    problems = settings.verify(settings.SETTINGS_DIR)
+    problems = methods.verify(methods.METHODS_DIR)
     if problems:
-        return False, f"settings file in {settings.SETTINGS_DIR}", problems
+        return False, f"method files in {methods.METHODS_DIR}", problems
     detail = []
     for gas in fortran.GASES:
         for name in parameters.names(gas):
@@ -97,10 +97,11 @@ def _parameters() -> tuple[bool, str, list[str]]:
             default = " (default)" if name == parameters.DEFAULT else ""
             detail.append(f"{ps.path.name}: set {name}{default}, {ps.name}, "
                           f"{len(ps.elements)} elements, sha256 {ps.sha256[:12]}")
-    st = settings.shipped()
-    detail.append(f"{settings.FILE}: the 2012 settings, sha256 {st.source.sha256[:12]}")
-    return True, (f"{', '.join(parameters.SHA256)} in {d} and {settings.FILE} in "
-                  f"{settings.SETTINGS_DIR}, as pinned"), detail
+    for key in methods.SHA256:
+        m = methods.load(methods.shipped_path(key), shipped=True)
+        detail.append(f"{m.path.name}: {m.name}, sha256 {m.sha256[:12]}")
+    return True, (f"{', '.join(parameters.SHA256)} in {d} and {len(methods.SHA256)} methods "
+                  f"in {methods.METHODS_DIR}, as pinned"), detail
 
 
 def _binaries() -> tuple[bool, str, list[str]]:

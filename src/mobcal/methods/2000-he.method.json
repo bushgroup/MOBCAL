@@ -1,0 +1,15 @@
+{
+  "format": "mobcal-method",
+  "version": 1,
+  "name": "MOBCAL 2000 (He)",
+  "description": "The calculation of the Jarrold group's 2000 helium release: its element table at 298 K and 25 trajectories per block, with RANLUX. The 2000 release has no nitrogen form.",
+  "gas": "he",
+  "parameters": "2000",
+  "generator": "ranlux",
+  "temperature": 298,
+  "imp": 25,
+  "itn": 10,
+  "inp": 40,
+  "inum": 250000,
+  "inor": 30
+}

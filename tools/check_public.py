@@ -125,11 +125,9 @@ def main() -> int:
 
     section("the run settings")
     from mobcal import settings
-    problems = settings.verify()
-    for p in problems:
-        print("     " + p)
-    check_true(f"{settings.FILE} present, byte-identical to its pin, and the 2012 values",
-               not problems)
+    check_true("no settings file beside mobcal.settings: a method carries the settings",
+               not [f for f in os.listdir(os.path.dirname(settings.__file__))
+                    if f.endswith(".toml")])
     with open(fortran.FORTRAN_DIR / "mobcal_settings.inc", encoding="ascii") as f:
         inc = f.read()
     declared = {m[1]: int(m[2]) for m in re.finditer(r"parameter \((mx\w+)=(\d+)\)", inc)}
@@ -153,9 +151,10 @@ def main() -> int:
         print("     " + p)
     check_true(f"all {len(methods.SHA256)} method files present, byte-identical to their pins, "
                "loading, and named once", not problems)
-    shipped = {p.stem for p in methods.METHODS_DIR.glob("*.toml")}
-    check_true(f"the method files beside mobcal.methods are the pinned ones ({sorted(shipped)})",
-               shipped == set(methods.SHA256))
+    shipped = {methods.stem(p) for p in methods.METHODS_DIR.glob(f"*{methods.SUFFIX}")}
+    check_true(f"the method files beside mobcal.methods are the pinned ones ({sorted(shipped)}), "
+               "and none is TOML", shipped == set(methods.SHA256)
+               and not list(methods.METHODS_DIR.glob("*.toml")))
     check_true(f"the default method {methods.DEFAULT} is a shipped one, under Philox, at the 2012 "
                "settings", methods.DEFAULT in methods.METHODS
                and methods.METHODS[methods.DEFAULT].generator == "philox"

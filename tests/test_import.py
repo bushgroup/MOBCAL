@@ -669,7 +669,7 @@ def test_running_a_calculation_never_loads_cclib():
 
 # Small enough that both gases finish in seconds; the header the program prints before any
 # trajectory (charge, mass, centre of mass) does not depend on them.
-QUICK = settings.resolve(None, imp=4, itn=1, inp=2, inum=2000, inor=30)
+QUICK = settings.resolve(imp=4, itn=1, inp=2, inum=2000, inor=30)
 HEADER = ("number of coordinate sets", "number of atoms", "coordinates in", "correction factor",
           "using a", "total charge", "total absolute charge", "mass of ion",
           "center of mass coordinates")

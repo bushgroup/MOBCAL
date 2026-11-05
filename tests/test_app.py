@@ -174,8 +174,9 @@ def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtb
     w.apply_method("2012-n2")
     w.counts["itn"].setValue(5)
     fields = w.form_batch()
-    m = w.save_method(tmp_path / "five cycles.toml", "Five cycles (N2)")
+    m = w.save_method(tmp_path / "five cycles.method.json", "Five cycles (N2)")
     assert m is not None and (m.gas, m.generator, m.settings.itn) == ("n2", "ranlux", 5)
+    assert m.description is None  # a shipped method's description stays with it
     assert w.method_combo.currentText() == "Five cycles (N2)"
     assert combo_items(w.method_combo)[-1] == "Five cycles (N2)"
     saved = w.form_batch()
@@ -192,22 +193,23 @@ def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtb
     qtbot.addWidget(w2)
     assert combo_items(w2.method_combo)[-1] == "Five cycles (N2)" and not w2.dropped
     assert w2.method_combo.currentText() == "Five cycles (N2)"  # the method last picked
-    twin = tmp_path / "twin.toml"
+    twin = tmp_path / "twin.method.json"
     twin.write_bytes(m.path.read_bytes())
     assert w2.load_method(twin) is None
     assert "already holds 'Five cycles (N2)'" in w._warnings[-1]  # the patch is the class's
-    assert w.save_method(tmp_path / "x.toml", "MOBCAL 2012 (He)") is None
+    assert w.save_method(tmp_path / "x.method.json", "MOBCAL 2012 (He)") is None
     assert "is the name of a shipped method" in w._warnings[-1]
 
 
 def test_a_method_seed_starts_the_seeds_and_save_method_keeps_it(window, tmp_path):
     w = window
     w.inputs.add_paths([CHOLINE])
-    assert "seed" not in w.save_method(tmp_path / "plain.toml", "Plain").path.read_text(
+    assert "seed" not in w.save_method(tmp_path / "plain.method.json", "Plain").path.read_text(
         encoding="utf-8")  # from a method without a seed, Save method writes none
-    seeded = tmp_path / "seeded.toml"
-    seeded.write_text(methods.shipped_path("2012-he").read_text(encoding="utf-8")
-                      .replace("MOBCAL 2012 (He)", "Seeded") + "seed = 42\n",
+    seeded = tmp_path / "seeded.method.json"
+    doc = json.loads(methods.shipped_path("2012-he").read_text(encoding="utf-8"))
+    seeded.write_text(methods.dumps({**doc, "name": "Seeded", "seed": 42,
+                                     "description": "Seeded at 42."}),
                       encoding="utf-8", newline="\n")
     m = w.load_method(seeded)
     w.seeds_spin.setValue(3)
@@ -218,8 +220,9 @@ def test_a_method_seed_starts_the_seeds_and_save_method_keeps_it(window, tmp_pat
     w.counts["itn"].setValue(6)
     assert w.method_combo.currentText() == "Custom (from Seeded)"
     assert [j.seed for j in w.form_batch().jobs()] == [42, 43, 44]
-    again = w.save_method(tmp_path / "again.toml", "Seeded again")
+    again = w.save_method(tmp_path / "again.method.json", "Seeded again")
     assert again.seed == 42 and again.settings.itn == 6
+    assert again.description == "Seeded at 42."  # a method file's description is kept
     # A shipped method goes back to the 2012 seed.
     w.apply_method("2012-he")
     assert w.seeds_spin.suffix() == "" and m.seed == 42
@@ -231,7 +234,7 @@ def test_a_method_file_with_its_own_table_fills_the_table(window, tmp_path):
     table = tmp_path / "mine_he.toml"
     table.write_bytes(win.parameters.default_path("he").read_bytes().replace(
         b'name = "MOBCAL 2012 helium"', b'name = "my helium"'))
-    f = tmp_path / "own.toml"
+    f = tmp_path / "own.method.json"
     methods.save(f, "Own table", "he", table, "philox", win.settings.DEFAULTS)
     m = w.load_method(f)
     assert m is not None and w.table_value() == str(table.resolve())
@@ -245,13 +248,18 @@ def test_a_method_file_with_its_own_table_fills_the_table(window, tmp_path):
 def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
         window, qtbot, tmp_path, monkeypatch):
     w = window
-    kept, changed, gone = (tmp_path / f"{n}.toml" for n in ("kept", "changed", "gone"))
+    kept, changed, gone = (tmp_path / f"{n}.method.json" for n in ("kept", "changed", "gone"))
     for f, name in ((kept, "Kept"), (changed, "Changed"), (gone, "Gone")):
         w.load_method(methods.save(f, name, "he", "2012", "ranlux", win.settings.DEFAULTS).path)
     assert len(w.store.methods) == 3
-    changed.write_text(changed.read_text(encoding="utf-8").replace("itn = 10", "itn = 9"),
+    changed.write_text(changed.read_text(encoding="utf-8").replace('"itn": 10', '"itn": 9'),
                        encoding="utf-8")
     gone.unlink()
+    # A TOML method file a 2.0 window remembered is dropped the same way, saying why.
+    old = tmp_path / "old.toml"
+    old.write_text('format = 1\nname = "Old"\ngas = "he"\nparameters = "2012"\n'
+                   'generator = "ranlux"\n', encoding="utf-8")
+    w.store.methods = [*w.store.methods, (str(old), "0" * 64)]
     w2 = MainWindow(w.store, launcher=launcher, cpus=8)
     qtbot.addWidget(w2)
     assert combo_items(w2.method_combo)[5:] == ["Kept"]
@@ -259,12 +267,30 @@ def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
     shown = []
     monkeypatch.setattr(QMessageBox, "information", lambda _, title, text: shown.append(text))
     w2.report_dropped_methods()
-    assert len(shown) == 1 and shown[0].startswith("2 method files were removed")
-    assert "changed.toml: the file has changed since it was added" in shown[0]
-    assert "gone.toml: the file is no longer there." in shown[0]
+    assert len(shown) == 1 and shown[0].startswith("3 method files were removed")
+    assert "changed.method.json: the file has changed since it was added" in shown[0]
+    assert "gone.method.json: the file is no longer there." in shown[0]
+    assert "old.toml: a TOML method file, which this version of MOBCAL does not read; a " \
+        "method file is JSON, NAME.method.json" in shown[0]
     assert w2.method_combo.currentText() == "MOBCAL 2012 with Philox (He)"  # Gone was picked
     w2.report_dropped_methods()
     assert len(shown) == 1
+
+
+def test_a_methods_description_is_its_tooltip_in_the_list(window, tmp_path):
+    w = window
+    tips = [w.method_combo.itemData(i, Qt.ItemDataRole.ToolTipRole)
+            for i in range(w.method_combo.count())]
+    assert tips[:5] == [m.description for m in methods.METHODS.values()] and all(tips[:5])
+    said = methods.save(tmp_path / "said", "Said", "he", "2012", "ranlux",
+                        win.settings.DEFAULTS, description="Helium, with a note.")
+    plain = methods.save(tmp_path / "plain", "Plain", "he", "2012", "ranlux",
+                         win.settings.DEFAULTS)
+    w.load_method(said.path)
+    w.load_method(plain.path)
+    i, j = (w.method_combo.findData(m.ref) for m in (said, plain))
+    assert w.method_combo.itemData(i, Qt.ItemDataRole.ToolTipRole) == "Helium, with a note."
+    assert w.method_combo.itemData(j, Qt.ItemDataRole.ToolTipRole) is None
 
 
 def test_the_estimate_and_add_batch(window, qtbot):

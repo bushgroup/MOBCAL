@@ -12,7 +12,7 @@ mobcal/
   mobcal(.exe)        the command, frozen with its own Python; `mobcal gui` opens the window
   mobcal-gui(.exe)    the window alone, without a console: the Start-menu shortcut's target
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
-                      in mobcal/parameters/, the 2012 settings file in mobcal/settings/,
+                      in mobcal/parameters/, the five shipped methods in mobcal/methods/,
                       the window's icon in mobcal/app/icons/, the user's guide (docs/*.md,
                       which Help, MOBCAL Help shows) in docs/,
                       cclib with numpy, scipy and periodictable for `mobcal import`, and

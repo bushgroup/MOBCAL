@@ -7,12 +7,12 @@
                [--rng philox|ranlux] [--parameters PATH|NAME]
                [--workers N] [--split W|auto] [--mode in-order|balanced|throughput]
                [--dealing static|claimed] [--out DIR]
-               [--skip-done] [--scratch delete|zip|keep] [--settings PATH] [--temperature T]
+               [--skip-done] [--scratch delete|zip|keep] [--temperature T]
                [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
     mobcal clean DIR [DIR ...] [--scratch delete|zip] [--apply]
     mobcal methods-text PATH [PATH ...]
     mobcal gui [--check]
-    mobcal render-parameters he|n2 [DIR] [--parameters PATH|NAME] [--settings PATH]
+    mobcal render-parameters he|n2 [DIR] [--method KEY|PATH] [--parameters PATH|NAME]
     mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
                   [-o OUT.ion.json] [--force]
     mobcal export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
@@ -31,17 +31,18 @@ the ``--mode`` given (balanced by default); ``--mode`` alone implies ``--split a
 ``--split W`` it is refused.
 ``--method`` picks the method (``mobcal.methods``), which carries the gas: a shipped one by its
 key, ``2012-philox-he`` by default, ``2012-he``, ``2012-n2``, ``2012-philox-n2`` or ``2000-he``,
-or a method file by its path. Both gases is two commands. A table, generator or setting given
-beside it overrides it, and the run records ``custom``, or the shipped method the fields make.
+or a method file, ``NAME.method.json``, by its path. Both gases is two commands. A table,
+generator or setting given beside it overrides it, and the run records ``custom``, or the
+shipped method the fields make.
 ``--rng`` picks the random number generator: Philox4x32-10, or ``ranlux``, the 2012 generator,
 which with the 2012 seed reproduces the 2012 numbers (``mobcal.run.DEFAULT_RNG`` says why the
 driver's default is not the run file's). With ``--parameters PATH`` every run uses that element
 table instead of the method's, checked the same way and recorded the same way; it must be a
 table for the method's gas. ``--parameters NAME`` picks a shipped set by name (``2000``, the
 Jarrold group's 2000 helium table; ``2012``, the default for each gas,
-``mobcal.parameters.SETS``). ``--settings PATH`` names a settings file (the temperature and the
-five sampling counts, ``mobcal.settings``), which replaces the method's settings, and the six
-single-value options override either value by value. Its exit status is 1 if any run failed.
+``mobcal.parameters.SETS``). The six single-value options (the temperature and the five
+sampling counts, ``mobcal.settings``) override the method's settings value by value; a set of
+settings to keep is a method file. Its exit status is 1 if any run failed.
 ``import`` writes an ion file, ``OUT.ion.json`` (``mobcal.io.ion``), from an ORCA or Gaussian
 output or an ``.xyz`` with the charges named by ``--charges`` (refused, listing what the file
 holds, until one is named), its provenance record inside it; ``mobcal.io.structure`` says what
@@ -58,7 +59,9 @@ on disk, a dry run unless ``--apply`` (``mobcal.clean``).
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
-driver does into each run directory, for running the program there by hand. ``self-check`` is
+driver does into each run directory, for running the program there by hand: the 2012 settings
+and the gas's default table, or with ``--method`` that method's (which must be for the gas),
+and with ``--parameters`` that table. ``self-check`` is
 ``mobcal.selfcheck``.
 ``build`` needs a source checkout; an installed copy carries binaries built in CI. ``gui``
 opens the window (``mobcal.app``), which is imported only then: this module imports no Qt.
@@ -190,9 +193,6 @@ def parser() -> argparse.ArgumentParser:
         "run settings", "The temperature and the five sampling counts the 2012 programs "
         "compiled in. Without these, every run uses its method's values: the 2012 values ("
         f"{_settings_default()}.")
-    s.add_argument("--settings", type=Path, default=None, metavar="PATH",
-                   help="A settings file (TOML) for every run, which replaces the method's "
-                        "settings; a key it leaves out keeps the 2012 value.")
     s.add_argument("--temperature", type=float, default=None, metavar="T",
                    help=options.cli_help("temperature"))
     for name in settings.COUNTS:
@@ -227,11 +227,14 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("dir", type=Path, nargs="?", default=Path("."), metavar="DIR",
                    help="Where to write parameters.tab and settings.tab. Default: the current "
                         "directory.")
+    p.add_argument("--method", default=None, metavar="KEY|PATH",
+                   help="Write this method's table and settings, a shipped method by its key or "
+                        "a method file by its path; it must be a method for the gas. Default: "
+                        "the gas's default table and the 2012 settings.")
     p.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help="Write this TOML file, or this shipped table by name "
-                        f"({options.set_names()}), instead of the gas's default table.")
-    p.add_argument("--settings", type=Path, default=None, metavar="PATH",
-                   help="Write this settings file instead of the 2012 values.")
+                        f"({options.set_names()}), instead of the method's or the gas's "
+                        "default table.")
 
     m = command("import", "Write an ion file from an ORCA or Gaussian output or an .xyz file, "
                 "with the charges you name, or from a .mfj, with its own.")
@@ -377,12 +380,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "render-parameters":
         try:
-            ps = parameters.load(parameters.path_for(args.parameters, args.gas), gas=args.gas)
-            st = settings.resolve(args.settings)
+            st, table = settings.DEFAULTS, args.parameters
+            if args.method is not None:
+                m = methods.get(args.method)
+                if m.gas != args.gas:
+                    raise methods.MethodError(
+                        f"{m.title} is a method for {parameters.GAS[m.gas]}, not "
+                        f"{parameters.GAS[args.gas]}")
+                st = m.settings
+                if table is None:
+                    table = m.table_path()
+            ps = parameters.load(parameters.path_for(table, args.gas), gas=args.gas)
             args.dir.mkdir(parents=True, exist_ok=True)
             out = ps.render(args.dir)
             out_s = st.render(args.dir)
-        except (parameters.ParameterError, settings.SettingsError, OSError) as e:
+        except (parameters.ParameterError, methods.MethodError, OSError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
         print(f"wrote {out}: {ps.name}, {len(ps.elements)} elements, from {ps.path}")
@@ -501,13 +513,11 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
             raise UsageError(f"{args.parameters} is a table for {parameters.GAS[ps.gas]} and "
                              f"{method.title} is a method for {parameters.GAS[gas]}; run it "
                              f"with a {parameters.GAS[ps.gas]} method")
-    # The method's settings, then a settings file over them whole, then single values.
+    # The method's settings, then single values.
     given = {k: getattr(args, k) for k in settings.NAMES}
     try:
-        if args.settings is not None:
-            st = settings.resolve(args.settings, **given)
-        elif any(v is not None for v in given.values()) or method.overrides():
-            st = settings.resolve(None, **{**method.overrides(),
+        if any(v is not None for v in given.values()) or method.overrides():
+            st = settings.resolve(**{**method.overrides(),
                                            **{k: v for k, v in given.items() if v is not None}})
         else:
             st = None

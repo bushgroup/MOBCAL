@@ -154,8 +154,8 @@ commands. `--method 2012-he` and `--method 2012-n2` are the calculation of the 2
 ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and `--method 2000-he` that of the 2000 helium
 release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)), each equal to the command lines those
 pages give; the default, `2012-philox-he`, and `2012-philox-n2` are the 2012 tables and
-settings under Philox. `--method PATH` runs a method file of one's own, which names its gas,
-table, generator and settings ([`docs/methods.md`](docs/methods.md)). An option given beside a
+settings under Philox. `--method PATH` runs a method file of one's own, `NAME.method.json`,
+which names its gas, table, generator and settings ([`docs/methods.md`](docs/methods.md)). An option given beside a
 method overrides that one value, and the run records the method as `custom`. The seed is not
 part of a method. The window, `mobcal gui`, offers the same methods and saves and loads method
 files ([`docs/window.md`](docs/window.md)).
@@ -180,14 +180,15 @@ trajectories and 30 reflections in the hard-sphere pass) are run settings:
 
 ```
 uv run mobcal run choline.mfj --temperature 298 --imp 25
-uv run mobcal run choline.mfj --settings mine.toml
+uv run mobcal run choline.mfj --method mine.method.json
 ```
 
 A run that sets nothing uses the 2012 values and prints the 2012 output. The package renders
 the settings into each run directory as `settings.tab`, the programs read the file when it is
 there, and an output at other settings equals what a program with those constants compiled in
-prints. [`docs/settings.md`](docs/settings.md) describes the file, the options, the bounds and
-the record.
+prints. A set of settings to keep is a method file, `NAME.method.json`, which holds them with
+the gas, table and generator they belong to. [`docs/settings.md`](docs/settings.md) describes the
+options, the bounds and the record.
 
 A run that did not finish is reported as failed, never as a number. The program exits with
 status 1 when it refuses its input (the 2012 program exited with status 0 either way), and the

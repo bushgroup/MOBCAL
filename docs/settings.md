@@ -11,36 +11,31 @@ what the published users who ran more trajectories did.
 
 The programs now read these values from a file in the directory they run in, `settings.tab`,
 and take the 2012 values when there is no such file. The package renders that file into every
-run directory, as it renders the element table, from the shipped settings file and whatever the
-user asked for. A run that asks for nothing uses the 2012 values and prints the 2012 output,
-byte for byte. This page describes the settings file a user writes, the command-line options,
-the bounds, what a split run does at other settings, and what the run's record carries.
+run directory, as it renders the element table, from the method's six values and whatever the
+user changed. A run that asks for nothing uses the 2012 values and prints the 2012 output, byte
+for byte. This page describes where the values come from, the command-line options, the bounds,
+what a split run does at other settings, and what the run's record carries.
 
 ## Setting them
 
 In the window, the temperature is a field under Basics and the five counts are fields under
 Advanced, each filled by the method chosen; a value changed there makes the method *Custom*
-([The window](window.md#method-basics-and-advanced)). From a terminal, `mobcal run` takes a
-settings file and single values:
+([The window](window.md#method-basics-and-advanced)). From a terminal, `mobcal run` takes the
+method's values and any of the six given singly:
 
 ```
 mobcal run choline.mfj --temperature 298 --imp 25
-mobcal run choline.mfj --settings mine.toml --inp 20
+mobcal run choline.mfj --method mine.method.json --inp 20
 ```
 
-A settings file is TOML with `format = 1` and any of the six keys. A key left out keeps the 2012
-value, so a file that changes one thing says one thing:
-
-```toml
-format = 1
-imp = 25
-```
-
-The six keys are `temperature` (K; an integer or a float greater than zero), `imp`, `itn`, `inp`,
-`inum` and `inor` (integers). The shipped file, `mobcal_2012.toml` (in the source code, under
-`src/mobcal/settings/`), holds all six at their 2012 values with a line on what each one is. The
-precedence is the 2012 values, then the file named by `--settings`, then the single-value options,
-so `--settings mine.toml --imp 1000` runs the file's settings with `imp` put back.
+A set of settings worth keeping is a method file ([Methods](methods.md#method-files)), which
+holds the six values beside the gas, the element table and the generator they were chosen for;
+a key it leaves out keeps the 2012 value. The six are `temperature` (K; a number greater than
+zero), `imp`, `itn`, `inp`, `inum` and `inor` (integers). The precedence is the 2012 values, then
+the method's, then the single-value options, so `--method mine.method.json --imp 1000` runs the
+file's settings with `imp` put back. Version 2.0 also read a separate settings file, the six
+values alone in TOML through `--settings`; a method file now does what it did, and the option is
+gone.
 
 The run directory's name carries each value that differs from 2012, in the order above, so two
 runs of one input and seed at different settings never share a directory:
@@ -65,8 +60,9 @@ without using them.
 
 ## The bounds
 
-The programs refuse a settings file whose values the 2012 arrays or output formats cannot hold,
-and the package refuses the same values before a run starts:
+The programs refuse a `settings.tab` whose values the 2012 arrays or output formats cannot
+hold, and the package refuses the same values, in a method file or given singly, before a run
+starts:
 
 | Setting | Allowed | Why |
 |---|---|---|
@@ -104,12 +100,15 @@ the input is read; the refusal is the output file's only line and is echoed to t
 six values a run read are printed to the screen, never to the output file, so an output at the
 2012 values is the 2012 output.
 
-To prepare a directory for running a program by hand, render the settings there along with the
-element table:
+To prepare a directory for running a program by hand, render a method's settings there along
+with its element table:
 
 ```
-mobcal render-parameters he path/to/run --settings mine.toml
+mobcal render-parameters he path/to/run --method mine.method.json
 ```
+
+Without `--method` the command writes the 2012 settings and the gas's default table, and
+`--parameters` replaces the table either way.
 
 ## Split runs
 
@@ -134,11 +133,11 @@ together; under RANLUX it can only take them in the order of the stream.
 
 ## Equal to a compiled build
 
-At the 2012 values, with or without the file, the outputs are the 2012 outputs; the regression
+At the 2012 values, with or without `settings.tab`, the outputs are the 2012 outputs; the regression
 test runs every choline comparison through the rendered file. At other values an output equals
 what a program with those constants compiled in prints: the test suite builds a copy of the
 sources with 298 K and `imp = 25` written into the reader's defaults, runs choline in helium
-through it with no settings file and through the shipped program with those settings rendered,
+through it with no `settings.tab` and through the shipped program with those settings rendered,
 and requires the two outputs to be byte-identical; nitrogen is held the same way at 350 K,
 `imp = 10`, `itn = 5` and `inp = 20`.
 
@@ -159,6 +158,7 @@ and the comparison.
 ## The record
 
 `record.json` in each run directory and the per-run entries of `summary.json` carry a
-`settings` block: the six values, whether they are the 2012 ones, the settings file's path and
-SHA-256 if one was named, the values given singly, and the name of the rendered file.
+`settings` block: the six values, whether they are the 2012 ones, the values given singly over
+the method's, and the name of the rendered file. A record written by version 2.0 also has the
+path and SHA-256 of the settings file the run named, `null` when it named none.
 `summary.csv` carries the six values as columns after the generator.

@@ -9,14 +9,13 @@ there). The programs now read them from ``settings.tab`` in the working director
 there and take the 2012 values when it is not. This module holds those values (``DEFAULTS``),
 the bounds the programs enforce (``BOUNDS``, ``MAX_POINTS``: the 2012 arrays and output
 formats, which ``fortran/mobcal_settings.inc`` declares and ``tools/check_public.py`` compares),
-the shipped settings file ``mobcal_2012.toml`` and its pin, the TOML schema a user's file
-follows, and the rendering.
+and the rendering.
 
-A settings file is TOML with ``format = 1`` and any of the six keys; a key left out takes the
-2012 value. The temperature is a TOML number, integer or float, greater than zero. ``resolve``
-applies the precedence a run uses, the defaults, then a file, then single values given on the
-command line, and the ``Settings`` it returns remembers where its values came from so that a
-run's record can say.
+The six values come from a method (``mobcal.methods``, whose file carries them) and from single
+values given on the command line or in the window's fields; there is no settings file of its
+own. ``resolve`` applies the precedence a run uses, the 2012 values, then the values given by
+name, and the ``Settings`` it returns remembers which were given so that a run's record can
+say.
 
 The rendered file is two lines the program reads list-directed: the format line and the six
 values. The temperature is written as the 17-significant-digit literal that reads back to the
@@ -24,28 +23,17 @@ same double, so ``temperature = 301`` reaches the program as exactly the ``301.d
 source compiled.
 
     from mobcal import settings
-    s = settings.resolve(Path("mine.toml"), imp=25)
+    s = settings.resolve(temperature=298, imp=25)
     s.render(Path("runs/choline-he-5013489-imp25"))
 """
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import math
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
-SETTINGS_DIR = Path(__file__).resolve().parent
-FILE = "mobcal_2012.toml"  # the shipped settings file: the 2012 values
-
-# The shipped file as committed (LF line endings, see .gitattributes).
-SHA256 = {
-    FILE: "7c9e87759d448fcb04ef734a805646eda7af98eb8df50553591ab8dc03fe457d",
-}
-
-FORMATS = (1,)
 RENDERED = "settings.tab"  # the file's name in a run directory
 MAGIC = "MOBCAL-SETTINGS"  # the first token of a rendered file
 RENDERED_FORMAT = 1
@@ -63,7 +51,7 @@ MAX_TEMPERATURE = 1e300  # the program refuses t >= 1.d300 along with NaN and in
 
 
 class SettingsError(ValueError):
-    """A settings file or value that cannot be used, with the file and the key named."""
+    """A setting that cannot be used, with the setting named."""
 
 
 def temperature_token(t: float) -> str:
@@ -91,15 +79,12 @@ def _check_count(name: str, v: object, where: str) -> int:
 
 @dataclass(frozen=True)
 class Source:
-    """Where a run's settings came from: the file, if one was named, and the values given
-    singly on top of it. Both empty means the defaults."""
-    path: Path | None = None
-    sha256: str | None = None
+    """Which of a run's settings were given singly, over its method's. Empty means the
+    method's values, or the defaults."""
     overrides: dict[str, float | int] = field(default_factory=dict)
 
     def record(self) -> dict:
-        return {"path": str(self.path) if self.path else None, "sha256": self.sha256,
-                "overrides": dict(self.overrides)}
+        return {"overrides": dict(self.overrides)}
 
 
 @dataclass(frozen=True)
@@ -176,71 +161,25 @@ DEFAULTS = Settings(301.0, 1000, 10, 40, 250000, 30)
 """The 2012 values: what the programs compute without a settings file."""
 
 
-def default_path() -> Path:
-    """The shipped settings file."""
-    return SETTINGS_DIR / FILE
+def resolve(**overrides: float | int | None) -> Settings:
+    """The settings a run uses: the 2012 values, then the ``overrides`` given by name
+    (``temperature``, ``imp``, ...; None means not given).
 
-
-def load(path: Path | str) -> Settings:
-    """Read and check a settings file; a key left out takes the 2012 value.
-
-    Raises SettingsError naming the file and the key.
+    Raises SettingsError naming the value.
     """
-    path = Path(path)
-    try:
-        data = path.read_bytes()
-    except OSError as e:
-        raise SettingsError(f"{path}: cannot read: {e.strerror or e}") from None
-    sha = hashlib.sha256(data).hexdigest()
-    try:
-        doc = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
-        raise SettingsError(f"{path}: not a TOML file: {e}") from None
-    unknown = [k for k in doc if k != "format" and k not in NAMES]
-    if unknown:
-        raise SettingsError(f"{path}: unknown key {unknown[0]!r}; the keys are format, "
-                            + ", ".join(NAMES))
-    fmt = doc.get("format")
-    if type(fmt) is not int or fmt not in FORMATS:
-        raise SettingsError(f"{path}: format is {fmt!r}; this version of mobcal reads format "
-                            + ", ".join(map(str, FORMATS)))
-    values = DEFAULTS.values()
-    if "temperature" in doc:
-        values["temperature"] = _check_temperature(doc["temperature"], str(path))
-    for name in COUNTS:
-        if name in doc:
-            values[name] = _check_count(name, doc[name], str(path))
-    try:
-        return Settings(**values, source=Source(path, sha))
-    except SettingsError as e:
-        raise SettingsError(str(e).replace("settings:", f"{path}:", 1)) from None
-
-
-def shipped() -> Settings:
-    """The shipped settings file, loaded and checked."""
-    return load(default_path())
-
-
-def resolve(path: Path | str | None = None, **overrides: float | int | None) -> Settings:
-    """The settings a run uses: the 2012 values, then the file ``path`` names if any, then the
-    ``overrides`` given by name (``temperature``, ``imp``, ...; None means not given).
-
-    Raises SettingsError naming the file or the value.
-    """
-    base = load(path) if path is not None else DEFAULTS
     given = {k: v for k, v in overrides.items() if v is not None}
     unknown = [k for k in given if k not in NAMES]
     if unknown:
         raise SettingsError(f"no setting named {unknown[0]!r}; the settings are "
                             + ", ".join(NAMES))
-    values = base.values()
+    values = DEFAULTS.values()
     if "temperature" in given:
         values["temperature"] = _check_temperature(given["temperature"], "--temperature")
     for name in COUNTS:
         if name in given:
             values[name] = _check_count(name, given[name], f"--{name}")
     try:
-        return Settings(**values, source=Source(base.source.path, base.source.sha256, given))
+        return Settings(**values, source=Source(given))
     except SettingsError as e:
         raise SettingsError(str(e).replace("settings:", "the settings given:", 1)) from None
 
@@ -261,29 +200,3 @@ def read_rendered(path: Path | str) -> Settings:
     except ValueError:
         raise SettingsError(f"{path}: cannot be read: {lines[1]!r}") from None
     return Settings(t, *counts)
-
-
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def verify(settings_dir: Path = SETTINGS_DIR) -> list[str]:
-    """One line per problem with the shipped file: missing, differing from its pin, or not the
-    2012 values. Empty means it is the committed file and says what the programs assume."""
-    problems = []
-    for name, want in SHA256.items():
-        p = settings_dir / name
-        if not p.is_file():
-            problems.append(f"{name}: missing")
-            continue
-        got = _sha256(p)
-        if got != want:
-            problems.append(f"{name}: sha256 {got[:12]}... differs from the pinned {want[:12]}...")
-        try:
-            s = load(p)
-        except SettingsError as e:
-            problems.append(f"{name}: {e}")
-            continue
-        if not s.is_default:
-            problems.append(f"{name}: holds {s.values()}, not the 2012 values {DEFAULTS.values()}")
-    return problems

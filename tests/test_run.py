@@ -291,7 +291,7 @@ def test_the_record_of_a_run(tmp_path):
     assert rec["parameters"]["rendered"] == "parameters.tab"
     assert rec["settings"] == {"temperature": 301.0, "imp": 1000, "itn": 10, "inp": 40,
                                "inum": 250000, "inor": 30, "default": True,
-                               "source": {"path": None, "sha256": None, "overrides": {}},
+                               "source": {"overrides": {}},
                                "rendered": "settings.tab"}
     assert (job.run_dir / "settings.tab").read_bytes() == \
         b"MOBCAL-SETTINGS 1\n3.0100000000000000d+02 1000 10 40 250000 30\n"

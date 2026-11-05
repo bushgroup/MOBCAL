@@ -13,7 +13,6 @@ import json
 import re
 import sys
 import time
-import tomllib
 from pathlib import Path
 
 import jsonschema
@@ -77,7 +76,7 @@ OLD = {
     "2012-philox-n2": dict(gas="n2"),
     "2000-he": dict(gas="he", generator="ranlux",
                     parameters=parameters.shipped_path("he", "2000"),
-                    settings=settings.resolve(None, temperature=298.0, imp=25)),
+                    settings=settings.resolve(temperature=298.0, imp=25)),
 }
 # The same, as a command line of today that spells the fields out over another method.
 SPELLED = {
@@ -146,12 +145,10 @@ def test_a_run_records_the_method_its_fields_make(tmp_path, argv, want, title):
     assert b.method_now == want and b.title() == title
 
 
-def test_a_settings_file_over_a_method_replaces_its_settings(tmp_path):
-    f = tmp_path / "s.toml"
-    f.write_text("format = 1\nitn = 5\n", encoding="utf-8")
-    b = from_cli(tmp_path, str(CHOLINE), "--method", "2000-he", "--settings", str(f))
-    assert b.resolved_settings.values() == {**settings.DEFAULTS.values(), "itn": 5}
-    assert b.method_now == "custom"
+def test_run_has_no_settings_file_a_method_carries_the_settings(tmp_path, capsys):
+    with pytest.raises(SystemExit):
+        cli.parser().parse_args(["run", str(CHOLINE), "--settings", "s.toml"])
+    capsys.readouterr()
 
 
 def test_the_gas_changed_over_a_method_makes_its_other_gas_or_custom(tmp_path):
@@ -172,121 +169,226 @@ def own_table(path: Path, gas: str = "he") -> Path:
 
 
 def test_a_saved_method_loads_back_as_the_fields_it_came_from(tmp_path):
-    st = settings.resolve(None, temperature=298.15, itn=5)
-    m = methods.save(tmp_path / "mine.toml", "Mine at 298.15 K", "he", "2000", "ranlux", st)
-    again = methods.load(tmp_path / "mine.toml")
+    st = settings.resolve(temperature=298.15, itn=5)
+    mine = tmp_path / "mine.method.json"
+    m = methods.save(mine, "Mine at 298.15 K", "he", "2000", "ranlux", st)
+    again = methods.load(mine)
     assert m == again and not m.shipped and m.key == "Mine at 298.15 K"
     assert (m.gas, m.parameters, m.table, m.generator) == ("he", "2000", None, "ranlux")
-    assert m.settings.values() == st.values() and m.ref == str(tmp_path / "mine.toml")
-    text = (tmp_path / "mine.toml").read_text(encoding="utf-8")
-    assert text.startswith('format = 1\nname = "Mine at 298.15 K"\ngas = "he"\n'
-                           'parameters = "2000"\ngenerator = "ranlux"\n'
-                           "temperature = 298.15\nimp = 1000\nitn = 5\n")
+    assert m.settings.values() == st.values() and m.ref == str(mine)
+    assert m.description is None
+    text = mine.read_text(encoding="utf-8")
+    assert text.startswith('{\n  "format": "mobcal-method",\n  "version": 1,\n'
+                           '  "name": "Mine at 298.15 K",\n  "gas": "he",\n'
+                           '  "parameters": "2000",\n  "generator": "ranlux",\n'
+                           '  "temperature": 298.15,\n  "imp": 1000,\n  "itn": 5,\n')
+    assert text.endswith('  "inor": 30\n}\n') and "\r" not in text
+    assert list(json.loads(text)) == [k for k in methods.KEYS if k in json.loads(text)]
     # The batch the method makes is the batch the fields make, with the file's name recorded.
-    by_file = from_cli(tmp_path, str(CHOLINE), "--method", str(tmp_path / "mine.toml"))
+    by_file = from_cli(tmp_path, str(CHOLINE), "--method", str(mine))
     by_fields = from_cli(tmp_path, str(CHOLINE), "--method", "2000-he", "--temperature",
                          "298.15", "--imp", "1000", "--itn", "5")
     assert by_file.jobs() == by_fields.jobs()
     assert {j.method for j in by_file.jobs()} == {"Mine at 298.15 K"}
-    assert by_file.jobs()[0].method_file == {"path": str(tmp_path / "mine.toml"),
-                                             "sha256": m.sha256}
+    assert by_file.jobs()[0].method_file == {"path": str(mine), "sha256": m.sha256}
     assert by_file.title() == "Mine at 298.15 K" and by_fields.method_now == "custom"
     # A field set over it is no longer the file's method.
-    over = from_cli(tmp_path, str(CHOLINE), "--method", str(tmp_path / "mine.toml"), "--imp",
-                    "25")
+    over = from_cli(tmp_path, str(CHOLINE), "--method", str(mine), "--imp", "25")
     assert over.method_now == "custom" and over.jobs()[0].method_file is None
     assert over.title() == "Custom (from Mine at 298.15 K)"
+
+
+@pytest.mark.parametrize("key", list(methods.METHODS))
+def test_save_writes_a_shipped_method_byte_for_byte(tmp_path, key):
+    """The shipped files are in the form save writes: the same fields and description saved
+    again are the same bytes, so one writer makes every method file."""
+    m = methods.METHODS[key]
+    again = methods.save(tmp_path / key, m.name, m.gas, m.parameters, m.generator, m.settings,
+                         description=m.description)
+    assert again.path == tmp_path / f"{key}.method.json"
+    assert again.path.read_bytes() == methods.shipped_path(key).read_bytes()
+
+
+@pytest.mark.parametrize("given, named", [("mine", "mine.method.json"),
+                                          ("mine.json", "mine.method.json"),
+                                          ("mine.method.json", "mine.method.json"),
+                                          ("Mine.Method.JSON", "Mine.Method.JSON")])
+def test_a_saved_method_file_is_named_name_method_json(tmp_path, given, named):
+    m = methods.save(tmp_path / given, "Mine", "he", "2012", "philox", settings.DEFAULTS)
+    assert m.path == tmp_path / named and m.path.is_file()
+    assert methods.stem(m.path) == ("mine" if named.islower() else "Mine")
 
 
 def test_a_method_file_names_its_own_table_by_path_and_sha256(tmp_path):
     (tmp_path / "tables").mkdir()
     table = own_table(tmp_path / "tables" / "mine_he.toml")
-    m = methods.save(tmp_path / "m.toml", "Mine", "he", table, "philox", settings.DEFAULTS)
+    f = tmp_path / "m.method.json"
+    m = methods.save(f, "Mine", "he", table, "philox", settings.DEFAULTS)
     sha = run.hashlib.sha256(table.read_bytes()).hexdigest()
     assert m.table == table.resolve() and m.table_sha256 == sha and m.parameters is None
-    assert f'path = "{table.resolve().as_posix()}"' in (tmp_path / "m.toml").read_text("utf-8")
-    jobs = Batch((CHOLINE,), tmp_path / "runs", method=str(tmp_path / "m.toml")).jobs()
+    assert json.loads(f.read_text("utf-8"))["parameters"] == {
+        "path": table.resolve().as_posix(), "sha256": sha}
+    jobs = Batch((CHOLINE,), tmp_path / "runs", method=str(f)).jobs()
     assert jobs[0].parameters == table.resolve() and jobs[0].method == "Mine"
     assert jobs[0].label == f"Choline-he-5013489-lj{sha[:8]}"
     # A relative path is the method file's folder's.
-    rel = tmp_path / "rel.toml"
-    rel.write_text(f'format = 1\nname = "Rel"\ngas = "he"\ngenerator = "philox"\n'
-                   f'[parameters]\npath = "tables/mine_he.toml"\nsha256 = "{sha}"\n',
+    rel = tmp_path / "rel.method.json"
+    rel.write_text(body(name="Rel", parameters={"path": "tables/mine_he.toml", "sha256": sha}),
                    encoding="utf-8")
     assert methods.load(rel).table == table.resolve()
     # Changed: refused, saying which.
     table.write_bytes(table.read_bytes() + b"\n")
     with pytest.raises(methods.MethodError, match="mine_he.toml has changed since the method "
                                                   "was saved"):
-        methods.load(tmp_path / "m.toml")
+        methods.load(f)
     with pytest.raises(BatchError, match="has changed"):
-        Batch((CHOLINE,), tmp_path / "runs", method=str(tmp_path / "m.toml"))
+        Batch((CHOLINE,), tmp_path / "runs", method=str(f))
     # Moved: refused, saying which.
     table.rename(tmp_path / "elsewhere.toml")
     with pytest.raises(methods.MethodError, match="mine_he.toml is not there; it has moved"):
-        methods.load(tmp_path / "m.toml")
+        methods.load(f)
     with pytest.raises(cli.UsageError, match="is not there"):
-        from_cli(tmp_path, str(CHOLINE), "--method", str(tmp_path / "m.toml"))
+        from_cli(tmp_path, str(CHOLINE), "--method", str(f))
 
 
-HEAD = 'format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-OWN = 'format = 1\nname = "X"\ngas = "he"\ngenerator = "philox"\n[parameters]\n'
+BASE = {"format": "mobcal-method", "version": 1, "name": "X", "gas": "he", "parameters": "2012",
+        "generator": "philox"}
+
+
+def body(drop: tuple[str, ...] = (), **fields) -> str:
+    """A method file's text: ``BASE`` without ``drop``, with ``fields`` set or added."""
+    return json.dumps({**{k: v for k, v in BASE.items() if k not in drop}, **fields}, indent=2)
+
 
 # A method file the reader refuses, and the start of what it says; the schema refuses each too.
 REFUSED = [
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\n', "no generator"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "sead = 1\n", "unknown key 'sead'"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "seed = 0\n", "seed is 0; a seed is a positive integer up to 2147483647"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "seed = 2147483648\n", "seed is 2147483648"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     'seed = "42"\n', "seed is '42'"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "seed = 4.2\n", "seed is 4.2"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "seed = true\n", "seed is True"),
-    ('format = 2\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n',
-     "format is 2"),
-    ('format = 1\nname = "X"\ngas = "ar"\nparameters = "2012"\ngenerator = "philox"\n',
-     "gas is 'ar'"),
-    ('format = 1\nname = "X"\ngas = "n2"\nparameters = "2000"\ngenerator = "philox"\n',
-     "the shipped N2 tables are 2012"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "rand"\n',
-     "generator is 'rand'"),
-    ('format = 1\nname = ""\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n',
-     "name must be 1 to 60"),
-    ('format = 1\nname = "X"\ngas = "he"\nparameters = "2012"\ngenerator = "philox"\n'
-     "itn = 0\n", "itn is 0"),
-    (HEAD.replace("format = 1", "format = true"), "format is True"),
-    (HEAD.replace('"X"', '"X "'), "name must be 1 to 60"),
-    (HEAD.replace('"X"', '"A\\tB"'), "name must be 1 to 60"),
-    (HEAD.replace('"X"', '"' + "x" * 61 + '"'), "name must be 1 to 60"),
-    (HEAD + "temperature = 0\n", "temperature 0 is not a positive number"),
-    (HEAD + 'temperature = "301"\n', "temperature must be a number"),
-    (HEAD + "imp = 1.5\n", "imp must be an integer"),
-    (HEAD + "inor = 101\n", "inor is 101; 1 to 100"),
-    (OWN + 'path = "t.toml"\nsha256 = "' + "A" * 64 + '"\n', "64 lowercase hex digits"),
-    (OWN + 'path = "t.toml"\nsha256 = "' + "a" * 64 + '"\nkind = 1\n',
+    (body(drop=("generator",)), "no generator"),
+    (body(drop=("version",)), "no version; a method file begins"),
+    (body(drop=("format",)), "no format; a method file begins"),
+    (body(sead=1), "unknown key 'sead'"),
+    (body(seed=0), "seed is 0; a seed is a positive integer up to 2147483647"),
+    (body(seed=2147483648), "seed is 2147483648"),
+    (body(seed="42"), "seed is '42'"),
+    (body(seed=4.2), "seed is 4.2"),
+    (body(seed=True), "seed is True"),
+    (body(format=1), "format is 1; this reader reads 'mobcal-method'"),
+    (body(format="mobcal-ion"), "format is 'mobcal-ion'"),
+    (body(version=2), "version is 2; this version of MOBCAL reads version 1 of mobcal-method"),
+    (body(version=True), "version is True"),
+    (body(version="1"), "version is '1'"),
+    (body(gas="ar"), "gas is 'ar'"),
+    (body(gas=["he"]), r"gas is \['he'\]"),
+    (body(gas="n2", parameters="2000"), "the shipped N2 tables are 2012"),
+    (body(generator="rand"), "generator is 'rand'"),
+    (body(name=""), "name must be 1 to 60"),
+    (body(name="X "), "name must be 1 to 60"),
+    (body(name="A\tB"), "name must be 1 to 60"),
+    (body(name="x" * 61), "name must be 1 to 60"),
+    (body(name=7), "name must be 1 to 60"),
+    (body(description=42), "description must be a string, not 42"),
+    (body(description=None), "description must be a string, not None"),
+    (body(itn=0), "itn is 0"),
+    (body(temperature=0), "temperature 0 is not a positive number"),
+    (body(temperature="301"), "temperature must be a number"),
+    (body().replace('"generator": "philox"', '"generator": "philox", "temperature": 1e400'),
+     "temperature inf is not a positive number"),
+    (body(imp=1.5), "imp must be an integer"),
+    (body(inor=101), "inor is 101; 1 to 100"),
+    (body(parameters={"path": "t.toml", "sha256": "A" * 64}), "64 lowercase hex digits"),
+    (body(parameters={"path": "t.toml", "sha256": "a" * 64, "kind": 1}),
      "a table with path and sha256"),
+    ("[]", "not a method file: the file must be one JSON object"),
 ]
 
 
-@pytest.mark.parametrize("body, match", REFUSED)
-def test_a_method_file_that_cannot_be_used_is_refused_by_key(tmp_path, body, match):
-    f = tmp_path / "bad.toml"
-    f.write_text(body, encoding="utf-8")
+@pytest.mark.parametrize("text, match", REFUSED)
+def test_a_method_file_that_cannot_be_used_is_refused_by_key(tmp_path, text, match):
+    f = tmp_path / "bad.method.json"
+    f.write_text(text, encoding="utf-8")
     with pytest.raises(methods.MethodError, match=match):
         methods.load(f)
 
 
 def test_a_key_left_out_takes_the_2012_value(tmp_path):
-    f = tmp_path / "short.toml"
-    f.write_text('format = 1\nname = "Short"\ngas = "n2"\nparameters = "2012"\n'
-                 'generator = "ranlux"\nimp = 500\n', encoding="utf-8")
+    f = tmp_path / "short.method.json"
+    f.write_text(body(name="Short", gas="n2", generator="ranlux", imp=500), encoding="utf-8")
     m = methods.load(f)
     assert m.settings.values() == {**settings.DEFAULTS.values(), "imp": 500}
+
+
+@pytest.mark.parametrize("text, match", [
+    (body().replace('"name": "X"', '"name": "X",\n  "name": "Y"'),
+     "key 'name' appears twice in one object"),
+    (body().replace('"generator": "philox"', '"generator": "philox", "temperature": NaN'),
+     "NaN is not a JSON number"),
+    (body().replace('"generator": "philox"', '"generator": "philox", "imp": Infinity'),
+     "Infinity is not a JSON number"),
+    (body()[:-2], "not JSON: "),
+    ("﻿" + body(seed=3), None),  # a byte-order mark, as some editors write, is read
+])
+def test_a_method_file_is_read_as_strict_json(tmp_path, text, match):
+    """As the ion file is read: a key twice in one object, or a constant JSON does not have,
+    is refused by name rather than read one way."""
+    f = tmp_path / "m.method.json"
+    f.write_text(text, encoding="utf-8")
+    if match is None:
+        assert methods.load(f).seed == 3
+        return
+    with pytest.raises(methods.MethodError, match=match):
+        methods.load(f)
+
+
+TOML_METHOD = ('format = 1\nname = "Old"\ngas = "he"\nparameters = "2012"\n'
+               'generator = "philox"\n')
+
+
+def test_a_toml_method_file_is_refused_naming_the_json_form(tmp_path):
+    """The TOML method files of 2.0 were converted to JSON when the format changed; a TOML
+    method file is refused with a message that says what a method file is now."""
+    f = tmp_path / "old.toml"
+    f.write_text(TOML_METHOD, encoding="utf-8")
+    want = "a TOML method file, which this version of MOBCAL does not read; a method file is " \
+        "JSON, NAME.method.json"
+    with pytest.raises(methods.MethodError, match=want):
+        methods.load(f)
+    with pytest.raises(methods.MethodError, match=want):
+        methods.get(str(f))
+    with pytest.raises(cli.UsageError, match=want):
+        from_cli(tmp_path, str(CHOLINE), "--method", str(f))
+    with pytest.raises(BatchError, match="a TOML method file"):
+        Batch((CHOLINE,), tmp_path / "runs", method=str(f))
+    # Gone is refused the same way, never read as a method's key.
+    with pytest.raises(methods.MethodError, match="gone.toml: a TOML method file"):
+        methods.get(str(tmp_path / "gone.toml"))
+    with pytest.raises(methods.MethodError, match="gone.method.json: cannot read"):
+        methods.get(str(tmp_path / "gone.method.json"))
+
+
+def test_a_description_is_carried_and_is_not_part_of_the_method(tmp_path):
+    assert all(m.description for m in methods.METHODS.values())
+    plain = methods.save(tmp_path / "plain", "Plain", "he", "2012", "ranlux", settings.DEFAULTS)
+    said = methods.save(tmp_path / "said", "Said", "he", "2012", "ranlux", settings.DEFAULTS,
+                        description="The 2012 release in helium, saved with a note.")
+    assert "description" not in json.loads(plain.path.read_text(encoding="utf-8"))
+    assert said.description == "The 2012 release in helium, saved with a note."
+    assert list(json.loads(said.path.read_text(encoding="utf-8")))[3] == "description"
+    for m in (plain, said):  # both are the 2012 helium calculation
+        assert m.matches("he", "2012", None, "ranlux", settings.DEFAULTS)
+        assert methods.identify(m.gas, m.parameters, m.generator, m.settings) == "2012-he"
+    a, b = (from_cli(tmp_path, str(CHOLINE), "--method", str(m.path)).jobs()[0]
+            for m in (plain, said))
+    assert a.label == b.label and staged(a, tmp_path / "a") == staged(b, tmp_path / "b")
+    # A shipped method says what it is; verify says so of one that does not.
+    shipped = tmp_path / "shipped"
+    shipped.mkdir()
+    for key in methods.SHA256:
+        (shipped / f"{key}.method.json").write_bytes(methods.shipped_path(key).read_bytes())
+    f = shipped / "2012-he.method.json"
+    doc = json.loads(f.read_text(encoding="utf-8"))
+    del doc["description"]
+    f.write_text(methods.dumps(doc), encoding="utf-8", newline="\n")
+    assert "2012-he.method.json: carries no description; a shipped method says what it is" in \
+        methods.verify(shipped)
 
 
 # --- the schema ----------------------------------------------------------------------------
@@ -304,20 +406,22 @@ def validator() -> jsonschema.Draft202012Validator:
 def test_every_shipped_and_saved_method_is_valid_against_the_schema(tmp_path):
     v = validator()
     for key in methods.SHA256:
-        v.validate(tomllib.loads(methods.shipped_path(key).read_text(encoding="utf-8")))
+        v.validate(json.loads(methods.shipped_path(key).read_text(encoding="utf-8")))
     table = own_table(tmp_path / "mine_he.toml")
-    st = settings.resolve(None, temperature=298.15, itn=5)
-    for i, (t, seed) in enumerate([("2012", None), ("2000", 42), (table, 7)]):
-        f = tmp_path / f"m{i}.toml"
-        methods.save(f, f"Mine {i}", "he", t, "ranlux", st, seed=seed)
-        v.validate(tomllib.loads(f.read_text(encoding="utf-8")))
+    st = settings.resolve(temperature=298.15, itn=5)
+    for i, (t, seed, said) in enumerate([("2012", None, None), ("2000", 42, "A note."),
+                                         (table, 7, None)]):
+        m = methods.save(tmp_path / f"m{i}", f"Mine {i}", "he", t, "ranlux", st, seed=seed,
+                         description=said)
+        v.validate(json.loads(m.path.read_text(encoding="utf-8")))
 
 
 def test_the_schema_holds_the_readers_keys_bounds_and_defaults():
     s, v = schema(), validator()
     p = s["properties"]
     assert tuple(p) == methods.KEYS and tuple(s["required"]) == methods.REQUIRED
-    assert methods.FORMATS == (p["format"]["const"],)
+    assert p["format"]["const"] == methods.FORMAT
+    assert (p["version"]["const"],) == methods.VERSIONS and methods.VERSION in methods.VERSIONS
     assert p["name"]["maxLength"] == methods.MAX_NAME
     assert p["gas"]["enum"] == list(parameters.SETS)
     assert tuple(p["generator"]["enum"]) == GENERATORS
@@ -325,7 +429,7 @@ def test_the_schema_holds_the_readers_keys_bounds_and_defaults():
     assert set(p["parameters"]["oneOf"][0]["enum"]) == names
     for gas, sets in parameters.SETS.items():  # a shipped table is one the gas has
         for n in names:
-            doc = {"format": 1, "name": "X", "gas": gas, "parameters": n, "generator": "philox"}
+            doc = {**BASE, "gas": gas, "parameters": n}
             assert v.is_valid(doc) == (n in sets), (gas, n)
     for k, (lo, hi) in settings.BOUNDS.items():
         assert (p[k]["minimum"], p[k]["maximum"]) == (lo, hi), k
@@ -337,23 +441,26 @@ def test_the_schema_holds_the_readers_keys_bounds_and_defaults():
     assert f"{methods.DEFAULT_SEED}, the 2012 seed" in p["seed"]["description"]
 
 
-@pytest.mark.parametrize("body, match", REFUSED)
-def test_the_schema_refuses_what_the_reader_refuses(body, match):
-    assert not validator().is_valid(tomllib.loads(body))
+@pytest.mark.parametrize("text, match", REFUSED)
+def test_the_schema_refuses_what_the_reader_refuses(text, match):
+    assert not validator().is_valid(json.loads(text))
 
 
-@pytest.mark.parametrize("body, match", [
-    (HEAD + "temperature = nan\n", "temperature nan is not a positive number"),
-    (HEAD + "itn = 100\ninp = 100\n", "at most 9999999 points"),
-    (HEAD.replace('"X"', '"A\\u200bB"'), "name must be 1 to 60 printable"),
-    (OWN + 'path = "gone.toml"\nsha256 = "' + "a" * 64 + '"\n', "gone.toml is not there"),
+@pytest.mark.parametrize("text, match", [
+    (body(itn=100, inp=100), "at most 9999999 points"),
+    (body(name="A​B"), "name must be 1 to 60 printable"),
+    (body(parameters={"path": "gone.toml", "sha256": "a" * 64}), "gone.toml is not there"),
+    (body(imp=1000.0), "imp must be an integer, not 1000.0"),
+    (body(seed=42.0), "seed is 42.0"),
+    (body(version=1.0), "version is 1.0"),
+    (body().replace('"name": "X"', '"name": "X",\n  "name": "Y"'), "appears twice"),
 ])
-def test_what_only_the_reader_refuses(tmp_path, body, match):
+def test_what_only_the_reader_refuses(tmp_path, text, match):
     """The rules the schema's description lists as the reader's: a document the schema accepts
     and ``load`` refuses."""
-    assert validator().is_valid(tomllib.loads(body))
-    f = tmp_path / "bad.toml"
-    f.write_text(body, encoding="utf-8")
+    assert validator().is_valid(json.loads(text))
+    f = tmp_path / "bad.method.json"
+    f.write_text(text, encoding="utf-8")
     with pytest.raises(methods.MethodError, match=match):
         methods.load(f)
 
@@ -380,12 +487,12 @@ def test_a_method_seed_is_the_first_seed_and_seeds_wins(tmp_path):
     the run is still a run of the method, which the seed does not identify."""
     assert all(m.seed is None and m.first_seed == batch.DEFAULT_SEED
                for m in methods.METHODS.values())
-    plain = methods.save(tmp_path / "plain.toml", "Plain", "he", "2012", "ranlux",
+    plain = methods.save(tmp_path / "plain", "Plain", "he", "2012", "ranlux",
                          settings.DEFAULTS)
     assert "seed" not in plain.path.read_text(encoding="utf-8") and plain.seed is None
-    m = methods.save(tmp_path / "m.toml", "Seeded", "he", "2012", "ranlux", settings.DEFAULTS,
+    m = methods.save(tmp_path / "m", "Seeded", "he", "2012", "ranlux", settings.DEFAULTS,
                      seed=42)
-    assert m.path.read_text(encoding="utf-8").endswith("inor = 30\nseed = 42\n")
+    assert m.path.read_text(encoding="utf-8").endswith('  "inor": 30,\n  "seed": 42\n}\n')
     assert (m.seed, m.first_seed) == (42, 42) and methods.load(m.path).seed == 42
     by_method = from_cli(tmp_path, str(CHOLINE), "--method", str(m.path))
     assert [j.seed for j in by_method.jobs()] == [42]
@@ -398,10 +505,11 @@ def test_a_method_seed_is_the_first_seed_and_seeds_wins(tmp_path):
     shipped = tmp_path / "shipped"
     shipped.mkdir()
     for key in methods.SHA256:
-        (shipped / f"{key}.toml").write_bytes(methods.shipped_path(key).read_bytes())
-    with (shipped / "2012-he.toml").open("a", encoding="utf-8", newline="\n") as f:
-        f.write("seed = 42\n")
-    assert "2012-he.toml: carries a seed; a shipped method carries none" in \
+        (shipped / f"{key}.method.json").write_bytes(methods.shipped_path(key).read_bytes())
+    f = shipped / "2012-he.method.json"
+    f.write_text(methods.dumps({**json.loads(f.read_text(encoding="utf-8")), "seed": 42}),
+                 encoding="utf-8", newline="\n")
+    assert "2012-he.method.json: carries a seed; a shipped method carries none" in \
         methods.verify(shipped)
 
 
@@ -414,14 +522,15 @@ def test_a_batch_refuses_a_seed_the_program_cannot_take(tmp_path):
 
 def test_a_run_from_a_method_file_records_its_name_and_sha256(tmp_path):
     inp = write_input(tmp_path / "ok.mfj", "ok")
-    m = methods.save(tmp_path / "m.toml", "My method", "n2", "2012", "philox",
-                     settings.resolve(None, itn=2))
+    m = methods.save(tmp_path / "m.method.json", "My method", "n2", "2012", "philox",
+                     settings.resolve(itn=2))
     b = Batch((inp,), tmp_path / "runs", method=m.ref, seeds=(1,), split=None)
     s = run_many(b.jobs(), 1, launcher=launcher)
     _, json_path = s.write(tmp_path / "runs")
     rec = json.loads((b.jobs()[0].run_dir / "record.json").read_text(encoding="utf-8"))
     assert rec["method"] == "My method" and rec["binary"]["gas"] == "n2"
-    assert rec["method_file"] == {"path": str(tmp_path / "m.toml"), "sha256": m.sha256}
+    assert rec["method_file"] == {"path": str(tmp_path / "m.method.json"),
+                                  "sha256": m.sha256}
     assert json.loads(json_path.read_text(encoding="utf-8"))["runs"][0]["method_file"] == \
         rec["method_file"]
     para = methods.text(methods.read_records([tmp_path / "runs"]))
@@ -434,8 +543,8 @@ def test_a_record_holds_every_field_of_its_method(tmp_path):
     that moves, changes or goes leaves its runs described."""
     inp = write_input(tmp_path / "ok.mfj", "ok")
     table = own_table(tmp_path / "mine_he.toml")
-    m = methods.save(tmp_path / "m.toml", "Mine", "he", table, "ranlux",
-                     settings.resolve(None, temperature=298.15, itn=2), seed=42)
+    m = methods.save(tmp_path / "m.method.json", "Mine", "he", table, "ranlux",
+                     settings.resolve(temperature=298.15, itn=2), seed=42)
     b = Batch((inp,), tmp_path / "runs", method=m.ref, split=None)
     run_many(b.jobs(), 1, launcher=launcher)
     rec = json.loads((b.jobs()[0].run_dir / "record.json").read_text(encoding="utf-8"))
@@ -645,9 +754,10 @@ def _interrupt_once(wait):
 
 def test_a_batch_round_trips_through_the_queue_file(tmp_path):
     b1 = Batch((CHOLINE,), tmp_path / "runs", method="2012-he", gas="n2", seeds=(1, 2),
-               settings=settings.resolve(None, imp=25), split=4, workers=2)
+               settings=settings.resolve(imp=25), split=4, workers=2)
     b2 = Batch((CHOLINE,), tmp_path / "runs", method="2000-he", parameters=None, split="auto")
-    m = methods.save(tmp_path / "m.toml", "Mine", "he", "2012", "ranlux", settings.DEFAULTS)
+    m = methods.save(tmp_path / "m.method.json", "Mine", "he", "2012", "ranlux",
+                     settings.DEFAULTS)
     b3 = Batch((CHOLINE,), tmp_path / "runs", method=m.ref)
     path = batch.save([b1, b2, b3], tmp_path / "queue.json")
     doc = json.loads(path.read_text(encoding="utf-8"))
@@ -759,14 +869,14 @@ def test_allocation(tmp_path):
     assert two_cores.jobs[0].split == 2  # 2 * 2.25 + 192 / 2 is well under 0.8 * 194.6
     # The prologue dominating, as in the 2000 release's example at imp 25 with its projection
     # pass per set: no split however many cores, in any mode.
-    st = settings.resolve(None, imp=1)
+    st = settings.resolve(imp=1)
     for mode in estimate.MODES:
         lean = estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)], cpus=80,
                                  mode=mode)
         assert lean.jobs[0].split is None
     # A split never exceeds what its costliest block lets it use, which is never more than
     # the blocks there are to deal: 5 blocks, the slowest twice the mean in helium, so 3.
-    st = settings.resolve(None, itn=1, inp=5, imp=100_000)
+    st = settings.resolve(itn=1, inp=5, imp=100_000)
     assert estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)],
                              cpus=80).jobs[0].split == 3
     with pytest.raises(ValueError, match="mode must be one of"):
@@ -812,7 +922,7 @@ def test_the_balanced_mode_keeps_its_efficiency(tmp_path):
 def test_cores_a_run_cannot_use_take_another_run(tmp_path):
     """Finish in order, a run whose costliest block caps its split leaves cores over, and they
     take a further run at the same split: 40 blocks, the slowest 3.4 times the mean, so 12."""
-    st = settings.resolve(None, itn=1)
+    st = settings.resolve(itn=1)
     jobs = [Job(CHOLINE, "n2", s, tmp_path, settings=st) for s in range(4)]
     p = estimate.allocate(jobs, cpus=40, mode=estimate.IN_ORDER)
     assert p.workers == 3 and {j.split for j in p.jobs} == {12}

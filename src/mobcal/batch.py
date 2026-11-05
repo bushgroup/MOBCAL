@@ -110,7 +110,7 @@ class Batch:
     def resolved_settings(self) -> Settings:
         if self.settings is not None:
             return self.settings
-        return settings.resolve(None, **self.loaded.overrides())
+        return settings.resolve(**self.loaded.overrides())
 
     def table(self) -> Path | None:
         """The element table file, None for the gas's default set. A method's own table goes

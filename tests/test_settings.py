@@ -1,4 +1,4 @@
-"""The run settings: the TOML is checked and pinned, the rendered file reads back to the bit,
+"""The run settings: the values are checked by name, the rendered file reads back to the bit,
 the 2012 values are the program's own defaults, other values equal a build with them compiled
 in, a split run is exact at any of them, and both sides refuse what the other does.
 
@@ -48,15 +48,15 @@ _HBR = "HBr+\n1\n2\nang\ncalc\n1.0000\n 0 0 0 35 0.5\n 1.41 0 0 1 0.5\n"
 
 # --- the module -----------------------------------------------------------------------------
 
-def test_the_defaults_are_the_2012_values_and_the_shipped_file_holds_them():
+def test_the_defaults_are_the_2012_values():
     assert DEFAULTS.values() == {"temperature": 301.0, "imp": 1000, "itn": 10, "inp": 40,
                                  "inum": 250000, "inor": 30}
     assert DEFAULTS.blocks_per_set == 400 and DEFAULTS.points == 400_000
-    assert settings.verify() == []
-    s = settings.shipped()
-    assert s == DEFAULTS and s.is_default and s.source.path == settings.default_path()
-    assert s.suffix() == "" and DEFAULTS.suffix() == ""
-    assert s.lines() == RENDERED.splitlines()
+    assert DEFAULTS.is_default and DEFAULTS.suffix() == ""
+    assert DEFAULTS.lines() == RENDERED.splitlines()
+    # A method carries the settings; there is no settings file beside the module.
+    assert not list(Path(settings.__file__).parent.glob("*.toml"))
+    assert not hasattr(settings, "load") and not hasattr(settings, "shipped")
 
 
 def test_the_rendered_file_and_its_read_back(tmp_path):
@@ -79,81 +79,68 @@ def test_the_temperature_token_round_trips(t):
     assert float(tok.replace("d", "e")) == float(t)
 
 
-def test_resolve_applies_defaults_then_the_file_then_the_values(tmp_path):
-    f = tmp_path / "mine.toml"
-    f.write_text("format = 1\nimp = 25\ntemperature = 298\n", encoding="utf-8")
-    s = settings.resolve(f, itn=3)
+def test_resolve_applies_defaults_then_the_values():
+    s = settings.resolve(temperature=298, imp=25, itn=3)
     assert s.values() == {"temperature": 298.0, "imp": 25, "itn": 3, "inp": 40,
                           "inum": 250000, "inor": 30}
-    assert s.source.path == f and s.source.overrides == {"itn": 3} and len(s.source.sha256) == 64
+    assert s.source.overrides == {"temperature": 298, "imp": 25, "itn": 3}
     assert s.suffix() == "-t298-imp25-itn3" and not s.is_default
-    assert settings.resolve(f, imp=1000, temperature=301).is_default
-    assert settings.resolve(None).source == settings.Source()
-    assert settings.resolve(None, temperature=None, imp=None) == DEFAULTS
-    assert settings.resolve(None, temperature=298.15).suffix() == "-t298.15"
+    assert settings.resolve(imp=1000, temperature=301).is_default
+    assert settings.resolve().source == settings.Source()
+    assert settings.resolve(temperature=None, imp=None) == DEFAULTS
+    assert settings.resolve(temperature=298.15).suffix() == "-t298.15"
     rec = s.record()
     assert rec["default"] is False and rec["rendered"] == "settings.tab"
-    assert rec["source"] == {"path": str(f), "sha256": s.source.sha256, "overrides": {"itn": 3}}
+    assert rec["source"] == {"overrides": {"temperature": 298, "imp": 25, "itn": 3}}
     with pytest.raises(SettingsError, match="no setting named 'imq'"):
-        settings.resolve(None, imq=1)
+        settings.resolve(imq=1)
 
 
 REFUSALS = {
-    "unknown key": ("format = 1\nimq = 25\n", "unknown key 'imq'"),
-    "format": ("format = 2\nimp = 25\n", "format is 2"),
-    "no format": ("imp = 25\n", "format is None"),
-    "count float": ("format = 1\nimp = 25.0\n", "imp must be an integer"),
-    "count string": ("format = 1\ninp = \"40\"\n", "inp must be an integer"),
-    "count bool": ("format = 1\ninor = true\n", "inor must be an integer"),
-    "imp 0": ("format = 1\nimp = 0\n", "imp is 0; 1 to 999999 are allowed"),
-    "imp over": ("format = 1\nimp = 1000000\n", "imp is 1000000; 1 to 999999 are allowed"),
-    "itn over": ("format = 1\nitn = 101\n", "itn is 101; 1 to 100 are allowed"),
-    "inp over": ("format = 1\ninp = 101\n", "inp is 101; 1 to 100 are allowed"),
-    "inum over": ("format = 1\ninum = 10000000\n", "inum is 10000000; 1 to 9999999"),
-    "inor over": ("format = 1\ninor = 101\n", "inor is 101; 1 to 100 are allowed"),
-    "product": ("format = 1\nitn = 100\ninp = 100\n", "itn\\*inp\\*imp is 100\\*100\\*1000"),
-    "t string": ("format = 1\ntemperature = \"301.d0\"\n", "temperature must be a number"),
-    "t zero": ("format = 1\ntemperature = 0\n", "temperature 0 is not a positive number"),
-    "t negative": ("format = 1\ntemperature = -5.0\n", "temperature -5.0 is not a positive"),
-    "t nan": ("format = 1\ntemperature = nan\n", "temperature nan is not a positive number"),
-    "t inf": ("format = 1\ntemperature = inf\n", "temperature inf is not a positive number"),
-    "not toml": ("format = \n", "not a TOML file"),
+    "count float": ({"imp": 25.0}, "--imp: imp must be an integer"),
+    "count string": ({"inp": "40"}, "--inp: inp must be an integer"),
+    "count bool": ({"inor": True}, "--inor: inor must be an integer"),
+    "imp 0": ({"imp": 0}, "imp is 0; 1 to 999999 are allowed"),
+    "imp over": ({"imp": 1000000}, "imp is 1000000; 1 to 999999 are allowed"),
+    "itn over": ({"itn": 101}, "itn is 101; 1 to 100 are allowed"),
+    "inp over": ({"inp": 101}, "inp is 101; 1 to 100 are allowed"),
+    "inum over": ({"inum": 10000000}, "inum is 10000000; 1 to 9999999"),
+    "inor over": ({"inor": 101}, "inor is 101; 1 to 100 are allowed"),
+    "product": ({"itn": 100, "inp": 100}, "itn\\*inp\\*imp is 100\\*100\\*1000"),
+    "t string": ({"temperature": "301.d0"}, "temperature must be a number"),
+    "t zero": ({"temperature": 0}, "temperature 0 is not a positive number"),
+    "t negative": ({"temperature": -5.0}, "temperature -5.0 is not a positive"),
+    "t nan": ({"temperature": float("nan")}, "temperature nan is not a positive number"),
+    "t inf": ({"temperature": float("inf")}, "temperature inf is not a positive number"),
 }
 
 
 @pytest.mark.parametrize("case", REFUSALS)
-def test_a_settings_file_is_refused_naming_the_key(tmp_path, case):
-    text, match = REFUSALS[case]
-    f = tmp_path / "bad.toml"
-    f.write_text(text, encoding="utf-8")
-    with pytest.raises(SettingsError, match=re.escape(str(f)) + ".*" + match):
-        settings.load(f)
+def test_a_setting_is_refused_naming_it(case):
+    values, match = REFUSALS[case]
+    with pytest.raises(SettingsError, match=match):
+        settings.resolve(**values)
 
 
 def test_values_given_singly_are_refused_the_same_way():
     with pytest.raises(SettingsError, match="--inp: inp is 101"):
-        settings.resolve(None, inp=101)
+        settings.resolve(inp=101)
     with pytest.raises(SettingsError, match="--temperature: temperature 0 is not"):
-        settings.resolve(None, temperature=0)
+        settings.resolve(temperature=0)
     with pytest.raises(SettingsError, match="itn\\*inp\\*imp is 100\\*100\\*1000"):
-        settings.resolve(None, itn=100, inp=100)
+        settings.resolve(itn=100, inp=100)
     with pytest.raises(SettingsError, match="imp is 0"):
         Settings(301.0, 0, 10, 40, 250000, 30)
-
-
-def test_a_missing_file_is_refused(tmp_path):
-    with pytest.raises(SettingsError, match="cannot read"):
-        settings.load(tmp_path / "none.toml")
 
 
 # --- the job, the command line and the split bound -----------------------------------------
 
 def test_a_jobs_settings_name_its_directory_and_bound_its_split(tmp_path):
-    s = settings.resolve(None, temperature=298, imp=25)
+    s = settings.resolve(temperature=298, imp=25)
     job = Job(Path("a10A1.mfj"), "he", 5013486, tmp_path, generator="ranlux", settings=s)
     assert job.label == "a10A1-he-5013486-ranlux-t298-imp25"
     assert Job(Path("x.mfj"), "he", 1, tmp_path).label == "x-he-1"
-    small = settings.resolve(None, itn=3, inp=7)
+    small = settings.resolve(itn=3, inp=7)
     assert Job(Path("x.mfj"), "he", 1, tmp_path, split=21, settings=small).split == 21
     with pytest.raises(ValueError, match="from 1 to 21 \\(itn \\* inp\\)"):
         Job(Path("x.mfj"), "he", 1, tmp_path, split=22, settings=small)
@@ -161,28 +148,49 @@ def test_a_jobs_settings_name_its_directory_and_bound_its_split(tmp_path):
         Job(Path("x.mfj"), "he", 1, tmp_path, settings={"imp": 25})
 
 
-def test_the_command_line_takes_a_file_and_single_values(tmp_path):
-    args = cli.parser().parse_args(["run", "x.mfj", "--settings", "s.toml", "--temperature",
-                                    "298", "--imp", "25", "--inor", "5"])
-    assert args.settings == Path("s.toml") and args.temperature == 298.0
+def test_the_command_line_takes_single_values_and_no_settings_file(tmp_path, capsys):
+    args = cli.parser().parse_args(["run", "x.mfj", "--temperature", "298", "--imp", "25",
+                                    "--inor", "5"])
+    assert args.temperature == 298.0
     assert (args.imp, args.itn, args.inp, args.inum, args.inor) == (25, None, None, None, 5)
     args = cli.parser().parse_args(["run", "x.mfj"])
-    assert all(getattr(args, k) is None for k in settings.NAMES) and args.settings is None
-    assert cli.parser().parse_args(["render-parameters", "he", "--settings", "s.toml"]).settings \
-        == Path("s.toml")
+    assert all(getattr(args, k) is None for k in settings.NAMES)
+    assert not hasattr(args, "settings")
+    for argv in (["run", "x.mfj", "--settings", "s.toml"],
+                 ["render-parameters", "he", "--settings", "s.toml"]):
+        with pytest.raises(SystemExit):
+            cli.parser().parse_args(argv)
+    capsys.readouterr()
 
 
-def test_render_parameters_writes_the_settings_too(tmp_path, capsys):
-    f = tmp_path / "mine.toml"
-    f.write_text("format = 1\nimp = 25\n", encoding="utf-8")
+def test_render_parameters_writes_a_methods_settings_and_table(tmp_path, capsys):
+    from mobcal import methods
+    for d in ('ref', 'ref2000'):
+        (tmp_path / d).mkdir()
     assert cli.main(["render-parameters", "he", str(tmp_path / "a")]) == 0
     assert (tmp_path / "a" / "settings.tab").read_bytes() == RENDERED.encode()
-    assert cli.main(["render-parameters", "he", str(tmp_path / "b"), "--settings", str(f)]) == 0
-    assert settings.read_rendered(tmp_path / "b" / "settings.tab").imp == 25
+    assert (tmp_path / "a" / "parameters.tab").read_bytes() == \
+        parameters.shipped("he").render(tmp_path / "ref").read_bytes()
+    assert cli.main(["render-parameters", "he", str(tmp_path / "b"), "--method", "2000-he"]) == 0
+    st = settings.read_rendered(tmp_path / "b" / "settings.tab")
+    assert (st.temperature, st.imp) == (298.0, 25)
+    assert (tmp_path / "b" / "parameters.tab").read_bytes() == \
+        parameters.shipped("he", "2000").render(tmp_path / "ref2000").read_bytes()
     assert "imp=25" in capsys.readouterr().out
-    f.write_text("format = 1\nimp = 0\n", encoding="utf-8")
-    assert cli.main(["render-parameters", "he", str(tmp_path / "c"), "--settings", str(f)]) == 2
-    assert "imp is 0" in capsys.readouterr().err
+    # --parameters wins over the method's table; a file of one's own is a method too.
+    m = methods.save(tmp_path / "mine", "Mine", "n2", "2012", "philox",
+                     settings.resolve(itn=3, inp=7))
+    assert cli.main(["render-parameters", "n2", str(tmp_path / "c"), "--method",
+                     str(m.path)]) == 0
+    assert settings.read_rendered(tmp_path / "c" / "settings.tab").blocks_per_set == 21
+    assert cli.main(["render-parameters", "he", str(tmp_path / "d"), "--method", "2000-he",
+                     "--parameters", "2012"]) == 0
+    assert (tmp_path / "d" / "parameters.tab").read_bytes() == \
+        (tmp_path / "a" / "parameters.tab").read_bytes()
+    capsys.readouterr()
+    # A method for the other gas is refused, naming both.
+    assert cli.main(["render-parameters", "he", str(tmp_path / "e"), "--method", "2012-n2"]) == 2
+    assert "MOBCAL 2012 (N2) is a method for N2, not He" in capsys.readouterr().err
 
 
 # --- through the reader, to the bit ----------------------------------------------------------
@@ -229,7 +237,7 @@ def test_a_rendered_temperature_reads_back_bit_identical(setprobe, tmp_path, t):
 
 
 def test_the_shipped_file_reads_back_as_the_defaults(setprobe, tmp_path):
-    settings.shipped().render(tmp_path)
+    DEFAULTS.render(tmp_path)
     rc, lines, _ = _probe(setprobe, tmp_path)
     assert rc == 0
     assert lines == [f"{_bits(301.0)}     1000       10       40   250000       30"]
@@ -372,7 +380,7 @@ def _by_hand(binary: Path, d: Path, gas: str) -> subprocess.Popen:
 @pytest.mark.parametrize("gas", sorted(ORACLE))
 def test_a_setting_equals_a_rebuilt_binary(pool, binaries, rebuilt, tmp_path, gas):
     values, _ = ORACLE[gas]
-    s = settings.resolve(None, **values)
+    s = settings.resolve(**values)
     # The rebuilt binary, its values compiled in, with no settings file (the driver would
     # render one, so it runs by hand); the shipped binary through the driver, which renders
     # the same values for it to read.
@@ -400,7 +408,7 @@ SMALL = dict(itn=3, inp=7, imp=100)  # 21 blocks of 100 trajectories: seconds
 
 @pytest.mark.parametrize("generator", ["ranlux", "philox"])
 def test_a_split_run_at_other_settings_reproduces_the_serial_run(pool, tmp_path, generator):
-    s = settings.resolve(None, **SMALL)
+    s = settings.resolve(**SMALL)
     jobs = [Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"serial-{generator}",
                 generator=generator, settings=s),
             Job(gate.CHOLINE, "he", 5013489, tmp_path, name=f"split-{generator}", split=4,
@@ -460,7 +468,7 @@ def test_a_block_file_of_another_shape_is_refused(pool, tmp_path):
 
 def test_the_driver_renders_and_records_other_settings(tmp_path):
     from test_run import launcher, write_input
-    s = settings.resolve(None, itn=3, inp=7, imp=100, temperature=298)
+    s = settings.resolve(itn=3, inp=7, imp=100, temperature=298)
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 7, tmp_path / "runs", split=4,
               settings=s, scratch="keep")
     r = run_one(job, launcher)

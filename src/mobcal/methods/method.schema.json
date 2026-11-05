@@ -1,19 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/methods/method.schema.json",
-  "title": "MOBCAL method file, format 1",
-  "description": "A method: the buffer gas, the element table, the random number generator, the six run settings and an optional first seed. The file is TOML; this schema checks the document a TOML reader makes of it. docs/methods.md is the specification. The rules that need more than the document are checked by mobcal.methods and listed on that page: a table of one's own must be at its path (a relative one read from the method file's folder) with the SHA-256 given and be a table for the method's gas; the name must differ from the shipped methods' and from every other method in the list; the temperature must be finite; itn x inp x imp is at most 9,999,999; and the name is refused when it holds any character Python's str.isprintable rejects, of which this schema refuses only the controls.",
+  "title": "MOBCAL method file, mobcal-method version 1",
+  "description": "A method: the buffer gas, the element table, the random number generator, the six run settings, an optional first seed and an optional description. The file is JSON, NAME.method.json, and this schema checks it as it stands. docs/methods.md is the specification. The rules that need more than the document are checked by mobcal.methods and listed on that page: a table of one's own must be at its path (a relative one read from the method file's folder) with the SHA-256 given and be a table for the method's gas; the name must differ from the shipped methods' and from every other method in the list; the temperature must be finite; the version, the five counts and the seed are written as integers (1000, not 1000.0 or 1e3, which this schema takes as integers); itn x inp x imp is at most 9,999,999; a key may appear only once; and the name is refused when it holds any character Python's str.isprintable rejects, of which this schema refuses only the controls.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "name", "gas", "parameters", "generator"],
+  "required": ["format", "version", "name", "gas", "parameters", "generator"],
   "properties": {
-    "format": {"const": 1},
+    "format": {"const": "mobcal-method"},
+    "version": {"const": 1},
     "name": {
       "description": "What the Method list and the run record show: 1 to 60 printable characters, no space at either end.",
       "type": "string",
       "minLength": 1,
       "maxLength": 60,
       "pattern": "^[^\\s\\u0000-\\u001f\\u007f-\\u009f](?:[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$"
+    },
+    "description": {
+      "description": "What the method is, in a sentence or two: the Method list's tooltip. Not part of what identifies the calculation.",
+      "type": "string"
     },
     "gas": {"enum": ["he", "n2"]},
     "parameters": {

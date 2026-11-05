@@ -53,7 +53,8 @@ shipped methods, **MOBCAL 2012 (He)** and **(N2)**, the calculation of the 2012 
 ([Reproducing MOBCAL 2012](mobcal-2012.md)); **MOBCAL 2012 with Philox (He)** and **(N2)**, the same
 tables and settings under Philox4x32-10, the helium one chosen at the first launch; and **MOBCAL
 2000 (He)**, the calculation of the Jarrold group's 2000 helium release ([Reproducing MOBCAL
-2000](mobcal-2000.md)). Below them are the method files loaded or saved, by name. A field changed
+2000](mobcal-2000.md)). Below them are the method files loaded or saved, by name. Holding the
+pointer over a method shows its description, when it has one. A field changed
 after a method is chosen shows the method as *Custom (from MOBCAL 2012 (He))*, say, and the runs
 record `custom`; changing it back restores the name, and fields that make another method show that
 one. Changing the gas of MOBCAL 2012 (He) to N2 shows MOBCAL 2012 (N2), whereas MOBCAL 2000 (He),
@@ -61,10 +62,11 @@ which has no nitrogen form, becomes Custom. Each shipped method equals the comma
 gives, run for run.
 
 File, Save method… writes the gas, element table, generator and six settings the form holds to
-a method file, asks for the name the list will show, and adds the file to the list. File, Load
-method… adds a file saved here or elsewhere and fills the fields from it. The list remembers its
-files at the next launch, and removes one that has been moved, deleted or edited since it was
-added, with a message that says which and why. `mobcal run --method PATH` runs the same file.
+a method file, `NAME.method.json`, asks for the name the list will show, and adds the file to the
+list. File, Load method… adds a file saved here or elsewhere and fills the fields from it. The list
+remembers its files at the next launch, and removes one that has been moved, deleted or edited
+since it was added, or that no longer loads, such as a TOML method file saved by version 2.0, with
+a message that says which and why ([Methods](methods.md#method-files)). `mobcal run --method PATH` runs the same file.
 
 Basics holds the gas (He or N2), the element table (the tables shipped for the gas, or a file of
 one's own for the gas, [The element tables](parameters.md)), the number of seeds per ion, and

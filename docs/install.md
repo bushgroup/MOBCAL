@@ -79,9 +79,9 @@ mobcal self-check
 ```
 
 checks, in under a second, that the installed copy can compute a cross section. It prints one line
-per stage, with the time each took: the version; that the two element tables and the settings file
-are the files this package shipped, by their checksums, and pass the checks a run puts them through
-([The element tables](parameters.md), [The run settings](settings.md)); that both Fortran programs
+per stage, with the time each took: the version; that the element tables and the five shipped
+methods are the files this package shipped, by their checksums, and pass the checks a run puts them
+through ([The element tables](parameters.md), [Methods](methods.md)); that both Fortran programs
 are present, are the files that were built for this package, and were built from this package's
 Fortran sources with the recorded compiler flags (the folder `fortran` beside `mobcal` holds the
 programs and a `build.json` that records the compiler, the flags, the commit and a checksum of each

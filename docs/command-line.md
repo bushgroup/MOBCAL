@@ -53,8 +53,8 @@ Run calculations in parallel, one process per run.
 usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
                   [--workers N] [--split W|auto] [--mode {in-order,balanced,throughput}]
                   [--dealing {static,claimed}] [--parameters PATH|NAME] [--out DIR]
-                  [--skip-done] [--scratch {delete,zip,keep}] [--settings PATH]
-                  [--temperature T] [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
+                  [--skip-done] [--scratch {delete,zip,keep}] [--temperature T]
+                  [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
@@ -75,7 +75,6 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
 
 The temperature and the five sampling counts the 2012 programs compiled in. Without these, every run uses its method's values: the 2012 values (temperature 301 K, imp 1000, itn 10, inp 40, inum 250000, inor 30), or under 2000-he, 298 K and imp 25.
 
-- `--settings PATH`: A settings file (TOML) for every run, which replaces the method's settings; a key it leaves out keeps the 2012 value.
 - `--temperature T`: The buffer gas temperature in kelvin, 301 K in 2012 and 298 K in 2000. It sets the trajectory method's velocity grid and the conversion of each cross section to a mobility.
 - `--imp N`: Trajectories per block of the trajectory method, one block for each velocity point in each cycle.
 - `--itn N`: Cycles of the trajectory method, each an independent estimate of the collision integral, whose standard deviation the output reports.
@@ -120,14 +119,14 @@ usage: mobcal methods-text [-h] PATH [PATH ...]
 Write the element table and the settings the program reads into a directory, for running the program there by hand.
 
 ```
-usage: mobcal render-parameters [-h] [--parameters PATH|NAME] [--settings PATH]
+usage: mobcal render-parameters [-h] [--method KEY|PATH] [--parameters PATH|NAME]
                                 GAS [DIR]
 ```
 
 - `GAS`: The gas whose table is written: he or n2.
 - `DIR`: Where to write parameters.tab and settings.tab. Default: the current directory.
-- `--parameters PATH|NAME`: Write this TOML file, or this shipped table by name (2012 (He, N2), 2000 (He)), instead of the gas's default table.
-- `--settings PATH`: Write this settings file instead of the 2012 values.
+- `--method KEY|PATH`: Write this method's table and settings, a shipped method by its key or a method file by its path; it must be a method for the gas. Default: the gas's default table and the 2012 settings.
+- `--parameters PATH|NAME`: Write this TOML file, or this shipped table by name (2012 (He, N2), 2000 (He)), instead of the method's or the gas's default table.
 
 ## mobcal import
 

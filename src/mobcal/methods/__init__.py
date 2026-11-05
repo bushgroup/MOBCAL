@@ -1,9 +1,10 @@
 """The methods: everything a calculation depends on but its input, in one file.
 
 A method is the gas, the element table, the random number generator and the six run settings
-(``mobcal.settings``), and may carry a seed. It is a TOML file (``load``, ``save``), and five
-ship beside this module, pinned like the element tables (``SHA256``, ``verify``), each known by
-its file's stem:
+(``mobcal.settings``), and may carry a seed and a description. It is a JSON file,
+``NAME.method.json`` (``load``, ``save``), and five ship beside this module, pinned like the
+element tables (``SHA256``, ``verify``), each known by its key, the file's name without
+``.method.json``:
 
     2012-he, 2012-n2              the calculation of the 2012 release: its tables and settings
                                   under RANLUX, which reproduces the 2012 outputs at the 2012 seed
@@ -13,36 +14,41 @@ its file's stem:
     2000-he                       the Jarrold group's 2000 helium release: its table, 298 K and
                                   ``imp`` 25, under RANLUX; it has no nitrogen form
 
-A method file of one's own follows the same format, ``format = 1``:
+A method file of one's own follows the same format, ``mobcal-method`` version 1, one JSON
+object whose keys ``save`` writes in this order (``KEYS``):
 
-    format = 1
-    name = "My method"          1 to 60 characters, shown in the window and recorded by runs
-    gas = "he"                  he or n2
-    parameters = "2012"         a shipped set's name, or a table:
-                                [parameters] path = "...", sha256 = "..."
-    generator = "philox"        philox or ranlux
-    temperature = 301           the six settings; a key left out takes the 2012 value
-    imp = 1000  ...
-    seed = 5013489              optional: the first seed of a run made from the method
+    "format": "mobcal-method", "version": 1
+    "name": "My method"            1 to 60 characters, shown in the window and recorded by runs
+    "description": "..."           optional: what the method is, the Method list's tooltip
+    "gas": "he"                    he or n2
+    "parameters": "2012"           a shipped set's name, or {"path": ..., "sha256": ...}
+    "generator": "philox"          philox or ranlux
+    "temperature": 301             the six settings; a key left out takes the 2012 value
+    "imp": 1000, ...
+    "seed": 5013489                optional: the first seed of a run made from the method
 
-The first five keys are required and an unknown key is refused by name. A table of one's own
-is named by its path, relative to the method file's folder unless absolute, and its SHA-256:
-loading the method refuses it, saying which, when the table has moved or changed.
+``format``, ``version``, ``name``, ``gas``, ``parameters`` and ``generator`` are required
+(``REQUIRED``), and an unknown key is refused by name; format and version are checked first, so
+a file of another version is refused for that alone. The text is read as the ion file is
+(``mobcal.io.strictjson``): a key twice in one object, or ``NaN`` or ``Infinity``, is refused.
+A table of one's own is named by its path, relative to the method file's folder unless
+absolute, and its SHA-256: loading the method refuses it, saying which, when the table has
+moved or changed. A file whose name ends in ``.toml`` is refused with a message that method
+files are JSON: the TOML method files of 2.0 were converted when the format changed, and no
+TOML reader is kept.
 
-``seed`` is optional, a positive integer up to ``infile.MAX_SEED``, and was added to format 1
-without a new format number: a file without it reads as before, so only a file that carries it
-needs this version. A run made from a method with a seed and no ``--seeds`` runs at it (n
-seeds count up from it in the window); ``--seeds`` wins when given. Without one, the first seed
-is the 2012 seed, 5013489 (``Method.first_seed``). The seed is not one of the fields
-``identify`` reads: a run at another seed is still a run of its method, and the shipped
-methods carry none.
+``seed`` and ``description`` are optional and are not fields ``identify`` reads: a run at
+another seed is still a run of its method, and a description says what a method is without
+being part of it. A run made from a method with a seed and no ``--seeds`` runs at it (n seeds
+count up from it in the window); ``--seeds`` wins when given. Without one, the first seed is
+the 2012 seed, 5013489 (``Method.first_seed``). The shipped methods carry a description and no
+seed.
 
 ``method.schema.json`` beside this module is the format as a JSON Schema (``SCHEMA``), for
-other tools, editors and the tests, never loaded here: it checks the document ``tomllib`` makes
-of a file, and its description lists the rules only ``load`` applies (the table on disk, the
-name against the list, a finite temperature, ``settings.MAX_POINTS``, the name's printable
-characters beyond the controls). The tests hold its keys, enums, bounds and defaults to the
-constants here.
+other tools, editors and the tests, never loaded here; its description lists the rules only
+``load`` applies (the table on disk, the name against the list, a finite temperature, counts
+written as integers, ``settings.MAX_POINTS``, the name's printable characters beyond the
+controls). The tests hold its keys, enums, bounds and defaults to the constants here.
 
 ``identify`` names the shipped method a run used from what the run used, so a run made with
 ``--rng ranlux`` and nothing else is a ``2012-he`` run whether or not ``--method 2012-he`` was
@@ -58,7 +64,7 @@ package's own paper exists it cites the version and the repository.
 
     from mobcal import methods
     m = methods.get("2000-he")          # or a path to a method file
-    methods.save(Path("mine.toml"), "Mine", "he", "2012", "philox", m.settings)
+    methods.save(Path("mine.method.json"), "Mine", "he", "2012", "philox", m.settings)
     print(methods.text(methods.read_records([Path("runs")])))
 """
 
@@ -68,12 +74,12 @@ import hashlib
 import json
 import re
 import statistics
-import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
 from mobcal import parameters, settings
+from mobcal.io import strictjson
 from mobcal.io.infile import GENERATORS, MAX_SEED
 from mobcal.settings import DEFAULTS, Settings
 
@@ -83,19 +89,23 @@ DEFAULT = "2012-philox-he"
 CUSTOM = "custom"
 REPOSITORY = "https://github.com/bushgroup/MOBCAL"
 RECORD_JSON = "record.json"
+SUFFIX = ".method.json"  # a method file's name: KEY.method.json shipped, NAME.method.json saved
 
 # The shipped method files as committed (LF line endings, see .gitattributes), by key.
 SHA256 = {
-    "2012-he": "9e0a49cfc07635673ce1ae175932f181b77de794ba0b31410a29a60bfeb94ef4",
-    "2012-n2": "6d6684ba2716913838f2a3de9da1c5b453e05858ec93a215931fdae48760c518",
-    "2012-philox-he": "17d80d64848b1dfefacf45a9c90c915b7b1e09c3e970aaa7e64aaf753ac7a1fe",
-    "2012-philox-n2": "e0fa6d07e7e045be7e812a31c3a60cc36ccebc98a61e7faed35aae68463fea17",
-    "2000-he": "d9682786413011e9688d1615e925a3e5604a45dcc66aa64c1e9a29a9c63f3781",
+    "2012-he": "2b1994b764ec8dbdc4c8dd7bcae800877483be9c1f444326258be762d5a9116a",
+    "2012-n2": "cfa8b8ad3ceb5a0711ada5ec735f8d4d8288943dd5116293c34fd438ac26fd30",
+    "2012-philox-he": "203d7513d6f5745382c7fa689639bf64137690bf83ed94eeddd9613b5238195d",
+    "2012-philox-n2": "b86f8a72865582f0a993b54a4fe60ce6596fb25c87341b944549160bc76518b5",
+    "2000-he": "413f29a63ee7711734d46e716159164ff00f9c71a5b15c58d0d342e71064ebad",
 }
 
-FORMATS = (1,)
-REQUIRED = ("format", "name", "gas", "parameters", "generator")
-KEYS = (*REQUIRED, *settings.NAMES, "seed")
+FORMAT = "mobcal-method"
+VERSIONS = (1,)  # the versions this reader takes
+VERSION = 1  # the version this writer writes
+REQUIRED = ("format", "version", "name", "gas", "parameters", "generator")
+KEYS = ("format", "version", "name", "description", "gas", "parameters", "generator",
+        *settings.NAMES, "seed")  # the order save writes them in
 DEFAULT_SEED = 5013489  # the 2012 seed, batch.DEFAULT_SEED; the first seed without a method seed
 MAX_NAME = 60
 
@@ -121,6 +131,7 @@ class Method:
     sha256: str  # of the method file
     shipped: bool = False
     seed: int | None = None  # the method's seed, when its file carries one
+    description: str | None = None  # what the method is, when its file says
 
     @property
     def first_seed(self) -> int:
@@ -130,12 +141,12 @@ class Method:
     @property
     def key(self) -> str:
         """What a run's record carries: a shipped method's key, or a file's name."""
-        return self.path.stem if self.shipped else self.name
+        return stem(self.path) if self.shipped else self.name
 
     @property
     def ref(self) -> str:
         """What finds the method again (``get``): a shipped method's key, or the file's path."""
-        return self.path.stem if self.shipped else str(self.path)
+        return stem(self.path) if self.shipped else str(self.path)
 
     @property
     def title(self) -> str:
@@ -173,6 +184,23 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def stem(path: Path | str) -> str:
+    """A method file's name without ``.method.json``: a shipped method's key."""
+    name = Path(path).name
+    return name[:-len(SUFFIX)] if name.lower().endswith(SUFFIX) else Path(path).stem
+
+
+def file_name(path: Path | str) -> Path:
+    """``path`` named as a method file, ``NAME.method.json``: unchanged when it is one, its
+    ``.json`` made ``.method.json``, or the suffix added."""
+    path = Path(path)
+    if path.name.lower().endswith(SUFFIX):
+        return path
+    if path.suffix.lower() == ".json":
+        return path.with_name(path.name[:-len(".json")] + SUFFIX)
+    return path.with_name(path.name + SUFFIX)
+
+
 def _check_name(name: object, where: str) -> str:
     if not isinstance(name, str) or not 1 <= len(name.strip()) <= MAX_NAME \
             or name != name.strip() or not name.isprintable():
@@ -185,14 +213,33 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     """Read and check a method file. A table of one's own must be where the file says, with
     the SHA-256 it says. Raises MethodError naming the file and the key."""
     path = Path(path)
+    if path.suffix.lower() == ".toml":
+        raise MethodError(f"{path}: a TOML method file, which this version of MOBCAL does not "
+                          f"read; a method file is JSON, NAME{SUFFIX} (the guide's Methods page "
+                          "gives the format)")
     try:
         data = path.read_bytes()
     except OSError as e:
         raise MethodError(f"{path}: cannot read: {e.strerror or e}") from None
     try:
-        doc = tomllib.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
-        raise MethodError(f"{path}: not a TOML file: {e}") from None
+        doc = strictjson.loads(data.decode("utf-8-sig"))
+    except UnicodeDecodeError as e:
+        raise MethodError(f"{path}: not UTF-8 text: {e}") from None
+    except strictjson.StrictJSONError as e:
+        raise MethodError(f"{path}: {e}") from None
+    if not isinstance(doc, dict):
+        raise MethodError(f"{path}: not a method file: the file must be one JSON object")
+    # format and version first, so that a file of another version is refused for that alone
+    for k in ("format", "version"):
+        if k not in doc:
+            raise MethodError(f"{path}: no {k}; a method file begins "
+                              f'"format": "{FORMAT}", "version": {VERSION}')
+    if doc["format"] != FORMAT:
+        raise MethodError(f"{path}: format is {doc['format']!r}; this reader reads {FORMAT!r}")
+    version = doc["version"]
+    if type(version) is not int or version not in VERSIONS:
+        raise MethodError(f"{path}: version is {version!r}; this version of MOBCAL reads "
+                          f"version {', '.join(map(str, VERSIONS))} of {FORMAT}")
     unknown = [k for k in doc if k not in KEYS]
     if unknown:
         raise MethodError(f"{path}: unknown key {unknown[0]!r}; the keys are "
@@ -201,30 +248,29 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     if missing:
         raise MethodError(f"{path}: no {missing[0]}; a method file needs "
                           + ", ".join(REQUIRED))
-    fmt = doc["format"]
-    if type(fmt) is not int or fmt not in FORMATS:
-        raise MethodError(f"{path}: format is {fmt!r}; this version of mobcal reads format "
-                          + ", ".join(map(str, FORMATS)))
     name = _check_name(doc["name"], str(path))
+    description = doc.get("description")
+    if "description" in doc and not isinstance(description, str):
+        raise MethodError(f"{path}: description must be a string, not {description!r}")
     gas = doc["gas"]
-    if gas not in parameters.SETS:
+    if not isinstance(gas, str) or gas not in parameters.SETS:
         raise MethodError(f"{path}: gas is {gas!r}; the gases are " + ", ".join(parameters.SETS))
     generator = doc["generator"]
-    if generator not in GENERATORS:
+    if not isinstance(generator, str) or generator not in GENERATORS:
         raise MethodError(f"{path}: generator is {generator!r}; the generators are "
                           + ", ".join(GENERATORS))
     set_name, table, table_sha = _table(doc["parameters"], gas, path)
     try:
-        st = settings.resolve(None, **{k: doc[k] for k in settings.NAMES if k in doc})
+        st = settings.resolve(**{k: doc[k] for k in settings.NAMES if k in doc})
     except settings.SettingsError as e:
         raise MethodError(f"{path}: {e}") from None
-    st = Settings(**st.values())  # a method's settings are its own, from no settings file
+    st = Settings(**st.values())  # a method's settings are its own, none given singly
     seed = doc.get("seed")
     if seed is not None and (type(seed) is not int or not 1 <= seed <= MAX_SEED):
         raise MethodError(f"{path}: seed is {seed!r}; a seed is a positive integer up to "
                           f"{MAX_SEED}")
     return Method(name, gas, set_name, table, table_sha, generator, st, path,
-                  hashlib.sha256(data).hexdigest(), shipped, seed)
+                  hashlib.sha256(data).hexdigest(), shipped, seed, description)
 
 
 def _table(value: object, gas: str, path: Path) -> tuple[str | None, Path | None, str | None]:
@@ -256,44 +302,51 @@ def _table(value: object, gas: str, path: Path) -> tuple[str | None, Path | None
     return None, table, value["sha256"]
 
 
-def _toml_string(s: str) -> str:
-    return json.dumps(s, ensure_ascii=False)  # a JSON string is a TOML basic string
+def dumps(doc: dict) -> str:
+    """A method document as ``save`` writes it: two-space indent, one key per line, the keys
+    in ``KEYS`` order, non-ASCII kept, a final newline."""
+    ordered = {k: doc[k] for k in KEYS if k in doc}
+    return json.dumps(ordered, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
 def save(path: Path | str, name: str, gas: str, table: str | Path, generator: str,
-         st: Settings, seed: int | None = None) -> Method:
+         st: Settings, seed: int | None = None, description: str | None = None) -> Method:
     """Write a method file with every key, a table of one's own by its absolute path and its
-    SHA-256 now, and ``seed`` when one is given, and return it as ``load`` reads it back.
-    ``table`` is a shipped set's name or a path. Raises MethodError."""
-    path = Path(path)
+    SHA-256 now, and ``seed`` and ``description`` when they are given, and return it as
+    ``load`` reads it back. ``table`` is a shipped set's name or a path. The file is named
+    ``NAME.method.json`` (``file_name``), whatever ``path`` ends in. Raises MethodError."""
+    path = file_name(path)
     _check_name(name, str(path))
-    lines = ["format = 1", f"name = {_toml_string(name)}", f"gas = {_toml_string(gas)}"]
+    doc: dict = {"format": FORMAT, "version": VERSION, "name": name}
+    if description:
+        doc["description"] = description
+    doc["gas"] = gas
     if isinstance(table, str) and table in parameters.SETS.get(gas, {}):
-        lines.append(f"parameters = {_toml_string(table)}")
-        tail = []
+        doc["parameters"] = table
     else:
         t = Path(table).resolve()
         try:
             sha = _sha256(t)
         except OSError as e:
             raise MethodError(f"{t}: cannot read: {e.strerror or e}") from None
-        tail = ["", "[parameters]", f"path = {_toml_string(t.as_posix())}",
-                f"sha256 = {_toml_string(sha)}"]
-    lines.append(f"generator = {_toml_string(generator)}")
-    lines.append(f"temperature = {st.temperature:g}" if st.temperature == int(st.temperature)
-                 else f"temperature = {st.temperature!r}")
-    lines += [f"{k} = {getattr(st, k)}" for k in settings.COUNTS]
+        doc["parameters"] = {"path": t.as_posix(), "sha256": sha}
+    doc["generator"] = generator
+    temperature = st.temperature
+    doc["temperature"] = int(temperature) if temperature.is_integer() \
+        and abs(temperature) < 2 ** 53 else temperature
+    for k in settings.COUNTS:
+        doc[k] = getattr(st, k)
     if seed is not None:
-        lines.append(f"seed = {seed}")
+        doc["seed"] = seed
     try:
-        path.write_text("\n".join(lines + tail) + "\n", encoding="utf-8", newline="\n")
+        path.write_text(dumps(doc), encoding="utf-8", newline="\n")
     except OSError as e:
         raise MethodError(f"{path}: cannot write: {e.strerror or e}") from None
     return load(path)
 
 
 def shipped_path(key: str) -> Path:
-    return METHODS_DIR / f"{key}.toml"
+    return METHODS_DIR / f"{key}{SUFFIX}"
 
 
 METHODS = {key: load(shipped_path(key), shipped=True) for key in SHA256}
@@ -305,7 +358,7 @@ def get(ref: str | Path) -> Method:
     if isinstance(ref, str) and ref in METHODS:
         return METHODS[ref]
     p = Path(ref)
-    if p.suffix.lower() != ".toml" and not p.exists():
+    if p.suffix.lower() not in (".json", ".toml") and not p.exists():
         raise MethodError(f"no method is named {str(ref)!r}; the methods are "
                           + ", ".join(METHODS) + ", or a method file's path")
     return load(p)
@@ -326,7 +379,7 @@ def verify(methods_dir: Path = METHODS_DIR) -> list[str]:
     not loading, or named twice. Empty means they are the committed files."""
     problems, names = [], set()
     for key, want in SHA256.items():
-        p = methods_dir / f"{key}.toml"
+        p = methods_dir / f"{key}{SUFFIX}"
         if not p.is_file():
             problems.append(f"{p.name}: missing")
             continue
@@ -343,6 +396,9 @@ def verify(methods_dir: Path = METHODS_DIR) -> list[str]:
             problems.append(f"{p.name}: names a table by path; a shipped method names a set")
         if m.seed is not None:
             problems.append(f"{p.name}: carries a seed; a shipped method carries none")
+        if not m.description:
+            problems.append(f"{p.name}: carries no description; a shipped method says what "
+                            "it is")
         if m.name in names:
             problems.append(f"{p.name}: the name {m.name!r} is another shipped method's")
         names.add(m.name)
