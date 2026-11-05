@@ -82,9 +82,9 @@ def test_reference_runs_completed():
 
 
 # The SUMMARY the helium binary wrote for Choline.mfj doubled into two identical coordinate
-# sets (this workstation, MSYS2 gfortran 16.2.0, the recorded flags, seed 5013489, 2026-10-21;
-# lab record, task 05). Set 1 repeats the single-set reference to every printed digit; set 2
-# continues the same random stream.
+# sets (an 80-thread Windows 11 workstation, MSYS2 gfortran 16.2.0, the recorded flags, seed
+# 5013489, 2026-10-21; lab record, task 05). Set 1 repeats the single-set reference to every
+# printed digit; set 2 continues the same random stream.
 _TWO_SETS = """\
  number of coordinate sets =    2
  number of atoms =  21
