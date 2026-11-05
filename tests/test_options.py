@@ -19,7 +19,7 @@ OPTIONS = {
     "inor": ("run", "inor"), "workers": ("run", "workers"), "split": ("run", "split"),
     "mode": ("run", "mode"),
     "dealing": ("run", "dealing"), "out": ("run", "out"), "charges": ("import", "charges"),
-    "net_charge": ("import", "net_charge"),
+    "net_charge": ("import", "net_charge"), "result_ion": ("run", "result_ion"),
 }
 
 

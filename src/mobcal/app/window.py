@@ -383,7 +383,15 @@ class MainWindow(QMainWindow):
         choose.clicked.connect(self._choose_folder)
         lay.addWidget(self.out_edit, 1)
         lay.addWidget(choose)
-        return box
+        self.keep_ion = QCheckBox("Keep the ion in each result file")
+        self.keep_ion.setChecked(True)
+        set_tip("result_ion", self.keep_ion)
+        outer = QWidget()
+        v = QVBoxLayout(outer)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(box)
+        v.addWidget(self.keep_ion)
+        return outer
 
     def _choose_folder(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "Results folder", self.out_edit.text())
@@ -677,7 +685,8 @@ class MainWindow(QMainWindow):
                      seeds=seeds(self.seeds_spin.value(), self.method_seed or DEFAULT_SEED),
                      parameters=self.table_value(),
                      generator=self.generator_combo.currentData(),
-                     settings=self.form_settings(), split=split, workers=workers)
+                     settings=self.form_settings(), split=split, workers=workers,
+                     result_ion="embed" if self.keep_ion.isChecked() else "reference")
 
     def update_estimate(self) -> None:
         self.inputs.set_gas(self.gas)

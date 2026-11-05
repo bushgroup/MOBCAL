@@ -7,7 +7,8 @@
                [--rng philox|ranlux] [--parameters PATH|NAME]
                [--workers N] [--split W|auto] [--mode in-order|balanced|throughput]
                [--dealing static|claimed] [--out DIR]
-               [--skip-done] [--scratch delete|zip|keep] [--temperature T]
+               [--skip-done] [--scratch delete|zip|keep] [--result-ion embed|reference]
+               [--temperature T]
                [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
     mobcal clean DIR [DIR ...] [--scratch delete|zip] [--apply]
     mobcal methods-text PATH [PATH ...]
@@ -56,6 +57,8 @@ the table of each gas asked for (both by default, which must agree), as a run st
 ``--scratch`` says what a split run that succeeds keeps of its workers' files
 (``mobcal.run.SCRATCH_MODES``); ``clean`` applies the same rule to finished split runs already
 on disk, a dry run unless ``--apply`` (``mobcal.clean``).
+``--result-ion`` says whether each run's ``NAME.result.json`` embeds the ion document or
+names the file alone (``mobcal.run.RESULT_ION_MODES``, docs/result-file.md).
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories or folders named (``mobcal.methods.text``).
 ``render-parameters`` writes ``parameters.tab`` and ``settings.tab`` into a directory, as the
@@ -80,7 +83,16 @@ from pathlib import Path
 from mobcal import ROOT, __version__, estimate, fortran, methods, options, parameters, settings
 from mobcal.batch import AUTO, CLASH, DEFAULT_SEED, DONE, Batch, BatchError, prior
 from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, GENERATORS
-from mobcal.run import DEFAULT_RNG, DEFAULT_SCRATCH, SCRATCH_MODES, Job, Result, run_many
+from mobcal.run import (
+    DEFAULT_RESULT_ION,
+    DEFAULT_RNG,
+    DEFAULT_SCRATCH,
+    RESULT_ION_MODES,
+    SCRATCH_MODES,
+    Job,
+    Result,
+    run_many,
+)
 
 DEFAULT_OUT = Path("runs")
 
@@ -189,6 +201,8 @@ def parser() -> argparse.ArgumentParser:
                         "the combining step there. Keep leaves every file. A run that fails or "
                         "is stopped keeps every file whatever this says. delete, zip or keep. "
                         f"Default: {DEFAULT_SCRATCH}.")
+    r.add_argument("--result-ion", choices=RESULT_ION_MODES, default=DEFAULT_RESULT_ION,
+                   help=options.cli_help("result_ion", DEFAULT_RESULT_ION))
     s = r.add_argument_group(
         "run settings", "The temperature and the five sampling counts the 2012 programs "
         "compiled in. Without these, every run uses its method's values: the 2012 values ("
@@ -536,7 +550,8 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
         batch = Batch(tuple(inputs), args.out, method.ref,
                       seeds=None if args.seeds is None else tuple(args.seeds),
                       parameters=args.parameters, generator=args.rng, settings=st,
-                      split=args.split, workers=args.workers, dealing=args.dealing)
+                      split=args.split, workers=args.workers, dealing=args.dealing,
+                      result_ion=args.result_ion)
         batch.jobs()
     except (BatchError, ValueError) as e:
         raise UsageError(str(e)) from None

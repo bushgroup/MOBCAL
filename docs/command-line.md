@@ -53,8 +53,9 @@ Run calculations in parallel, one process per run.
 usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ranlux}]
                   [--workers N] [--split W|auto] [--mode {in-order,balanced,throughput}]
                   [--dealing {static,claimed}] [--parameters PATH|NAME] [--out DIR]
-                  [--skip-done] [--scratch {delete,zip,keep}] [--temperature T]
-                  [--imp N] [--itn N] [--inp N] [--inum N] [--inor N]
+                  [--skip-done] [--scratch {delete,zip,keep}]
+                  [--result-ion {embed,reference}] [--temperature T] [--imp N] [--itn N]
+                  [--inp N] [--inum N] [--inor N]
                   INPUT [INPUT ...]
 ```
 
@@ -70,6 +71,7 @@ usage: mobcal run [-h] [--method KEY|PATH] [--seeds N[,N...]] [--rng {philox,ran
 - `--out DIR`: The folder for a study: each batch adds its run directories here, and summary.csv and summary.json are rewritten to cover every run it holds. Default: runs/.
 - `--skip-done`: Leave out the runs the output folder already holds complete.
 - `--scratch {delete,zip,keep}`: What a divided run that succeeds keeps of the files its processes wrote. Delete removes the folder of each process, the claim files and the block files, after writing what only those folders held into the run's record.json. Zip does the same but packs the block files into blocks.zip, which unpacked into the run's folder lets the program redo the combining step there. Keep leaves every file. A run that fails or is stopped keeps every file whatever this says. delete, zip or keep. Default: delete.
+- `--result-ion {embed,reference}`: Whether each run's result file, NAME.result.json, carries the ion's geometries and charges or names the ion file by its name and SHA-256 alone, to keep result files small when the geometries are kept elsewhere. The method is in every result file either way. embed, which carries the ion, or reference. Default: embed.
 
 ### Run settings
 

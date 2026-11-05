@@ -166,6 +166,19 @@ def test_the_form_makes_the_batch_the_command_line_makes(window, tmp_path):
     assert b.jobs() == by_cli.jobs() and b.title() == "MOBCAL 2000 (He)"
 
 
+
+def test_keep_the_ion_sets_the_result_files_ion_as_the_command_line_does(window):
+    w = window
+    w.inputs.add_paths([CHOLINE])
+    assert w.keep_ion.isChecked() and w.form_batch().result_ion == "embed"
+    assert w.keep_ion.toolTip() == tip(options.tooltip("result_ion"))
+    w.keep_ion.setChecked(False)
+    b = w.form_batch()
+    by_cli = cli.batch_from_args(cli.parser().parse_args(
+        ["run", str(CHOLINE), "--result-ion", "reference", "--out", w.out_edit.text()]))
+    assert b.result_ion == by_cli.result_ion == "reference"
+    assert {j.result_ion for j in b.jobs()} == {"reference"}
+
 # --- method files -------------------------------------------------------------------------
 
 def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtbot, tmp_path):

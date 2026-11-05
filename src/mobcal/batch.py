@@ -39,7 +39,7 @@ from pathlib import Path
 
 from mobcal import estimate, fortran, methods, parameters, settings
 from mobcal.io.infile import DEALINGS, DEFAULT_DEALING, MAX_SEED
-from mobcal.run import RECORD_JSON, Job, cores
+from mobcal.run import DEFAULT_RESULT_ION, RECORD_JSON, RESULT_ION_MODES, Job, cores
 from mobcal.settings import Settings, Source
 
 FORMAT = 3
@@ -68,6 +68,9 @@ class Batch:
     workers: int | None = None  # runs in flight; None: the allocation's, or the cores
     skip_done: bool = False  # leave out, when the batch starts, runs the folder holds complete
     remaining: tuple[str, ...] | None = None  # run labels left, once paused; None: every run
+    # whether each result file embeds the ion document or names the file alone; not a field
+    # of the calculation. The queue file carries it as an extra key, read as embed when absent.
+    result_ion: str = DEFAULT_RESULT_ION
     # the method, read once when the batch is made
     loaded: methods.Method = field(default=None, init=False, compare=False, repr=False)
 
@@ -95,6 +98,9 @@ class Batch:
                              f"{self.split!r}")
         if self.dealing is not None and self.dealing not in DEALINGS:
             raise BatchError(f"dealing must be one of {DEALINGS} or None, not {self.dealing!r}")
+        if self.result_ion not in RESULT_ION_MODES:
+            raise BatchError(f"result_ion must be one of {RESULT_ION_MODES}, not "
+                             f"{self.result_ion!r}")
 
     # --- what the runs use ---------------------------------------------------------------
 
@@ -136,7 +142,8 @@ class Batch:
         gas, gen, st, table = (self.resolved_gas, self.resolved_generator,
                                self.resolved_settings, self.table())
         return [Job(p, gas, s, self.out_dir, parameters=table, generator=gen, settings=st,
-                    dealing=self.dealing or DEFAULT_DEALING, method_from=self.loaded)
+                    dealing=self.dealing or DEFAULT_DEALING, method_from=self.loaded,
+                    result_ion=self.result_ion)
                 for p in self.inputs for s in self.seeds]
 
     def to_run(self) -> list[Job]:
@@ -196,7 +203,7 @@ class Batch:
                 "generator": self.generator,
                 "settings": None if st is None else st.values(),
                 "split": self.split, "dealing": self.dealing, "workers": self.workers,
-                "skip_done": self.skip_done,
+                "skip_done": self.skip_done, "result_ion": self.result_ion,
                 "remaining": None if self.remaining is None else list(self.remaining)}
 
     @classmethod
@@ -223,7 +230,8 @@ def from_entry(doc: dict) -> list[Batch]:
                       seeds=tuple(doc["seeds"]), parameters=doc.get("parameters"),
                       generator=doc.get("generator"), settings=st,
                       split=doc.get("split", AUTO), dealing=doc.get("dealing"),
-                      workers=doc.get("workers"), skip_done=bool(doc.get("skip_done", False)))
+                      workers=doc.get("workers"), skip_done=bool(doc.get("skip_done", False)),
+                      result_ion=doc.get("result_ion", DEFAULT_RESULT_ION))
         if fmt == 3:
             return [Batch(method=doc["method"], gas=doc.get("gas"),
                           remaining=doc.get("remaining"), **common)]

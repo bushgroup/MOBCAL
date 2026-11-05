@@ -135,7 +135,9 @@ holding a copy of the input, the `mobcal.in` the program read, the element table
 records the program and its build, the input and its hash, the seed and the generator, the
 element table and its hash, the settings and where they came from, the method they make (a
 shipped method's key, a method file's name with its path and hash, or `custom`), the times and
-the result.
+the result. Beside it, `NAME.result.json` is the run's result file, written to be read without
+MOBCAL: both inputs, the gas, the temperature and the seed, how the run ended, and every value
+the program reported, each with its unit ([The result file](docs/result-file.md)).
 The directory of a run in one process is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the

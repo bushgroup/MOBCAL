@@ -152,6 +152,13 @@ table when it is not the gas's 2012 table, and each setting that differs from 20
 (`choline-he-5013486-ranlux-lj2000-t298-imp25`), never for the method, so the same calculation
 lands in the same directory whichever way it was asked for.
 
+To carry a run's method outside its directory, use the run's result file, `NAME.result.json`
+beside `record.json` ([The result file](result-file.md)). It holds the method as a method
+document whatever the run was made from: a shipped method's file, a method file of one's own, or,
+for a run made `custom`, the method its gas, table, generator and settings make, with the method
+it was made from and the values that differ. Written to a file, that document is a method that
+makes the run's calculation again.
+
 Runs made before methods carried their gas recorded `current`, `2012` or `2000`. These are read
 as `2012-philox-he` or `2012-philox-n2`, as `2012-he` or `2012-n2`, and as `2000-he`, by the gas
 of the run, so a folder holding runs from both versions gives one methods paragraph. A queue the

@@ -125,6 +125,14 @@ folder, complete, the window asks whether to skip them or run them again. It ref
 whose name another input's run directory already carries, since that run would be overwritten;
 rename the input or choose another folder.
 
+Each run directory holds the run's result file, `NAME.result.json`, which carries both inputs
+and every value the program reported ([The result file](result-file.md)). *Keep the ion in each
+result file*, below the folder, is checked by default, and each result file then carries the
+ion's geometries and charges. To keep result files small when the geometries are kept
+elsewhere, as for thousands of frames of a molecular dynamics trajectory, uncheck it, and each
+result file names the ion file by its name and SHA-256 alone. A batch keeps the choice it was
+added with, in the queue and across launches.
+
 ## Running, the queue and stopping
 
 Every batch control is a button in the Queue box: Add batch, a second button that starts, pauses

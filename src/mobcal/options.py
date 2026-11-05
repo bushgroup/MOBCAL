@@ -162,6 +162,13 @@ SHARED = {
         cli="An .xyz file needs it; for an output it must agree with the charge the output was "
             "computed at.",
         window="An .xyz file does not carry it, so give it here."),
+    "result_ion": Description(
+        "Whether each run's result file, NAME.result.json, carries the ion's geometries and "
+        "charges or names the ion file by its name and SHA-256 alone, to keep result files "
+        "small when the geometries are kept elsewhere. The method is in every result file "
+        "either way.",
+        cli="embed, which carries the ion, or reference.",
+        window="Checked, each result file carries the ion."),
     "methods_text": Description(
         "A methods paragraph for the completed runs, written from their records: the program "
         "and version, method, gas, element table, temperature, trajectory counts, generator "

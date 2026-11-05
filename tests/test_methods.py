@@ -1076,3 +1076,25 @@ def test_the_methods_text_names_the_charges_when_every_run_records_them(tmp_path
     run_many([Job(write_input(tmp_path / "a.mfj", "ok"), "he", 1, out)], 1,
              launcher=launcher).write(out)
     assert "partial charges" not in methods.text(methods.read_records([out]))
+
+
+# --- the result file's ion: embedded or named, from the command line and the queue file ---------
+
+def test_result_ion_travels_from_the_command_line_and_the_queue_file(tmp_path):
+    default = from_cli(tmp_path, str(CHOLINE))
+    ref = from_cli(tmp_path, str(CHOLINE), "--result-ion", "reference")
+    assert default.result_ion == "embed" and ref.result_ion == "reference"
+    assert {j.result_ion for j in ref.jobs()} == {"reference"}
+    assert {j.result_ion for j in default.jobs()} == {"embed"}
+    assert ref.jobs() == default.jobs()  # not a field of the calculation
+    path = batch.save([ref, default], tmp_path / "queue.json")
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert [b["result_ion"] for b in doc["batches"]] == ["reference", "embed"]
+    assert batch.load(path) == ([ref, default], [])
+    del doc["batches"][0]["result_ion"]  # a queue file written before the key: embed
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert batch.load(path)[0][0].result_ion == "embed"
+    with pytest.raises(BatchError, match="result_ion"):
+        Batch((CHOLINE,), tmp_path, result_ion="maybe")
+    with pytest.raises(SystemExit):
+        from_cli(tmp_path, str(CHOLINE), "--result-ion", "maybe")
