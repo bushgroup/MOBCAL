@@ -175,30 +175,65 @@ def main() -> int:
     if split is not None and split[1] > 0:
         tm = tm / split[0]  # a worker's partial sum, which is not a result
     pa, ehs = tm + 5.5, tm + 8
+
+    def e(x: float) -> str:  # the program's 1pe11.4
+        return f"{x:11.4E}"
+
+    def inv(cs: float) -> float:  # an inverse mobility that follows the cross section
+        return 18.4 * cs
+
+    def mean_inv(values: list[float]) -> float:  # the AVGE row's: 1 / (mean mobility)
+        return len(values) / sum(1 / inv(v) for v in values)
+
+    # Every SUMMARY line the program prints, in its formats (605-636 one set, 622-634 several),
+    # in the order the program prints them, the charge-distribution lines excepted: the program
+    # gates those on tmmob, which is zero where they would print.
+    trajectory = ["", " mobility calculation by MOBIL2 (trajectory method)", "",
+                  " trajectory parameters",
+                  f" sw1 ={e(5e-5)}       sw2 ={e(5e-3)}",
+                  f" dtsf1 ={e(0.5)}     dtsf2 ={e(0.1)}", "",
+                  f" number of complete cycles (itn) ={settings.itn:6d}",
+                  f" number of velocity points (inp) ={settings.inp:6d}",
+                  f" number of random points (imp) ={settings.imp:6d}",
+                  f" total number of points ={settings.itn * settings.inp * settings.imp:7d}"]
     lines += ["", "", "", " SUMMARY", "", " program version = junkn.f",
               f" input file name = {inp:<30}", f" input file label = {label:<30}",
-              f" temperature = {settings.temperature:.4E}", seed_line]
+              f" temperature ={e(settings.temperature)}", seed_line]
     if mode == "ok":
+        lines.append(f" structural asymmetry parameter ={e(1.2982)}")
         if gas == "he":
-            lines += ["", " mobility calculation by MOBIL4 (HS scattering)",
-                      f" average PA cross section = {pa:.4E}",
-                      f" average EHS cross section = {ehs:.4E}"]
-        lines += ["", " mobility calculation by MOBIL2 (trajectory method)",
-                  f" average TM cross section = {tm:.4E}",
-                  " standard deviation (percent) = 9.2000E-01",
-                  " number of failed trajectories =   3"]
+            lines += ["", " mobility calculation by MOBIL4 (HS scattering)", "",
+                      f" number of Monte Carlo trajectories ={settings.inum:7d}",
+                      f" maximum number of reflections encountered ={4:3d}", "",
+                      f" inverse average PA mobility ={e(inv(pa))}",
+                      f" average PA cross section ={e(pa)}", "",
+                      f" inverse average EHS mobility ={e(inv(ehs))}",
+                      f" average EHS cross section ={e(ehs)}"]
+        lines += trajectory + [
+            "", f" inverse average (second order) TM mobility ={e(inv(tm))}",
+            f" average TM cross section ={e(tm)}",
+            f" standard deviation (percent) ={e(0.92)}",
+            f" number of failed trajectories ={3:4d}"]
     else:  # sets N
         n = sets
+        pas, ehss, tms = ([x + i for i in range(1, n + 1)] for x in (pa, ehs, tm))
+        asym = [1.2982 + i / 1e4 for i in range(1, n + 1)]
         if gas == "he":
-            lines += ["", "    set     PA CS       PA MOB^-1      EHSS CS      EHSS MOB^-1"
-                          "    ASYMP"]
-            lines += [f" {i:5d}   {pa + i:11.4E}   {1.0:11.4E}   {ehs + i:11.4E}   {1.0:11.4E}"
-                      f"   {1.0:8.4f}" for i in range(1, n + 1)]
-            lines += ["", f"   AVGE  {pa + (n + 1) / 2:11.4E}   {1.0:11.4E}   "
-                          f"{ehs + (n + 1) / 2:11.4E}   {1.0:11.4E}   {1.0:8.4f}"]
-        lines += ["", "    set     TM CS       TM MOB^-1"]
-        lines += [f" {i:5d}   {tm + i:11.4E}   {1.0:11.4E}" for i in range(1, n + 1)]
-        lines += ["", f"   AVGE  {tm + (n + 1) / 2:11.4E}   {1.0:11.4E}"]
+            lines += ["", " mobility calculation by MOBIL4 (HS scattering)", "",
+                      f" number of Monte Carlo trajectories ={settings.inum:7d}", "",
+                      f" minimum and maximum number of reflections ={3:3d}  {4:3d}", "", "",
+                      "    set     PA CS       PA MOB^-1      EHSS CS      EHSS MOB^-1"
+                      "    ASYMP"]
+            lines += [f" {i:5d}   {p:11.4E}   {inv(p):11.4E}   {h:11.4E}   {inv(h):11.4E}"
+                      f"   {a:8.4f}"
+                      for i, p, h, a in zip(range(1, n + 1), pas, ehss, asym, strict=True)]
+            lines += ["", f"   AVGE  {sum(pas) / n:11.4E}   {mean_inv(pas):11.4E}   "
+                          f"{sum(ehss) / n:11.4E}   {mean_inv(ehss):11.4E}   "
+                          f"{sum(asym) / n:8.4f}"]
+        lines += trajectory + ["", f" total number of failed trajectories ={3:4d}", "", "",
+                               "    set     TM CS       TM MOB^-1"]
+        lines += [f" {i:5d}   {t:11.4E}   {inv(t):11.4E}" for i, t in enumerate(tms, 1)]
+        lines += ["", f"   AVGE  {sum(tms) / n:11.4E}   {mean_inv(tms):11.4E}"]
     return write(out, lines, 0)
 
 
