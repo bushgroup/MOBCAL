@@ -258,15 +258,18 @@ def compiler_version(gfortran: str) -> str:
     return proc.stdout.splitlines()[0].strip() if proc.stdout else ""
 
 
-# git from the window, or from a run, must not open a console window on Windows
-_NO_WINDOW = {"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" else {}
+# git started from the window, or during a run, as the driver starts the program
+# (run._POPEN_EXTRA): no console window on Windows, its own session elsewhere, so a terminal's
+# Ctrl+C reaches the driver and not a lookup it is waiting on
+_DETACHED = ({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt"
+             else {"start_new_session": True})
 
 
 def _git(root: Path, *args: str) -> str | None:
     try:
         git = os.environ.get("MOBCAL_GIT", "git")
         proc = subprocess.run([git, "-C", str(root), *args], capture_output=True, text=True,
-                              timeout=30, **_NO_WINDOW)
+                              timeout=30, **_DETACHED)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return proc.stdout if proc.returncode == 0 else None
