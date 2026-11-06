@@ -60,7 +60,9 @@ class Batch:
     method: str = methods.DEFAULT  # a shipped method's key or a method file's path
     gas: str | None = None  # None: the method's
     seeds: tuple[int, ...] | None = None  # None: the method's first seed (Method.first_seed)
-    parameters: str | None = None  # a shipped set's name or a file; None: the method's
+    # a shipped set's name, a TOML file, or a table already read (the window's, from a method
+    # of one's own); None: the method's
+    parameters: str | parameters.ParameterSet | None = None
     generator: str | None = None  # None: the method's
     settings: Settings | None = None  # None: the method's
     split: int | str | None = AUTO  # W, "auto" (mobcal.estimate.allocate), or None: serial
@@ -118,18 +120,25 @@ class Batch:
             return self.settings
         return settings.resolve(**self.loaded.overrides())
 
-    def table(self) -> Path | None:
-        """The element table file, None for the gas's default set. A method's own table goes
-        with its gas: the gas changed over it, the runs take that gas's default set."""
+    def table(self) -> Path | parameters.ParameterSet | None:
+        """The element table as a job takes it: None for the gas's default set, a file, or a
+        table a method carried. A method's own table goes with its gas: the gas changed over
+        it, the runs take that gas's set of the same name, or its default set."""
         gas, m = self.resolved_gas, self.loaded
+        if isinstance(self.parameters, parameters.ParameterSet):
+            if self.parameters.gas != gas:
+                raise BatchError(f"{self.parameters.where}: is a table for "
+                                 f"{parameters.GAS[self.parameters.gas]}, not "
+                                 f"{parameters.GAS[gas]}")
+            return self.parameters
         if self.parameters is not None:
             name: str | Path = self.parameters
         elif gas != m.gas:
-            name = m.parameters if m.parameters in parameters.SETS[gas] else parameters.DEFAULT
-        elif m.table is not None:
+            name = m.set_name if m.set_name in parameters.SETS[gas] else parameters.DEFAULT
+        elif m.set_name is None:
             return m.table
         else:
-            name = m.parameters
+            name = m.set_name
         if name == parameters.DEFAULT and self.parameters is None:
             return None
         try:
@@ -199,7 +208,9 @@ class Batch:
         st = self.settings
         return {"format": FORMAT, "inputs": [str(p) for p in self.inputs],
                 "out_dir": str(self.out_dir), "method": self.method, "gas": self.gas,
-                "seeds": list(self.seeds), "parameters": self.parameters,
+                "seeds": list(self.seeds),
+                "parameters": self.parameters.document()
+                if isinstance(self.parameters, parameters.ParameterSet) else self.parameters,
                 "generator": self.generator,
                 "settings": None if st is None else st.values(),
                 "split": self.split, "dealing": self.dealing, "workers": self.workers,
@@ -212,6 +223,16 @@ class Batch:
         if doc.get("format") != FORMAT:
             raise BatchError(f"batch format {doc.get('format')!r}; from_dict reads {FORMAT}")
         return from_entry(doc)[0]
+
+
+def _table(value: object) -> str | parameters.ParameterSet | None:
+    """A queue file's ``parameters``: a name or a path as written, or a table it holds whole."""
+    if isinstance(value, dict):
+        try:
+            return parameters.from_document(value, "the queued batch's element table")
+        except parameters.ParameterError as e:
+            raise BatchError(str(e)) from None
+    return value
 
 
 def from_entry(doc: dict) -> list[Batch]:
@@ -227,7 +248,7 @@ def from_entry(doc: dict) -> list[Batch]:
             given = {k: v for k, v in st.items() if v != getattr(settings.DEFAULTS, k)}
             st = Settings(**st, source=Source(overrides=given))
         common = dict(inputs=tuple(doc["inputs"]), out_dir=Path(doc["out_dir"]),
-                      seeds=tuple(doc["seeds"]), parameters=doc.get("parameters"),
+                      seeds=tuple(doc["seeds"]), parameters=_table(doc.get("parameters")),
                       generator=doc.get("generator"), settings=st,
                       split=doc.get("split", AUTO), dealing=doc.get("dealing"),
                       workers=doc.get("workers"), skip_done=bool(doc.get("skip_done", False)),

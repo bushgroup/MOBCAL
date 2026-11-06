@@ -14,28 +14,33 @@ element tables (``SHA256``, ``verify``), each known by its key, the file's name 
     2000-he                       the Jarrold group's 2000 helium release: its table, 298 K and
                                   ``imp`` 25, under RANLUX; it has no nitrogen form
 
-A method file of one's own follows the same format, ``mobcal-method`` version 1, one JSON
-object whose keys ``save`` writes in this order (``KEYS``):
+A method file of one's own follows the same format, ``ccs-method`` version 1, one JSON object:
+a core any program's method has, and one block of what only MOBCAL's has, the keys in this
+order (``KEYS``, ``BLOCK``):
 
-    "format": "mobcal-method", "version": 1
+    "format": "ccs-method", "version": 1
     "name": "My method"            1 to 60 characters, shown in the window and recorded by runs
     "description": "..."           optional: what the method is, the Method list's tooltip
-    "gas": "he"                    he or n2
-    "parameters": "2012"           a shipped set's name, or {"path": ..., "sha256": ...}
-    "generator": "philox"          philox or ranlux
-    "temperature": 301             the six settings; a key left out takes the 2012 value
-    "imp": 1000, ...
+    "gas": "He"                    by formula, He or N2
+    "temperature": {"value": 301, "unit": "K"}
     "seed": 5013489                optional: the first seed of a run made from the method
+    "mobcal": {
+      "generator": "philox"        philox or ranlux
+      "imp": 1000, "itn": 10, "inp": 40, "inum": 250000, "inor": 30
+      "parameters": {...}          the element table, whole (mobcal.parameters.from_document)
+    }
 
-``format``, ``version``, ``name``, ``gas``, ``parameters`` and ``generator`` are required
-(``REQUIRED``), and an unknown key is refused by name; format and version are checked first, so
-a file of another version is refused for that alone. The text is read as the ion file is
+Every key but ``description`` and ``seed`` is required, in the core and in the block, and an
+unknown key is refused by name; format and version are checked first, so a file of another
+version is refused for that alone, and a file under the format's name before 2.1.0
+(``mobcal-method``, never released) is refused with that said. A method whose block is another
+program's is refused by that program's name. The text is read as the ion file is
 (``mobcal.io.strictjson``): a key twice in one object, or ``NaN`` or ``Infinity``, is refused.
-A table of one's own is named by its path, relative to the method file's folder unless
-absolute, and its SHA-256: loading the method refuses it, saying which, when the table has
-moved or changed. A file whose name ends in ``.toml`` is refused with a message that method
-files are JSON: the TOML method files of 2.0 were converted when the format changed, and no
-TOML reader is kept.
+The element table is carried whole, shipped or one's own, with the SHA-256 of the TOML file it
+was taken from and of its rendered rows, so a method needs no other file to run: a shipped table
+is checked against its pinned file, and any table's rows against its ``rows_sha256``. A file
+whose name ends in ``.toml`` is refused with a message that method files are JSON: the TOML
+method files of 2.0 were converted when the format changed, and no TOML reader is kept.
 
 ``seed`` and ``description`` are optional and are not fields ``identify`` reads: a run at
 another seed is still a run of its method, and a description says what a method is without
@@ -46,9 +51,10 @@ seed.
 
 ``method.schema.json`` beside this module is the format as a JSON Schema (``SCHEMA``), for
 other tools, editors and the tests, never loaded here; its description lists the rules only
-``load`` applies (the table on disk, the name against the list, a finite temperature, counts
-written as integers, ``settings.MAX_POINTS``, the name's printable characters beyond the
-controls). The tests hold its keys, enums, bounds and defaults to the constants here.
+``load`` applies (the table's two hashes and its unique keys, the name against the list, a
+finite temperature, counts written as integers, ``settings.MAX_POINTS``, the name's printable
+characters beyond the controls). The tests hold its keys, enums and bounds to the constants
+here.
 
 ``identify`` names the shipped method a run used from what the run used, so a run made with
 ``--rng ranlux`` and nothing else is a ``2012-he`` run whether or not ``--method 2012-he`` was
@@ -65,6 +71,7 @@ package's own paper exists it cites the version and the repository.
     from mobcal import methods
     m = methods.get("2000-he")          # or a path to a method file
     methods.save(Path("mine.method.json"), "Mine", "he", "2012", "philox", m.settings)
+    methods.save(Path("own.method.json"), "Own", "he", Path("my.toml"), "philox", m.settings)
     print(methods.text(methods.read_records([Path("runs")])))
 """
 
@@ -93,19 +100,23 @@ SUFFIX = ".method.json"  # a method file's name: KEY.method.json shipped, NAME.m
 
 # The shipped method files as committed (LF line endings, see .gitattributes), by key.
 SHA256 = {
-    "2012-he": "2b1994b764ec8dbdc4c8dd7bcae800877483be9c1f444326258be762d5a9116a",
-    "2012-n2": "cfa8b8ad3ceb5a0711ada5ec735f8d4d8288943dd5116293c34fd438ac26fd30",
-    "2012-philox-he": "203d7513d6f5745382c7fa689639bf64137690bf83ed94eeddd9613b5238195d",
-    "2012-philox-n2": "b86f8a72865582f0a993b54a4fe60ce6596fb25c87341b944549160bc76518b5",
-    "2000-he": "413f29a63ee7711734d46e716159164ff00f9c71a5b15c58d0d342e71064ebad",
+    "2012-he": "8895d44d884f433427572c41633990afc3acf1d843de65fc1782c60aee505a8f",
+    "2012-n2": "de021afd66ccf4e9d3de4f152a95e35cfdcc5df4cedd77e2c0c3594731197a76",
+    "2012-philox-he": "80d1cfc6f6c00f2e06a95126591364e901eff83e8f7442900775cfdd05413aaf",
+    "2012-philox-n2": "44e74ab1cad7b2c9e8441aad234fe880db562fd03fb68bfcdbd7a0613c5287d2",
+    "2000-he": "8acd5a7ba89ff39ee21c60dfd449aecff7b76bbb9aa5b574663b973f8adbd26f",
 }
 
-FORMAT = "mobcal-method"
+FORMAT = "ccs-method"
+FORMERLY = "mobcal-method"  # the format's name before 2.1.0, in development versions only
 VERSIONS = (1,)  # the versions this reader takes
 VERSION = 1  # the version this writer writes
-REQUIRED = ("format", "version", "name", "gas", "parameters", "generator")
-KEYS = ("format", "version", "name", "description", "gas", "parameters", "generator",
-        *settings.NAMES, "seed")  # the order save writes them in
+BLOCK_NAME = "mobcal"  # the block of what only MOBCAL's method has
+KEYS = ("format", "version", "name", "description", "gas", "temperature", "seed",
+        BLOCK_NAME)  # the core and the block, in the order save writes them
+REQUIRED = ("format", "version", "name", "gas", "temperature", BLOCK_NAME)
+BLOCK = ("generator", *settings.COUNTS, "parameters")  # every one required, in this order
+TEMPERATURE_UNIT = "K"
 DEFAULT_SEED = 5013489  # the 2012 seed, batch.DEFAULT_SEED; the first seed without a method seed
 MAX_NAME = 60
 
@@ -121,10 +132,8 @@ class MethodError(ValueError):
 @dataclass(frozen=True)
 class Method:
     name: str  # what the window's list and the record say
-    gas: str
-    parameters: str | None  # a shipped set's name (mobcal.parameters.SETS), or None ...
-    table: Path | None  # ... for a table of one's own, by path
-    table_sha256: str | None  # and the SHA-256 the method file pins it at
+    gas: str  # the package's spelling, he | n2
+    table: parameters.ParameterSet  # the element table the method carries
     generator: str
     settings: Settings
     path: Path  # the method file
@@ -152,28 +161,35 @@ class Method:
     def title(self) -> str:
         return self.name
 
-    def table_path(self) -> Path | None:
-        """The element table file, None for the gas's default set."""
-        if self.table is not None:
-            return self.table
-        return None if self.parameters == parameters.DEFAULT else \
-            parameters.shipped_path(self.gas, self.parameters)
+    @property
+    def set_name(self) -> str | None:
+        """The shipped set the table is (``2012``, ``2000``), None for a table of one's own."""
+        return self.table.set_name
+
+    @property
+    def table_sha256(self) -> str:
+        """The SHA-256 of the TOML file the table was taken from."""
+        return self.table.sha256
+
+    def job_table(self) -> Path | parameters.ParameterSet | None:
+        """The table as a job takes it (``mobcal.run.Job.parameters``): None for the gas's
+        default set, a shipped set's file, or the table itself for one of one's own."""
+        if self.set_name == parameters.DEFAULT:
+            return None
+        if self.set_name is not None:
+            return parameters.shipped_path(self.gas, self.set_name)
+        return self.table
 
     def overrides(self) -> dict[str, float | int]:
         """The settings that differ from the 2012 values, as ``--temperature`` and the count
         options would give them."""
         return {k: v for k, v in self.settings.values().items() if v != getattr(DEFAULTS, k)}
 
-    def matches(self, gas: str, set_name: str | None, table_sha256: str | None,
-                generator: str, st: Settings) -> bool:
-        """Whether a run of these fields is a run of this method. ``set_name`` is the shipped
-        set the run's table is by its pin, ``table_sha256`` the table file's hash."""
-        if (gas, generator) != (self.gas, self.generator) or st.values() != \
-                self.settings.values():
-            return False
-        if self.table is None:
-            return set_name == self.parameters
-        return table_sha256 == self.table_sha256
+    def matches(self, gas: str, table_sha256: str | None, generator: str, st: Settings) -> bool:
+        """Whether a run of these fields is a run of this method: the same gas, generator and
+        settings, and a table taken from the same TOML file (its SHA-256)."""
+        return (gas, generator, table_sha256) == (self.gas, self.generator, self.table_sha256) \
+            and st.values() == self.settings.values()
 
     def record(self) -> dict | None:
         """``record.json``'s ``method_file``: a file of one's own, by path and SHA-256."""
@@ -210,8 +226,7 @@ def _check_name(name: object, where: str) -> str:
 
 
 def load(path: Path | str, shipped: bool = False) -> Method:
-    """Read and check a method file. A table of one's own must be where the file says, with
-    the SHA-256 it says. Raises MethodError naming the file and the key."""
+    """Read and check a method file. Raises MethodError naming the file and the key."""
     path = Path(path)
     if path.suffix.lower() == ".toml":
         raise MethodError(f"{path}: a TOML method file, which this version of MOBCAL does not "
@@ -230,12 +245,21 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     return from_document(doc, path, hashlib.sha256(data).hexdigest(), shipped)
 
 
-def from_document(doc: object, path: Path | str, sha256: str, shipped: bool = False,
-                  find_table: bool = True) -> Method:
+def _keys(d: dict, allowed: tuple[str, ...], required: tuple[str, ...], where: str,
+          what: str) -> None:
+    unknown = [k for k in d if k not in allowed]
+    if unknown:
+        raise MethodError(f"{where}: unknown key {unknown[0]!r}; the keys of {what} are "
+                          + ", ".join(allowed))
+    missing = [k for k in required if k not in d]
+    if missing:
+        raise MethodError(f"{where}: no {missing[0]}; {what} needs " + ", ".join(required))
+
+
+def from_document(doc: object, path: Path | str, sha256: str, shipped: bool = False) -> Method:
     """A method document checked as ``load`` checks a file, ``path`` and ``sha256`` the file's
-    it stands for. With ``find_table`` False, a table of one's own is taken by its path and
-    SHA-256 as written, not looked for: a document embedded in a result file names a table on
-    the computer that ran it. Raises MethodError naming ``path`` and the key."""
+    it stands for (a document embedded in a result file is read by the same rules). Raises
+    MethodError naming ``path`` and the key."""
     path = Path(path)
     if not isinstance(doc, dict):
         raise MethodError(f"{path}: not a method file: the file must be one JSON object")
@@ -244,125 +268,121 @@ def from_document(doc: object, path: Path | str, sha256: str, shipped: bool = Fa
         if k not in doc:
             raise MethodError(f"{path}: no {k}; a method file begins "
                               f'"format": "{FORMAT}", "version": {VERSION}')
+    if doc["format"] == FORMERLY:
+        raise MethodError(f"{path}: format is {FORMERLY!r}, the name this format had in "
+                          "development versions before 2.1.0, which no release wrote; a method "
+                          "file now carries its element table, so load a shipped method, set "
+                          "the fields again and save it")
     if doc["format"] != FORMAT:
         raise MethodError(f"{path}: format is {doc['format']!r}; this reader reads {FORMAT!r}")
     version = doc["version"]
     if type(version) is not int or version not in VERSIONS:
         raise MethodError(f"{path}: version is {version!r}; this version of MOBCAL reads "
                           f"version {', '.join(map(str, VERSIONS))} of {FORMAT}")
-    unknown = [k for k in doc if k not in KEYS]
-    if unknown:
-        raise MethodError(f"{path}: unknown key {unknown[0]!r}; the keys are "
-                          + ", ".join(KEYS))
-    missing = [k for k in REQUIRED if k not in doc]
-    if missing:
-        raise MethodError(f"{path}: no {missing[0]}; a method file needs "
-                          + ", ".join(REQUIRED))
+    others = [k for k in doc if k not in KEYS and isinstance(doc[k], dict)]
+    if BLOCK_NAME not in doc and len(others) == 1:
+        raise MethodError(f"{path}: a method for {others[0]}, whose block it carries; MOBCAL "
+                          f"runs a method with a {BLOCK_NAME!r} block")
+    _keys(doc, KEYS, REQUIRED, str(path), "a method file")
     name = _check_name(doc["name"], str(path))
     description = doc.get("description")
     if "description" in doc and not isinstance(description, str):
         raise MethodError(f"{path}: description must be a string, not {description!r}")
-    gas = doc["gas"]
-    if not isinstance(gas, str) or gas not in parameters.SETS:
-        raise MethodError(f"{path}: gas is {gas!r}; the gases are " + ", ".join(parameters.SETS))
-    generator = doc["generator"]
+    formula = doc["gas"]
+    gas = next((g for g, f in parameters.GAS.items() if f == formula), None)
+    if gas is None:
+        raise MethodError(f"{path}: gas is {formula!r}; the gases are "
+                          + ", ".join(parameters.GAS.values()))
+    t = doc["temperature"]
+    if not isinstance(t, dict) or sorted(t) != ["unit", "value"]:
+        raise MethodError(f'{path}: temperature must be {{"value": T, "unit": '
+                          f'"{TEMPERATURE_UNIT}"}}, not {t!r}')
+    if t["unit"] != TEMPERATURE_UNIT:
+        raise MethodError(f"{path}: temperature.unit is {t['unit']!r}; it is "
+                          f"{TEMPERATURE_UNIT!r}")
+    block = doc[BLOCK_NAME]
+    where = f"{path}: {BLOCK_NAME}"
+    if not isinstance(block, dict):
+        raise MethodError(f"{where} must be an object")
+    _keys(block, BLOCK, BLOCK, where, f"the {BLOCK_NAME} block")
+    generator = block["generator"]
     if not isinstance(generator, str) or generator not in GENERATORS:
-        raise MethodError(f"{path}: generator is {generator!r}; the generators are "
+        raise MethodError(f"{where}.generator is {generator!r}; the generators are "
                           + ", ".join(GENERATORS))
-    set_name, table, table_sha = _table(doc["parameters"], gas, path, find_table)
     try:
-        st = settings.resolve(**{k: doc[k] for k in settings.NAMES if k in doc})
+        table = parameters.from_document(block["parameters"], f"{where}.parameters", gas=gas)
+    except parameters.ParameterError as e:
+        raise MethodError(str(e)) from None
+    try:
+        st = settings.resolve(temperature=t["value"],
+                              **{k: block[k] for k in settings.COUNTS})
     except settings.SettingsError as e:
         raise MethodError(f"{path}: {e}") from None
     st = Settings(**st.values())  # a method's settings are its own, none given singly
     seed = doc.get("seed")
-    if seed is not None and (type(seed) is not int or not 1 <= seed <= MAX_SEED):
+    if "seed" in doc and (type(seed) is not int or not 1 <= seed <= MAX_SEED):
         raise MethodError(f"{path}: seed is {seed!r}; a seed is a positive integer up to "
                           f"{MAX_SEED}")
-    return Method(name, gas, set_name, table, table_sha, generator, st, path, sha256, shipped,
-                  seed, description)
+    return Method(name, gas, table, generator, st, path, sha256, shipped, seed, description)
 
 
-def _table(value: object, gas: str, path: Path,
-           find: bool = True) -> tuple[str | None, Path | None, str | None]:
-    if isinstance(value, str):
-        if value not in parameters.SETS[gas]:
-            raise MethodError(f"{path}: parameters is {value!r}; the shipped "
-                              f"{parameters.GAS[gas]} tables are "
-                              + ", ".join(parameters.SETS[gas]))
-        return value, None, None
-    if not isinstance(value, dict) or sorted(value) != ["path", "sha256"] \
-            or not all(isinstance(v, str) for v in value.values()):
-        raise MethodError(f"{path}: parameters must be a shipped table's name or a table with "
-                          "path and sha256")
-    if not re.fullmatch(r"[0-9a-f]{64}", value["sha256"]):
-        raise MethodError(f"{path}: parameters.sha256 must be 64 lowercase hex digits")
-    table = Path(value["path"])
-    if not table.is_absolute():
-        table = path.resolve().parent / table
-    if not find:
-        return None, table, value["sha256"]
-    if not table.is_file():
-        raise MethodError(f"{path}: its element table {table} is not there; it has moved or "
-                          "been deleted")
-    if _sha256(table) != value["sha256"]:
-        raise MethodError(f"{path}: its element table {table} has changed since the method was "
-                          "saved (its SHA-256 differs)")
+def table_for(table: str | Path | parameters.ParameterSet, gas: str) -> parameters.ParameterSet:
+    """A table as a method carries it: a shipped set's name, a TOML file's path, or the table
+    itself. Raises MethodError."""
+    if isinstance(table, parameters.ParameterSet):
+        if table.gas != gas:
+            raise MethodError(f"{table.where}: is a table for {parameters.GAS[table.gas]}, not "
+                              f"{parameters.GAS[gas]}")
+        return table
     try:
-        parameters.load(table, gas=gas)
+        return parameters.load(parameters.path_for(table, gas), gas=gas)
     except parameters.ParameterError as e:
-        raise MethodError(f"{path}: its element table: {e}") from None
-    return None, table, value["sha256"]
+        raise MethodError(str(e)) from None
+
+
+def plain_number(v: float) -> float | int:
+    """A temperature as a document writes it: an integer when it is one."""
+    return int(v) if float(v).is_integer() and abs(v) < 2 ** 53 else v
 
 
 def dumps(doc: dict) -> str:
-    """A method document as ``save`` writes it: two-space indent, one key per line, the keys
-    in ``KEYS`` order, non-ASCII kept, a final newline."""
+    """A method document as ``save`` writes it: two-space indent, one key per line, the core's
+    keys in ``KEYS`` order and the block's in ``BLOCK`` order, non-ASCII kept, a final
+    newline. The table keeps its own order (``ParameterSet.document``)."""
     ordered = {k: doc[k] for k in KEYS if k in doc}
+    block = ordered.get(BLOCK_NAME)
+    if isinstance(block, dict):
+        ordered[BLOCK_NAME] = {k: block[k] for k in BLOCK if k in block} \
+            | {k: v for k, v in block.items() if k not in BLOCK}
     return json.dumps(ordered, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
 
 
-def document(name: str, gas: str, table: str | Path, table_sha256: str | None, generator: str,
+def document(name: str, gas: str, table: parameters.ParameterSet, generator: str,
              st: Settings, seed: int | None = None, description: str | None = None) -> dict:
-    """A method document with every key in ``KEYS`` order, as ``save`` writes one: ``table`` a
-    shipped set's name, or a path written absolute beside ``table_sha256``; the temperature an
-    integer when it is one; ``seed`` and ``description`` only when given."""
+    """A method document with every key in order, as ``save`` writes one: the table whole,
+    the temperature an integer when it is one, ``seed`` and ``description`` only when given."""
     doc: dict = {"format": FORMAT, "version": VERSION, "name": name}
     if description:
         doc["description"] = description
-    doc["gas"] = gas
-    if isinstance(table, str) and table in parameters.SETS.get(gas, {}):
-        doc["parameters"] = table
-    else:
-        doc["parameters"] = {"path": Path(table).resolve().as_posix(), "sha256": table_sha256}
-    doc["generator"] = generator
-    temperature = st.temperature
-    doc["temperature"] = int(temperature) if temperature.is_integer() \
-        and abs(temperature) < 2 ** 53 else temperature
-    for k in settings.COUNTS:
-        doc[k] = getattr(st, k)
+    doc["gas"] = parameters.GAS[gas]
+    doc["temperature"] = {"value": plain_number(st.temperature), "unit": TEMPERATURE_UNIT}
     if seed is not None:
         doc["seed"] = seed
+    doc[BLOCK_NAME] = {"generator": generator, **{k: getattr(st, k) for k in settings.COUNTS},
+                       "parameters": table.document()}
     return doc
 
 
-def save(path: Path | str, name: str, gas: str, table: str | Path, generator: str,
-         st: Settings, seed: int | None = None, description: str | None = None) -> Method:
-    """Write a method file with every key, a table of one's own by its absolute path and its
-    SHA-256 now, and ``seed`` and ``description`` when they are given, and return it as
-    ``load`` reads it back. ``table`` is a shipped set's name or a path. The file is named
-    ``NAME.method.json`` (``file_name``), whatever ``path`` ends in. Raises MethodError."""
+def save(path: Path | str, name: str, gas: str, table: str | Path | parameters.ParameterSet,
+         generator: str, st: Settings, seed: int | None = None,
+         description: str | None = None) -> Method:
+    """Write a method file with every key, the table whole (a shipped set's name, a TOML
+    file's path, or a table already read), and ``seed`` and ``description`` when they are
+    given, and return it as ``load`` reads it back. The file is named ``NAME.method.json``
+    (``file_name``), whatever ``path`` ends in. Raises MethodError."""
     path = file_name(path)
     _check_name(name, str(path))
-    if isinstance(table, str) and table in parameters.SETS.get(gas, {}):
-        sha = None
-    else:
-        table = Path(table).resolve()
-        try:
-            sha = _sha256(table)
-        except OSError as e:
-            raise MethodError(f"{table}: cannot read: {e.strerror or e}") from None
-    doc = document(name, gas, table, sha, generator, st, seed, description)
+    doc = document(name, gas, table_for(table, gas), generator, st, seed, description)
     try:
         path.write_text(dumps(doc), encoding="utf-8", newline="\n")
     except OSError as e:
@@ -389,19 +409,19 @@ def get(ref: str | Path) -> Method:
     return load(p)
 
 
-def identify(gas: str, set_name: str | None, generator: str, st: Settings) -> str:
-    """The shipped method whose every field these are, else ``custom``. ``set_name`` is the
-    shipped set the run's table is by its pin (``ParameterSet.set_name``), None for any other
-    file."""
+def identify(gas: str, table_sha256: str | None, generator: str, st: Settings) -> str:
+    """The shipped method whose every field these are, else ``custom``. ``table_sha256`` is
+    the SHA-256 of the run's table file (a shipped set's pin for a shipped set)."""
     for m in METHODS.values():
-        if m.matches(gas, set_name, None, generator, st):
+        if m.matches(gas, table_sha256, generator, st):
             return m.key
     return CUSTOM
 
 
 def verify(methods_dir: Path = METHODS_DIR) -> list[str]:
     """One line per problem with the shipped method files: missing, differing from their pins,
-    not loading, or named twice. Empty means they are the committed files."""
+    not loading (which checks each embedded table against its pinned TOML), carrying a table
+    of one's own, or named twice. Empty means they are the committed files."""
     problems, names = [], set()
     for key, want in SHA256.items():
         p = methods_dir / f"{key}{SUFFIX}"
@@ -417,8 +437,9 @@ def verify(methods_dir: Path = METHODS_DIR) -> list[str]:
         except MethodError as e:
             problems.append(str(e))
             continue
-        if m.table is not None:
-            problems.append(f"{p.name}: names a table by path; a shipped method names a set")
+        if m.set_name is None:
+            problems.append(f"{p.name}: carries a table of one's own; a shipped method carries "
+                            "a shipped set")
         if m.seed is not None:
             problems.append(f"{p.name}: carries a seed; a shipped method carries none")
         if not m.description:
@@ -504,9 +525,7 @@ def record_method(doc: dict) -> str:
     s = doc["settings"]
     st = Settings(**{k: s[k] for k in settings.NAMES})
     p = doc.get("parameters") or {}
-    set_name = next((n for n, f in parameters.SETS[gas].items()
-                     if p.get("sha256") == parameters.SHA256[f]), None)
-    return identify(gas, set_name, doc["mobcal_in"]["generator"], st)
+    return identify(gas, p.get("sha256"), doc["mobcal_in"]["generator"], st)
 
 
 def _cite(keys: Iterable[str], order: list[str]) -> str:

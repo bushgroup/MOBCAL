@@ -107,7 +107,7 @@ def test_a_mfj_input_is_embedded_as_the_ion_document_it_reads_as(tmp_path, valid
     job = Job(inp, "he", 7, tmp_path)
     run_one(job, launcher)
     entry = result(job)["inputs"]["ion"]
-    assert entry["format"] == "mobcal-ion" and entry["converted_from"] == "mfj"
+    assert entry["format"] == "ccs-ion" and entry["converted_from"] == "mfj"
     assert entry["embedded"] is True
     assert entry["file"] == {"name": "ok.mfj",
                              "sha256": hashlib.sha256(inp.read_bytes()).hexdigest()}
@@ -266,7 +266,7 @@ def reload(doc: dict, tmp_path: Path, name: str) -> methods.Method:
 
 
 def same_calculation(m: methods.Method, job: Job) -> bool:
-    return m.matches(job.gas, job.set_name, job.table_sha256, job.generator, job.settings)
+    return m.matches(job.gas, job.table_sha256, job.generator, job.settings)
 
 
 def test_a_shipped_method_embeds_its_file(tmp_path, validator):
@@ -287,7 +287,7 @@ def test_a_method_file_embeds_its_document(tmp_path, validator):
     m = methods.save(tmp_path / "mine", "Mine at 298.15 K", "he", "2000", "ranlux", st,
                      seed=42, description="ours")
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 42, tmp_path / "runs",
-              parameters=m.table_path(), generator="ranlux", settings=st, method_from=m)
+              parameters=m.job_table(), generator="ranlux", settings=st, method_from=m)
     run_one(job, launcher)
     doc = result(job)
     valid(validator, doc)
@@ -312,12 +312,13 @@ def test_a_custom_run_embeds_the_method_its_fields_make(tmp_path, validator):
     entry = doc["inputs"]["method"]
     assert entry["source"] == "custom" and entry["name"] == "custom" and entry["file"] is None
     assert entry["from"] == "2012-philox-he"
-    assert entry["overrides"] == {"temperature": 298, "imp": 25}
+    assert entry["overrides"] == {"temperature": {"value": 298, "unit": "K"},
+                                  "mobcal.imp": 25}
     assert entry["document"]["name"] == "Custom" and "seed" not in entry["document"]
     assert same_calculation(reload(entry["document"], tmp_path, "Again"), job)
 
 
-def test_a_custom_table_of_ones_own_is_named_by_path_and_sha256(tmp_path, validator):
+def test_a_custom_table_of_ones_own_is_carried_whole(tmp_path, validator):
     mine = tmp_path / "mine.toml"
     mine.write_bytes(parameters.default_path("he").read_bytes() + b"\n# a copy of my own\n")
     job = Job(write_input(tmp_path / "ok.mfj", "ok"), "he", 1, tmp_path / "runs",
@@ -327,9 +328,12 @@ def test_a_custom_table_of_ones_own_is_named_by_path_and_sha256(tmp_path, valida
     valid(validator, doc)
     entry = doc["inputs"]["method"]
     assert entry["source"] == "custom" and entry["from"] is None and entry["overrides"] == {}
-    assert entry["document"]["parameters"] == {
-        "path": mine.resolve().as_posix(), "sha256": hashlib.sha256(mine.read_bytes()).hexdigest()}
+    carried = entry["document"]["mobcal"]["parameters"]
+    assert carried == parameters.load(mine, gas="he").document() and "path" not in carried
+    assert carried["sha256"] == hashlib.sha256(mine.read_bytes()).hexdigest()
     assert doc["mobcal"]["parameters"]["shipped"] is False
+    assert same_calculation(reload(entry["document"], tmp_path, "Again"), job)
+    mine.unlink()  # the method needs the TOML no more
     assert same_calculation(reload(entry["document"], tmp_path, "Again"), job)
 
 
@@ -348,7 +352,7 @@ def test_the_schema_holds_the_writers_constants():
     assert d["ion_input"]["properties"]["format"]["const"] == ion.FORMAT
     assert d["method_input"]["properties"]["format"]["const"] == methods.FORMAT
     assert d["method_input"]["properties"]["overrides"]["propertyNames"]["enum"] == \
-        list(run._METHOD_KEYS)
+        list(run.OVERRIDE_KEYS)
     assert d["mobcal"]["properties"]["settings"]["required"] == list(settings.NAMES)
     assert s["$id"].endswith("/src/mobcal/io/result.schema.json")
     # the two relative references resolve to exactly the input schemas' $id

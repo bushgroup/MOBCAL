@@ -194,6 +194,9 @@ def with_columns(d):
 # (id, edit, message, the schema refuses it too)
 REFUSALS = [
     ("format", setter("format", "mobcal-ions"), r"^format: 'mobcal-ions'", True),
+    ("format before 2.1.0", setter("format", "mobcal-ion"),
+     r"^format: 'mobcal-ion', the name this format had in development versions before 2\.1\.0"
+     r".*change it to 'ccs-ion'", True),
     ("version 2", setter("version", 2), r"^version: 2; this version", True),
     ("version true", setter("version", True), r"^version: True", True),
     ("unknown key", setter("weights", [1.0]), r"^weights: not a field", True),
@@ -390,7 +393,7 @@ def test_export_refuses_an_element_a_table_lacks_and_a_bad_file(tmp_path, capsys
     assert cli.main(["export", str(src), "--gas", "n2"]) == 0
     assert Mfj.read(tmp_path / "p.mfj").sets[0][0].key == 31
     bad = tmp_path / "bad.ion.json"
-    bad.write_text('{"format": "mobcal-ion", "version": 2}', encoding="utf-8")
+    bad.write_text('{"format": "ccs-ion", "version": 2}', encoding="utf-8")
     assert cli.main(["export", str(bad)]) == 2
     assert "bad.ion.json: version: 2" in capsys.readouterr().err
     assert not (tmp_path / "bad.mfj").exists()

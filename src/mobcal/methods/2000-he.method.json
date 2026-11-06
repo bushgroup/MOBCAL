@@ -1,15 +1,124 @@
 {
-  "format": "mobcal-method",
+  "format": "ccs-method",
   "version": 1,
   "name": "MOBCAL 2000 (He)",
   "description": "The calculation of the Jarrold group's 2000 helium release: its element table at 298 K and 25 trajectories per block, with RANLUX. The 2000 release has no nitrogen form.",
-  "gas": "he",
-  "parameters": "2000",
-  "generator": "ranlux",
-  "temperature": 298,
-  "imp": 25,
-  "itn": 10,
-  "inp": 40,
-  "inum": 250000,
-  "inor": 30
+  "gas": "He",
+  "temperature": {
+    "value": 298,
+    "unit": "K"
+  },
+  "mobcal": {
+    "generator": "ranlux",
+    "imp": 25,
+    "itn": 10,
+    "inp": 40,
+    "inum": 250000,
+    "inor": 30,
+    "parameters": {
+      "format": 1,
+      "name": "MOBCAL 2000 helium",
+      "sha256": "441382ffc0f618d2358131f74ed4898312c4d1b21524faf08fb9c3eeaedb9940",
+      "rows_sha256": "57ebfaca184077d484a10788a5cb9fb695b67553c341455bb338992b6a614a9f",
+      "shipped": true,
+      "gas": "He",
+      "form": "pair",
+      "kinds": {
+        "mass": "double",
+        "epsilon": "double",
+        "sigma": "double",
+        "rhs": "double"
+      },
+      "element": [
+        {
+          "key": 1,
+          "symbol": "H",
+          "mass": "1.008d0",
+          "epsilon": "0.65d-03",
+          "sigma": "2.38d0",
+          "rhs": "2.2d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "epsilon an average of ab initio values; sigma fitted to the mobilities of C6H6 and other ions (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord; Mesleh et al. 1996)"
+        },
+        {
+          "key": 12,
+          "symbol": "C",
+          "mass": "12.01d0",
+          "epsilon": "1.34d-3",
+          "sigma": "3.043d0",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "fitted to the mobility of C60 (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord; Mesleh et al. 1996; hard-sphere radius, Shvartsburg and Jarrold 1996)"
+        },
+        {
+          "key": 14,
+          "symbol": "N",
+          "mass": "14.01d0",
+          "epsilon": "1.34d-3",
+          "sigma": "3.043d0",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "commented 'same as carbon': carbon's epsilon, sigma and hard-sphere radius (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        },
+        {
+          "key": 16,
+          "symbol": "O",
+          "mass": "16.00d0",
+          "epsilon": "1.34d-3",
+          "sigma": "3.043d0",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "commented 'same as carbon': carbon's epsilon, sigma and hard-sphere radius (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        },
+        {
+          "key": 23,
+          "symbol": "Na",
+          "mass": "22.99d0",
+          "epsilon": "0.0278d-3",
+          "sigma": "3.97d0/1.12246d0",
+          "rhs": "2.853d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "fitted to Viehland's Na+/He potential; hard-sphere radius fitted to the 300 K Na+ mobility (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        },
+        {
+          "key": 28,
+          "symbol": "Si",
+          "mass": "28.09d0",
+          "epsilon": "1.35d-3",
+          "sigma": "3.5d0",
+          "rhs": "2.95d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "fitted to the mobilities of small silicon clusters (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        },
+        {
+          "key": 32,
+          "symbol": "S",
+          "mass": "32.06d0",
+          "epsilon": "1.35d-3",
+          "sigma": "3.5d0",
+          "rhs": "3.5d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "commented 'same as silicon' (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        },
+        {
+          "key": 56,
+          "symbol": "Fe",
+          "mass": "55.85d0",
+          "epsilon": "1.35d-3",
+          "sigma": "3.5d0",
+          "rhs": "3.5d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "commented 'same as silicon' (bushgroup/MOBCAL-2000 v1.0, mobcal.f fcoord)"
+        }
+      ]
+    }
+  }
 }

@@ -250,9 +250,13 @@ def test_a_method_file_with_its_own_table_fills_the_table(window, tmp_path):
     f = tmp_path / "own.method.json"
     methods.save(f, "Own table", "he", table, "philox", win.settings.DEFAULTS)
     m = w.load_method(f)
-    assert m is not None and w.table_value() == str(table.resolve())
-    assert w.table_combo.currentText() == "mine_he.toml"
-    assert w.method_combo.currentText() == "Own table"
+    assert m is not None and w.table_value() == m.table and m.table.path is None
+    assert w.table_combo.currentText() == "my helium (in the method)"
+    table.unlink()  # the method carries the table: the file is not needed to save or run it
+    again = w.save_method(tmp_path / "again.method.json", "Own table again")
+    assert again.table.document() == m.table.document()
+    assert w.form_batch().table() == again.table
+    assert w.method_combo.currentText() == "Own table again"
     w.gas_combo.setCurrentIndex(w.gas_combo.findData("n2"))
     assert w.table_value() == "2012"  # a helium table does not follow the gas to nitrogen
     assert w.method_combo.currentText() == "MOBCAL 2012 with Philox (N2)"
@@ -1014,7 +1018,7 @@ def test_an_ion_file_runs_where_it_is_and_shows_its_charges(window, qtbot, tmp_p
     assert row.status == "ok" and w.results_table.item(0, 0).text() == "a"
     assert w.csv_text().splitlines()[1].startswith("a,")
     rec = json.loads((row.run_dir / "record.json").read_text(encoding="utf-8"))
-    assert rec["input"]["format"] == "mobcal-ion" and Path(rec["input"]["path"]) == a.resolve()
+    assert rec["input"]["format"] == "ccs-ion" and Path(rec["input"]["path"]) == a.resolve()
     assert not (w.out_dir / "imported").exists()
 
 
@@ -1032,7 +1036,7 @@ def test_an_ion_file_without_charges_blocks_nitrogen(window, qtbot, tmp_path):
 def test_a_nine_column_mfj_and_a_bad_ion_file_are_refused_saying_why(window, qtbot, tmp_path):
     w = window
     bad = tmp_path / "bad.ion.json"
-    bad.write_text('{"format": "mobcal-ion", "version": 2}\n', encoding="utf-8")
+    bad.write_text('{"format": "ccs-ion", "version": 2}\n', encoding="utf-8")
     add(qtbot, w, ION / "choline_mobcalmpi.mfj", bad)
     nine, two = w.inputs.items
     assert nine.state == "error" and "nine-column" in nine.error and "mobcal import" in nine.error

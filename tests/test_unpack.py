@@ -46,7 +46,7 @@ def again(job: Job, u: result.Unpacked) -> Job:
 
 
 def table(job: Job) -> parameters.ParameterSet:
-    return parameters.load(job.parameters_path, gas=job.gas)
+    return job.table()
 
 
 def same_job(new: Job, old: Job) -> None:
@@ -125,18 +125,25 @@ def test_a_custom_method_is_named_by_the_result(tmp_path):
     same_job(new, job)
 
 
-def test_a_table_of_ones_own_is_found_where_the_method_names_it(tmp_path):
+def test_a_table_of_ones_own_reruns_without_its_file(tmp_path):
+    """A result made under a table of one's own carries the table in its method: unpacked and
+    run again with the TOML file gone, it is the same calculation, in the same directory."""
     mine = tmp_path / "mine.toml"
-    mine.write_bytes(parameters.default_path("he").read_bytes() + b"\n# a copy of my own\n")
+    mine.write_bytes(parameters.shipped_path("he", "2000").read_bytes())
     inp = ion_file(tmp_path / "ok.ion.json", "ok")
-    job = ran(tmp_path, inp, "--parameters", str(mine))
+    job = ran(tmp_path, inp, "--parameters", str(mine), "--rng", "ranlux")
+    want = table(job)
+    mine.unlink()
     u = result.unpack(result.Result.read(job.result_path), tmp_path / "u")
-    assert u.staged is True and any(str(mine.resolve()) in n for n in u.notes)
-    same_job(again(job, u), dataclasses.replace(job, parameters=mine.resolve()))
-    # moved away, the staged input cannot be checked, and unpack says so
-    mine.rename(tmp_path / "moved.toml")
-    u = result.unpack(result.Result.read(job.result_path), tmp_path / "v")
-    assert u.staged is None and any("is not on this computer" in n for n in u.notes)
+    assert u.staged is True
+    new = again(job, u)
+    assert new.label == job.label and new.staged == job.staged
+    assert new.table().lines() == want.lines() and new.table_sha256 == job.table_sha256
+    before = json.loads((job.run_dir / "record.json").read_text(encoding="utf-8"))
+    rerun = run_one(dataclasses.replace(new, out_dir=tmp_path / "again"), launcher)
+    assert rerun.ok and rerun.cross_sections == before["cross_sections"]
+    assert (rerun.job.run_dir / "parameters.tab").read_bytes() == \
+        (job.run_dir / "parameters.tab").read_bytes()
 
 
 def test_a_divided_run_reruns_divided(tmp_path):
@@ -192,6 +199,12 @@ def edited(job: Job, tmp_path: Path, change) -> Path:
 
 @pytest.mark.parametrize("change, message", [
     (lambda d: d.update(format="mobcal-result"), "format is 'mobcal-result'"),
+    (lambda d: d.update(format="ims-result"), "format is 'ims-result': the file was written "
+                                              "by a development version before 2.1.0"),
+    (lambda d: d["inputs"]["method"]["document"].update(format="mobcal-method"),
+     "inputs.method.document: .*'mobcal-method', the name this format had"),
+    (lambda d: d["inputs"]["ion"]["document"].update(format="mobcal-ion"),
+     "inputs.ion.document: format: 'mobcal-ion', the name this format had"),
     (lambda d: d.update(version=2), "version is 2; this version of MOBCAL reads version 1"),
     (lambda d: d.pop("seed"), "has no 'seed'"),
     (lambda d: d.update(gas="Ar"), "gas is 'Ar'"),

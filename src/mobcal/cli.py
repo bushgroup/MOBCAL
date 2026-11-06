@@ -427,15 +427,17 @@ def main(argv: list[str] | None = None) -> int:
                         f"{parameters.GAS[args.gas]}")
                 st = m.settings
                 if table is None:
-                    table = m.table_path()
-            ps = parameters.load(parameters.path_for(table, args.gas), gas=args.gas)
+                    table = m.job_table()
+            ps = table if isinstance(table, parameters.ParameterSet) else \
+                parameters.load(parameters.path_for(table, args.gas), gas=args.gas)
             args.dir.mkdir(parents=True, exist_ok=True)
             out = ps.render(args.dir)
             out_s = st.render(args.dir)
         except (parameters.ParameterError, methods.MethodError, OSError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 2
-        print(f"wrote {out}: {ps.name}, {len(ps.elements)} elements, from {ps.path}")
+        print(f"wrote {out}: {ps.name}, {len(ps.elements)} elements, from "
+              + (str(ps.path) if ps.path is not None else f"the method {args.method}"))
         print(f"wrote {out_s}: " + ("the 2012 settings" if st.is_default else
                                     " ".join(f"{k}={v:g}" for k, v in st.values().items())))
         return 0

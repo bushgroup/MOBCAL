@@ -99,6 +99,7 @@ GASES = (("He", "he"), ("N2", "n2"))
 GENERATORS = (("Philox4x32-10", "philox"), ("RANLUX (the 2012 generator)", "ranlux"))
 OTHER_TABLE = "Other file…"
 METHOD_FILTER = f"Method (*{methods.SUFFIX})"
+IN_METHOD = "(in the method)"  # after the name of a table a method carried
 RESULT_COLUMNS = ("Ion", "Gas", "TM (Å²)", "PA (Å²)", "EHS (Å²)", "Status", "Time")
 CSV_HEADER = ("ion", "input", "gas", "TM", "PA", "EHS", "runs", "status", "seconds", "folder",
               "message")
@@ -109,6 +110,11 @@ TOGGLE = {IDLE: ("Start queue", "start_queue"), RUNNING: ("Pause queue", "pause_
           PAUSING: ("Pausing…", "pausing"), STOPPING: ("Pause queue", "pause_queue"),
           PAUSED: ("Resume queue", "resume_queue")}
 MARK = {RUNNING: "Running", PAUSING: "Pausing", STOPPING: "Stopping", PAUSED: "Paused"}
+
+
+def _table_key(t: parameters.ParameterSet) -> str:
+    """The Element table field's data for a table a method carried: no file names it."""
+    return f"method:{t.sha256}"
 
 
 def set_tip(key: str, *widgets: QWidget) -> None:
@@ -163,7 +169,8 @@ class MainWindow(QMainWindow):
         self.plan: estimate.Plan | None = None
         self.batch_started = 0.0
         self._from = methods.DEFAULT  # the method the fields were last filled from, by ref
-        self._other_table: tuple[Path, str] | None = None  # a table of one's own and its gas
+        # a table of one's own and its gas: a TOML file chosen, or a table a method carried
+        self._other_table: tuple[Path | parameters.ParameterSet, str] | None = None
         self.loaded: dict[str, methods.Method] = {}  # the method files in the list, by path
         self.dropped: list[str] = []  # remembered method files that no longer load, and why
         self._read_remembered_methods()
@@ -408,8 +415,14 @@ class MainWindow(QMainWindow):
         for n in parameters.names(self.gas):
             self.table_combo.addItem(f"{n} ({parameters.shipped(self.gas, n).name})", n)
         if self._other_table is not None and self._other_table[1] == self.gas:
-            self.table_combo.addItem(self._other_table[0].name, str(self._other_table[0]))
+            t = self._other_table[0]
+            if isinstance(t, parameters.ParameterSet):
+                self.table_combo.addItem(f"{t.name} {IN_METHOD}", _table_key(t))
+            else:
+                self.table_combo.addItem(t.name, str(t))
         self.table_combo.addItem(OTHER_TABLE, OTHER_TABLE)
+        if isinstance(keep, parameters.ParameterSet):
+            keep = _table_key(keep)
         i = self.table_combo.findData(str(keep) if keep is not None else parameters.DEFAULT)
         self.table_combo.setCurrentIndex(i if i >= 0 else 0)
 
@@ -543,9 +556,9 @@ class MainWindow(QMainWindow):
         self._filling = True
         try:
             self.gas_combo.setCurrentIndex(self.gas_combo.findData(m.gas))
-            if m.table is not None:
+            if m.set_name is None:
                 self._other_table = (m.table, m.gas)
-            self._fill_tables(m.table if m.table is not None else m.parameters)
+            self._fill_tables(m.table if m.set_name is None else m.set_name)
             self.generator_combo.setCurrentIndex(self.generator_combo.findData(m.generator))
             self.temperature.setValue(m.settings.temperature)
             for name, spin in self.counts.items():
@@ -601,9 +614,16 @@ class MainWindow(QMainWindow):
             self._fill_tables(self._other_table[0] if path else parameters.DEFAULT)
         self.fields_changed()
 
-    def table_value(self) -> str | None:
+    def table_value(self) -> str | parameters.ParameterSet | None:
+        """The table the field holds: a shipped set's name, a TOML file's path, or the table a
+        method carried; None when nothing is chosen."""
         v = self.table_combo.currentData()
-        return None if v in (None, OTHER_TABLE) else v
+        if v in (None, OTHER_TABLE):
+            return None
+        t = self._other_table[0] if self._other_table is not None else None
+        if isinstance(t, parameters.ParameterSet) and v == _table_key(t):
+            return t
+        return v
 
     def form_settings(self) -> Settings:
         values = {"temperature": self.temperature.value(),
@@ -620,17 +640,18 @@ class MainWindow(QMainWindow):
         except settings.SettingsError:
             return methods.CUSTOM
         gas, table = self.gas, self.table_value()
-        if table in parameters.names(gas):
-            set_name, sha = table, parameters.SHA256[parameters.SETS[gas][table]]
+        if isinstance(table, parameters.ParameterSet):
+            sha = table.sha256
+        elif table in parameters.names(gas):
+            sha = parameters.SHA256[parameters.SETS[gas][table]]
         else:
             try:
-                ps = parameters.load(table, gas=gas)
-                set_name, sha = ps.set_name, ps.sha256
+                sha = parameters.load(table, gas=gas).sha256
             except (parameters.ParameterError, TypeError):
                 return methods.CUSTOM
         for ref in (self._from, *methods.METHODS, *self.loaded):
             m = self.method(ref)
-            if m is not None and m.matches(gas, set_name, sha, gen, st):
+            if m is not None and m.matches(gas, sha, gen, st):
                 return ref
         return methods.CUSTOM
 

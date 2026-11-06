@@ -1,4 +1,5 @@
-"""The ion file, ``X.ion.json``: format ``mobcal-ion``, version 1.
+"""The ion file, ``X.ion.json``: format ``ccs-ion``, version 1 (``mobcal-ion`` before 2.1.0,
+in development versions only, which this reader refuses by that name).
 
 ``docs/ion-file.md`` is the specification and ``ion.schema.json`` beside this module its
 structure as a JSON Schema; this module reads, checks and writes the format with the standard
@@ -49,7 +50,8 @@ from mobcal import __version__, fortran, parameters
 from mobcal.io import mobcalmpi, strictjson
 from mobcal.io.mfj import FIELD_WIDTH, MAX_ATOMS, MAX_SETS, Atom, Mfj
 
-FORMAT = "mobcal-ion"
+FORMAT = "ccs-ion"
+FORMERLY = "mobcal-ion"  # the format's name before 2.1.0, in development versions only
 VERSIONS = (1,)  # the versions this reader takes
 VERSION = 1  # the version this writer writes
 SUFFIX = ".ion.json"
@@ -187,8 +189,9 @@ class Ion:
         if missing:
             counts = ", ".join(f"{s} ({self.symbols.count(s)} atom"
                                f"{'s' if self.symbols.count(s) != 1 else ''})" for s in missing)
-            raise IonError(f"{counts} not in the element table {table.name!r} "
-                           f"({table.path.name}), which holds {', '.join(keys)}")
+            where = f" ({table.path.name})" if table.path is not None else ""
+            raise IonError(f"{counts} not in the element table {table.name!r}{where}, which "
+                           f"holds {', '.join(keys)}")
         first = self.conformers[0].charges
         if table.gas == "n2" and (first is None or any(q is None for q in first)):
             n = self.atoms if first is None else sum(q is None for q in first)
@@ -421,6 +424,10 @@ def _check(data: object) -> Ion:
     for k in ("format", "version"):
         if k not in d:
             _fail(k, "missing")
+    if d["format"] == FORMERLY:
+        _fail("format", f"{FORMERLY!r}, the name this format had in development versions "
+              f"before 2.1.0, which no release wrote; change it to {FORMAT!r}, since nothing "
+              "else differs")
     if d["format"] != FORMAT:
         _fail("format", f"{d['format']!r}; this reader reads {FORMAT!r}")
     if isinstance(d["version"], bool) or d["version"] not in VERSIONS:

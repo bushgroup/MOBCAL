@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/result.schema.json",
-  "title": "ims-result, version 1, as MOBCAL writes it",
+  "title": "ccs-result, version 1, as MOBCAL writes it",
   "description": "One calculation of an ion's collision cross section: the program, both inputs, the gas, the temperature, the seed, how the run ended, the cross sections with their units, and a block of what only MOBCAL reports. The file is JSON, NAME.result.json, written into each run directory beside record.json. docs/result-file.md is the specification. The core keys (every top-level key but mobcal) are the format any ion-mobility program can fill; mobcal is this program's extension block. The embedded ion and method documents are checked here by $ref to the schemas of their formats, which the two relative references below resolve to by those schemas' $id; the rules those formats state beyond their schemas are checked by mobcal.io.ion and mobcal.methods when a document is read back, and are not repeated here. Every unit string is fixed per key in version 1.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "version", "status", "message", "software", "started", "finished",
                "seconds", "gas", "temperature", "seed", "inputs", "results", "mobcal"],
   "properties": {
-    "format": {"const": "ims-result"},
+    "format": {"const": "ccs-result"},
     "version": {"const": 1},
     "status": {
       "description": "How the run ended: ok when the program completed and printed its summary, failed when it did not, stopped when the user ended it.",
@@ -155,7 +155,7 @@
       "additionalProperties": false,
       "required": ["format", "file", "converted_from", "embedded", "document"],
       "properties": {
-        "format": {"const": "mobcal-ion"},
+        "format": {"const": "ccs-ion"},
         "file": {"$ref": "#/$defs/file"},
         "converted_from": {
           "description": "mfj when the file given was a .mfj, whose ion document is embedded; null for an ion file.",
@@ -176,7 +176,7 @@
       "required": ["format", "source", "name", "file", "from", "overrides", "embedded",
                    "document"],
       "properties": {
-        "format": {"const": "mobcal-method"},
+        "format": {"const": "ccs-method"},
         "source": {
           "description": "shipped: a method MOBCAL ships, by its key; file: a method file of one's own; custom: values given beside a method, or in the window, made a method of no file.",
           "enum": ["shipped", "file", "custom"]
@@ -194,10 +194,11 @@
           "type": ["string", "null"]
         },
         "overrides": {
-          "description": "For custom, each method-document key whose value differs from the from method's, with the run's value; empty otherwise.",
+          "description": "For custom, each key of the method document whose value differs from the from method's, with the run's value: the core's temperature, and the mobcal block's keys by dotted path (mobcal.imp); empty otherwise.",
           "type": "object",
-          "propertyNames": {"enum": ["parameters", "generator", "temperature", "imp", "itn",
-                                     "inp", "inum", "inor"]}
+          "propertyNames": {"enum": ["temperature", "mobcal.generator", "mobcal.imp",
+                                     "mobcal.itn", "mobcal.inp", "mobcal.inum", "mobcal.inor",
+                                     "mobcal.parameters"]}
         },
         "embedded": {"const": true},
         "document": {"$ref": "../methods/method.schema.json"}

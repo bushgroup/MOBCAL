@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/methods/method.schema.json",
-  "title": "MOBCAL method file, mobcal-method version 1",
-  "description": "A method: the buffer gas, the element table, the random number generator, the six run settings, an optional first seed and an optional description. The file is JSON, NAME.method.json, and this schema checks it as it stands. docs/methods.md is the specification. The rules that need more than the document are checked by mobcal.methods and listed on that page: a table of one's own must be at its path (a relative one read from the method file's folder) with the SHA-256 given and be a table for the method's gas; the name must differ from the shipped methods' and from every other method in the list; the temperature must be finite; the version, the five counts and the seed are written as integers (1000, not 1000.0 or 1e3, which this schema takes as integers); itn x inp x imp is at most 9,999,999; a key may appear only once; and the name is refused when it holds any character Python's str.isprintable rejects, of which this schema refuses only the controls.",
+  "title": "MOBCAL method file, ccs-method version 1",
+  "description": "A method: everything a calculation depends on but its input. The core (name, description, gas, temperature, seed) is what any program's method has; the mobcal block holds what MOBCAL's has: the random number generator, the five sampling counts and the element table, carried whole. The file is JSON, NAME.method.json, and this schema checks it as it stands. docs/methods.md is the specification. The rules that need more than the document's structure are checked by mobcal.methods and listed on that page: every number token of the table is spelled with its column's declared kind (a d exponent for double, none for single) and is greater than zero, and only the two expressions the 2012 source wrote hold an operator; the element keys are unique; the table's rows hash to its rows_sha256; shipped is true exactly when sha256 is the pin of one of the gas's shipped tables, and a shipped table equals that file field for field; the name must differ from the shipped methods' and from every other method in the list; the temperature must be finite; the version, the five counts, the seed and the element keys are written as integers (1000, not 1000.0 or 1e3, which this schema takes as integers); itn x inp x imp is at most 9,999,999; a key may appear only once; and the name is refused when it holds any character Python's str.isprintable rejects, of which this schema refuses only the controls.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "version", "name", "gas", "parameters", "generator"],
+  "required": ["format", "version", "name", "gas", "temperature", "mobcal"],
   "properties": {
-    "format": {"const": "mobcal-method"},
+    "format": {"const": "ccs-method"},
     "version": {"const": 1},
     "name": {
       "description": "What the Method list and the run record show: 1 to 60 printable characters, no space at either end.",
@@ -20,58 +20,144 @@
       "description": "What the method is, in a sentence or two: the Method list's tooltip. Not part of what identifies the calculation.",
       "type": "string"
     },
-    "gas": {"enum": ["he", "n2"]},
-    "parameters": {
-      "description": "The element table: a shipped table by name (2012 in either gas, 2000 in helium only), or a table of one's own by path and SHA-256.",
-      "oneOf": [
-        {"enum": ["2012", "2000"]},
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["path", "sha256"],
-          "properties": {
-            "path": {"type": "string", "minLength": 1},
-            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-          }
-        }
-      ]
-    },
-    "generator": {"enum": ["ranlux", "philox"]},
+    "gas": {"description": "The buffer gas, by formula.", "enum": ["He", "N2"]},
     "temperature": {
-      "description": "The buffer gas temperature in kelvin; 301 when left out.",
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "exclusiveMaximum": 1e300
-    },
-    "imp": {
-      "description": "Trajectories per block of the trajectory method; 1000 when left out.",
-      "type": "integer", "minimum": 1, "maximum": 999999
-    },
-    "itn": {
-      "description": "Cycles of the trajectory method; 10 when left out.",
-      "type": "integer", "minimum": 1, "maximum": 100
-    },
-    "inp": {
-      "description": "Velocity points of the trajectory method; 40 when left out.",
-      "type": "integer", "minimum": 1, "maximum": 100
-    },
-    "inum": {
-      "description": "Trajectories of the projection approximation and exact hard-sphere pass (helium); 250000 when left out.",
-      "type": "integer", "minimum": 1, "maximum": 9999999
-    },
-    "inor": {
-      "description": "Reflections followed per hard-sphere trajectory (helium); 30 when left out.",
-      "type": "integer", "minimum": 1, "maximum": 100
+      "description": "The buffer gas temperature.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1e300},
+        "unit": {"const": "K"}
+      }
     },
     "seed": {
       "description": "The first seed of a run of this method; 5013489, the 2012 seed, when left out.",
       "type": "integer", "minimum": 1, "maximum": 2147483647
-    }
+    },
+    "mobcal": {"$ref": "#/$defs/mobcal"}
   },
   "allOf": [
     {
-      "if": {"properties": {"gas": {"const": "n2"}}, "required": ["gas"]},
-      "then": {"properties": {"parameters": {"not": {"const": "2000"}}}}
+      "if": {"properties": {"gas": {"const": "He"}}, "required": ["gas"]},
+      "then": {"properties": {"mobcal": {"properties": {"parameters": {"properties": {"gas": {"const": "He"}}}}}}}
+    },
+    {
+      "if": {"properties": {"gas": {"const": "N2"}}, "required": ["gas"]},
+      "then": {"properties": {"mobcal": {"properties": {"parameters": {"properties": {"gas": {"const": "N2"}}}}}}}
     }
-  ]
+  ],
+  "$defs": {
+    "mobcal": {
+      "description": "What only MOBCAL's method has. Every key is required.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "imp", "itn", "inp", "inum", "inor", "parameters"],
+      "properties": {
+        "generator": {"enum": ["ranlux", "philox"]},
+        "imp": {
+          "description": "Trajectories per block of the trajectory method; 1000 in 2012.",
+          "type": "integer", "minimum": 1, "maximum": 999999
+        },
+        "itn": {
+          "description": "Cycles of the trajectory method; 10 in 2012.",
+          "type": "integer", "minimum": 1, "maximum": 100
+        },
+        "inp": {
+          "description": "Velocity points of the trajectory method; 40 in 2012.",
+          "type": "integer", "minimum": 1, "maximum": 100
+        },
+        "inum": {
+          "description": "Trajectories of the projection approximation and exact hard-sphere pass (helium); 250000 in 2012.",
+          "type": "integer", "minimum": 1, "maximum": 9999999
+        },
+        "inor": {
+          "description": "Reflections followed per hard-sphere trajectory (helium); 30 in 2012.",
+          "type": "integer", "minimum": 1, "maximum": 100
+        },
+        "parameters": {"$ref": "#/$defs/table"}
+      }
+    },
+    "table": {
+      "description": "The element table, whole: the tree of the TOML file it was taken from (docs/parameters.md, format 1), every number a string holding the Fortran literal, plus sha256 (of that TOML file), rows_sha256 (of the rendered table from its second line on) and shipped.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "name", "sha256", "rows_sha256", "shipped", "gas", "form", "kinds",
+                   "element"],
+      "properties": {
+        "format": {"const": 1},
+        "name": {
+          "description": "The table's name: letters, digits, blanks and ._()+- with no blank at either end.",
+          "type": "string", "minLength": 1, "maxLength": 60,
+          "pattern": "^[A-Za-z0-9._()+\\-](?:[A-Za-z0-9 ._()+\\-]*[A-Za-z0-9._()+\\-])?$"
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "rows_sha256": {"$ref": "#/$defs/sha256"},
+        "shipped": {"type": "boolean"},
+        "gas": {"enum": ["He", "N2"]},
+        "form": {"enum": ["pair", "combining"]},
+        "kinds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mass", "epsilon", "sigma", "rhs"],
+          "properties": {
+            "mass": {"$ref": "#/$defs/kind"},
+            "epsilon": {"$ref": "#/$defs/kind"},
+            "sigma": {"$ref": "#/$defs/kind"},
+            "rhs": {"$ref": "#/$defs/kind"}
+          }
+        },
+        "combining": {
+          "description": "The constants that combine a combining table's self parameters with the gas; double precision.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eogas", "rogas", "conve", "convr"],
+          "properties": {
+            "eogas": {"$ref": "#/$defs/token"},
+            "rogas": {"$ref": "#/$defs/token"},
+            "conve": {"$ref": "#/$defs/token"},
+            "convr": {"$ref": "#/$defs/token"}
+          }
+        },
+        "element": {
+          "type": "array", "minItems": 1, "maxItems": 100,
+          "items": {"$ref": "#/$defs/element"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"gas": {"const": "He"}}, "required": ["gas"]},
+          "then": {"properties": {"form": {"const": "pair"}}, "not": {"required": ["combining"]}}
+        },
+        {
+          "if": {"properties": {"gas": {"const": "N2"}}, "required": ["gas"]},
+          "then": {"properties": {"form": {"const": "combining"}}, "required": ["combining"]}
+        }
+      ]
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "symbol", "mass", "epsilon", "sigma", "rhs", "status", "rhs_status",
+                   "provenance"],
+      "properties": {
+        "key": {"description": "The integer mass key the .mfj carries.", "type": "integer", "minimum": 1},
+        "symbol": {"type": "string", "pattern": "^[A-Z][a-z]{0,2}$"},
+        "mass": {"$ref": "#/$defs/token"},
+        "epsilon": {"$ref": "#/$defs/token"},
+        "sigma": {"$ref": "#/$defs/token"},
+        "rhs": {"$ref": "#/$defs/token"},
+        "status": {"enum": ["fitted", "provisional"]},
+        "rhs_status": {"enum": ["own", "borrowed"]},
+        "provenance": {"type": "string", "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$"}
+      }
+    },
+    "token": {
+      "description": "A Fortran real literal as the source spells it (digits, one point, digits, an optional d exponent), or one of the two expressions the 2012 source wrote.",
+      "type": "string", "maxLength": 32,
+      "pattern": "^(?:[0-9]+\\.[0-9]*(?:[dD][+-]?[0-9]+)?|3\\.97d0/1\\.12246d0|4\\.2d0\\*0\\.01036427d0)$"
+    },
+    "kind": {"enum": ["single", "double"]},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
 }

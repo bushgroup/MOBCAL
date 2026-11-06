@@ -27,6 +27,15 @@ and written as its 17-significant-digit round-trip token, which a compiled fold 
 expression reproduces bit for bit. The driver renders it into every run directory, every run;
 ``mobcal render-parameters`` does it by hand.
 
+A method document carries its table whole (``mobcal.methods``, ``ccs-method``):
+``ParameterSet.document`` is the TOML file's tree in JSON, key for key, plus ``sha256``, the
+TOML file's hash, which the rendered table's first line carries, ``rows_sha256``, the hash of
+the rendered table from its second line on (every byte the program converts), and ``shipped``.
+``from_document`` reads one back under every rule ``load`` applies, and refuses rows that do not
+hash to ``rows_sha256`` and a table that says it is shipped and differs from the pinned file.
+A set read from a document has no ``path``, and renders the same bytes as the file it was taken
+from.
+
     from mobcal import parameters
     ps = parameters.load(parameters.default_path("n2"), gas="n2")
     ps.render(Path("runs/choline-n2-5013489"))
@@ -71,6 +80,10 @@ STATUS = ("fitted", "provisional")
 RHS_STATUS = ("own", "borrowed")
 ELEMENT_FIELDS = ("key", "symbol", *COLUMNS, "status", "rhs_status", "provenance")
 TOP_LEVEL = ("format", "name", "gas", "form", "kinds", "combining", "element")
+# A table embedded in a method document: the TOML's keys and three of its own, in this order.
+DOCUMENT_KEYS = ("format", "name", "sha256", "rows_sha256", "shipped", "gas", "form", "kinds",
+                 "combining", "element")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 # The two expressions the 2012 source wrote, the only tokens allowed an operator.
 EXPRESSIONS = ("3.97d0/1.12246d0", "4.2d0*0.01036427d0")
@@ -177,8 +190,8 @@ class Element:
 
 @dataclass(frozen=True)
 class ParameterSet:
-    path: Path
-    sha256: str  # of the file's bytes
+    path: Path | None  # the TOML file; None for a set read from a method document
+    sha256: str  # of the TOML file's bytes
     format: int
     name: str
     gas: str  # the package's spelling, he | n2
@@ -187,9 +200,34 @@ class ParameterSet:
     constants: dict[str, str]  # eogas, rogas, conve, convr for combining; empty for pair
     elements: tuple[Element, ...]
 
+    def __hash__(self) -> int:  # the dict fields are not hashable; the two hashes identify it
+        return hash((self.sha256, self.rows_sha256))
+
     @property
     def keys(self) -> tuple[int, ...]:
         return tuple(e.key for e in self.elements)
+
+    @property
+    def where(self) -> str:
+        """How a refusal names the set: its file, or its name for one read from a document."""
+        return str(self.path) if self.path is not None else f"the element table {self.name!r}"
+
+    @property
+    def rows_sha256(self) -> str:
+        """The SHA-256 of the rendered table from its second line on: the kinds, the constants,
+        the count and the rows, every byte the program converts."""
+        return hashlib.sha256(("\n".join(self.lines()[1:]) + "\n").encode("ascii")).hexdigest()
+
+    def document(self) -> dict:
+        """The set as a method document embeds it (``DOCUMENT_KEYS`` order)."""
+        doc: dict = {"format": self.format, "name": self.name, "sha256": self.sha256,
+                     "rows_sha256": self.rows_sha256, "shipped": self.shipped,
+                     "gas": GAS[self.gas], "form": self.form,
+                     "kinds": {c: self.kinds[c] for c in COLUMNS}}
+        if self.form == "combining":
+            doc["combining"] = {c: self.constants[c] for c in CONSTANTS}
+        doc["element"] = [{f: getattr(e, f) for f in ELEMENT_FIELDS} for e in self.elements]
+        return doc
 
     @property
     def shipped(self) -> bool:
@@ -212,7 +250,7 @@ class ParameterSet:
         lines += [" ".join(e.tokens()) for e in self.elements]
         bad = [line for line in lines if "/" in line or "," in line or "\t" in line]
         if bad:  # cannot happen after load(); a list-directed read would stop or split on it
-            raise ParameterError(f"{self.path}: the rendered table would carry {bad[0]!r}")
+            raise ParameterError(f"{self.where}: the rendered table would carry {bad[0]!r}")
         return lines
 
     def render(self, d: Path) -> Path:
@@ -223,7 +261,8 @@ class ParameterSet:
 
     def record(self) -> dict:
         """What a run's record says about the set it used."""
-        return {"path": str(self.path), "name": self.name, "format": self.format,
+        return {"path": None if self.path is None else str(self.path), "name": self.name,
+                "format": self.format,
                 "gas": GAS[self.gas], "sha256": self.sha256, "shipped": self.shipped,
                 "rendered": RENDERED}
 
@@ -279,72 +318,134 @@ def load(path: Path | str, gas: str | None = None) -> ParameterSet:
         doc = tomllib.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         raise ParameterError(f"{path}: not a TOML file: {e}") from None
-
     unknown = [k for k in doc if k not in TOP_LEVEL]
     if unknown:
         raise ParameterError(f"{path}: unknown key {unknown[0]!r}")
+    return _from_tree(doc, str(path), path, sha, gas)
+
+
+def from_document(doc: object, where: str, gas: str | None = None) -> ParameterSet:
+    """A table embedded in a method document (``ParameterSet.document``), checked as ``load``
+    checks a file; with ``gas``, also refused when it is for the other gas. Its rows must hash
+    to its ``rows_sha256``; ``shipped`` must be true exactly when ``sha256`` is the pin of one
+    of the gas's shipped sets, and a shipped table must equal that file field for field.
+    ``where`` names the document in refusals. Raises ParameterError."""
+    if not isinstance(doc, dict):
+        raise ParameterError(f"{where}: must be an object holding the table")
+    unknown = [k for k in doc if k not in DOCUMENT_KEYS]
+    if unknown:
+        raise ParameterError(f"{where}: unknown key {unknown[0]!r}; the keys are "
+                             + ", ".join(DOCUMENT_KEYS))
+    for k in ("sha256", "rows_sha256"):
+        if not isinstance(doc.get(k), str) or not _SHA256.fullmatch(doc[k]):
+            raise ParameterError(f"{where}: {k} must be 64 lowercase hexadecimal digits")
+    if type(doc.get("shipped")) is not bool:
+        raise ParameterError(f"{where}: shipped must be true or false")
+    tree = {k: v for k, v in doc.items() if k in TOP_LEVEL}
+    ps = _from_tree(tree, where, None, doc["sha256"], gas)
+    if ps.rows_sha256 != doc["rows_sha256"]:
+        raise ParameterError(f"{where}: its rows differ from those it was saved with (their "
+                             "SHA-256 is not rows_sha256); make the table a TOML file and save "
+                             "the method again")
+    if doc["shipped"] is not ps.shipped:
+        raise ParameterError(
+            f"{where}: shipped is {str(doc['shipped']).lower()} and its sha256 is "
+            + (f"the pin of the shipped {ps.set_name!r} set" if ps.shipped
+               else "the pin of no shipped set"))
+    if ps.shipped:
+        want = shipped(ps.gas, ps.set_name)
+        diff = _difference(ps.document(), want.document())
+        if diff:
+            raise ParameterError(f"{where}: says it is the shipped {ps.set_name!r} set and "
+                                 f"differs from {want.path.name} in {diff}")
+    return ps
+
+
+def _difference(have: dict, want: dict) -> str | None:
+    """Where two embedded tables first differ, as ``element 14, sigma``; None when they agree."""
+    for k in DOCUMENT_KEYS:
+        a, b = have.get(k), want.get(k)
+        if a == b:
+            continue
+        if k == "element":
+            for i, (ra, rb) in enumerate(zip(a or [], b or [], strict=False)):
+                f = next((f for f in ELEMENT_FIELDS if ra.get(f) != rb.get(f)), None)
+                if f is not None:
+                    return f"element {rb.get('key', i + 1)}, {f}"
+            return f"its number of elements, {len(a or [])} where the file has {len(b or [])}"
+        if isinstance(a, dict) and isinstance(b, dict):
+            f = next(f for f in {**b, **a} if a.get(f) != b.get(f))
+            return f"{k}, {f}"
+        return k
+    return None
+
+
+def _from_tree(doc: dict, where: str, path: Path | None, sha: str,
+               gas: str | None) -> ParameterSet:
+    """A table's tree, read from a TOML file or a method document, checked; ``where`` names it
+    in refusals."""
     fmt = doc.get("format")
     if type(fmt) is not int or fmt not in FORMATS:
-        raise ParameterError(f"{path}: format is {fmt!r}; this version of mobcal reads "
+        raise ParameterError(f"{where}: format is {fmt!r}; this version of mobcal reads "
                              f"format {', '.join(map(str, FORMATS))}")
-    name = _string(doc, "name", str(path))
+    name = _string(doc, "name", where)
     if not (0 < len(name) <= MAX_NAME and _NAME.fullmatch(name) and name == name.strip()):
-        raise ParameterError(f"{path}: name {name!r} must be 1 to {MAX_NAME} characters of "
+        raise ParameterError(f"{where}: name {name!r} must be 1 to {MAX_NAME} characters of "
                              f"letters, digits, blanks and ._()+- with no blank at either end")
-    file_gas = _string(doc, "gas", str(path), tuple(GAS.values()))
+    file_gas = _string(doc, "gas", where, tuple(GAS.values()))
     pkg_gas = next(g for g, s in GAS.items() if s == file_gas)
     if gas is not None and gas != pkg_gas:
-        raise ParameterError(f"{path}: is a table for {file_gas}, not {GAS[gas]}")
-    form = _string(doc, "form", str(path), tuple(FORM.values()))
+        raise ParameterError(f"{where}: is a table for {file_gas}, not {GAS[gas]}")
+    form = _string(doc, "form", where, tuple(FORM.values()))
     if form != FORM[pkg_gas]:
-        raise ParameterError(f"{path}: form is {form!r}; the {file_gas} program implements "
+        raise ParameterError(f"{where}: form is {form!r}; the {file_gas} program implements "
                              f"{FORM[pkg_gas]!r} only")
 
     kinds = doc.get("kinds")
     if not isinstance(kinds, dict) or set(kinds) != set(COLUMNS):
-        raise ParameterError(f"{path}: [kinds] must declare exactly {', '.join(COLUMNS)}")
+        raise ParameterError(f"{where}: [kinds] must declare exactly {', '.join(COLUMNS)}")
     for c in COLUMNS:
-        _string(kinds, c, f"{path}: [kinds]", tuple(KIND_BYTES))
+        _string(kinds, c, f"{where}: [kinds]", tuple(KIND_BYTES))
 
     constants: dict[str, str] = {}
     if form == "combining":
         table = doc.get("combining")
         if not isinstance(table, dict) or set(table) != set(CONSTANTS):
-            raise ParameterError(f"{path}: [combining] must give exactly {', '.join(CONSTANTS)}")
+            raise ParameterError(f"{where}: [combining] must give exactly {', '.join(CONSTANTS)}")
         for c in CONSTANTS:
-            constants[c] = _check_token(table[c], "double", f"{path}: [combining] {c}")
+            constants[c] = _check_token(table[c], "double", f"{where}: [combining] {c}")
     elif "combining" in doc:
-        raise ParameterError(f"{path}: [combining] is for form \"combining\" only")
+        raise ParameterError(f"{where}: [combining] is for form \"combining\" only")
 
     rows = doc.get("element")
     if not (isinstance(rows, list) and all(isinstance(r, dict) for r in rows)):
-        raise ParameterError(f"{path}: the elements must be [[element]] tables")
+        raise ParameterError(f"{where}: the elements must be [[element]] tables")
     if not 1 <= len(rows) <= MAX_ROWS:
-        raise ParameterError(f"{path}: {len(rows)} elements; 1 to {MAX_ROWS} are allowed")
+        raise ParameterError(f"{where}: {len(rows)} elements; 1 to {MAX_ROWS} are allowed")
     elements, seen = [], set()
     for i, row in enumerate(rows, 1):
         key = row.get("key")
         if type(key) is not int or key < 1:
-            raise ParameterError(f"{path}: element {i}: key must be a positive integer")
-        where = f"{path}: element {key}"
+            raise ParameterError(f"{where}: element {i}: key must be a positive integer")
+        at = f"{where}: element {key}"
         if key in seen:
-            raise ParameterError(f"{where}: key {key} appears twice")
+            raise ParameterError(f"{at}: key {key} appears twice")
         seen.add(key)
         missing = [f for f in ELEMENT_FIELDS if f not in row]
         extra = [f for f in row if f not in ELEMENT_FIELDS]
         if missing or extra:
-            raise ParameterError(f"{where}: " + (f"no {missing[0]}" if missing
+            raise ParameterError(f"{at}: " + (f"no {missing[0]}" if missing
                                                  else f"unknown field {extra[0]!r}"))
-        symbol = _string(row, "symbol", where)
+        symbol = _string(row, "symbol", at)
         if not _SYMBOL.fullmatch(symbol):
-            raise ParameterError(f"{where}: symbol {symbol!r} is not an element symbol")
-        tokens = {c: _check_token(row[c], kinds[c], f"{where}: {c}") for c in COLUMNS}
-        provenance = _string(row, "provenance", where)
+            raise ParameterError(f"{at}: symbol {symbol!r} is not an element symbol")
+        tokens = {c: _check_token(row[c], kinds[c], f"{at}: {c}") for c in COLUMNS}
+        provenance = _string(row, "provenance", at)
         if not provenance.strip() or "\n" in provenance or "\r" in provenance:
-            raise ParameterError(f"{where}: provenance must be one non-empty line")
+            raise ParameterError(f"{at}: provenance must be one non-empty line")
         elements.append(Element(key, symbol, **tokens,
-                                status=_string(row, "status", where, STATUS),
-                                rhs_status=_string(row, "rhs_status", where, RHS_STATUS),
+                                status=_string(row, "status", at, STATUS),
+                                rhs_status=_string(row, "rhs_status", at, RHS_STATUS),
                                 provenance=provenance))
     return ParameterSet(path, sha, fmt, name, pkg_gas, form, dict(kinds), constants,
                         tuple(elements))

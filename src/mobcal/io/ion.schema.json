@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/ion.schema.json",
-  "title": "mobcal-ion, version 1",
+  "title": "ccs-ion, version 1",
   "description": "An ion's elements, conformer geometries and charges, and how they were made; the input from which MOBCAL writes the .mfj the 2012 program reads. docs/ion-file.md is the specification. This schema checks the structure; the cross-field rules (array lengths, the charge sum against molecular_charge, null charges only outside calc mode, conformer symbols beside per-atom columns) are checked by mobcal.io.ion and listed on that page.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "version", "label", "molecular_charge", "units", "correction_factor",
                "charge_mode", "symbols", "columns", "conformers", "written_by"],
   "properties": {
-    "format": {"const": "mobcal-ion"},
+    "format": {"const": "ccs-ion"},
     "version": {"const": 1},
     "label": {
       "description": "Line 1 of the written .mfj: at most 30 characters, ISO 8859-1, no line break (none of U+000A to U+000D, U+001C to U+001E, U+0085), no trailing blank; leading blanks are kept.",

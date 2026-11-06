@@ -445,7 +445,7 @@ def test_a_run_from_an_ion_file(tmp_path):
     rec = json.loads((d / "record.json").read_text(encoding="utf-8"))
     assert rec["input"] == {"path": str(inp), "staged_name": "chol.mfj",
                             "sha256": hashlib.sha256(inp.read_bytes()).hexdigest(),
-                            "atoms": 21, "coordinate_sets": 1, "format": "mobcal-ion",
+                            "atoms": 21, "coordinate_sets": 1, "format": "ccs-ion",
                             "staged_sha256": hashlib.sha256(staged).hexdigest(),
                             "charge_mode": "calc",
                             "import": {"source": {"program": "mfj", "version": None},

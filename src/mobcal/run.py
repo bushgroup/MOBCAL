@@ -11,7 +11,8 @@ specified``, ``masses do not add up``).
 
 A ``Job`` is one calculation: an input file (a ``.mfj``, or an ion file, ``X.ion.json``,
 ``mobcal.io.ion``), a gas and a seed, the element table to use, the
-package's own for the gas unless the job names another, the random number generator,
+package's own for the gas unless the job names another (a TOML file, or a table a method
+document carried, which needs no file), the random number generator,
 Philox4x32-10 unless the job says ``ranlux``, the 2012 generator, which is what reproduces a
 2012 number, and the run settings (``mobcal.settings``: the temperature and the five sampling
 counts), the 2012 values unless the job says otherwise. The run directory's name carries
@@ -183,7 +184,9 @@ class Job:
     name: str | None = None  # the run directory's name; default <stem>-<gas>-<seed>[-ranlux]
     staged_name: str | None = None  # the input's name inside the run directory
     split: int | None = None  # W: run this one calculation across W processes
-    parameters: Path | None = None  # the element table; None is the package's for the gas
+    # the element table: None, the package's for the gas; a TOML file; or a table already read,
+    # as a method of one's own carries it (mobcal.methods.Method.job_table)
+    parameters: Path | ParameterSet | None = None
     generator: str = DEFAULT_RNG  # the random number generator: philox, or ranlux (2012)
     settings: Settings = settings.DEFAULTS  # the temperature and the sampling counts
     dealing: str = DEFAULT_DEALING  # how a split run's blocks are shared: claimed, or static
@@ -224,7 +227,7 @@ class Job:
                              f"not {self.split!r}")
         object.__setattr__(self, "input", Path(self.input))
         object.__setattr__(self, "out_dir", Path(self.out_dir))
-        if self.parameters is not None:
+        if self.parameters is not None and not isinstance(self.parameters, ParameterSet):
             object.__setattr__(self, "parameters", Path(self.parameters))
         set_name, sha, tag = _table(self.gas, self.parameters)
         object.__setattr__(self, "set_name", set_name)
@@ -234,7 +237,7 @@ class Job:
     def _from_file(self) -> methods.Method | None:
         """The method file the job was made from, while its fields are the file's."""
         m = self.method_from
-        if m is None or m.shipped or not m.matches(self.gas, self.set_name, self.table_sha256,
+        if m is None or m.shipped or not m.matches(self.gas, self.table_sha256,
                                                    self.generator, self.settings):
             return None
         return m
@@ -247,7 +250,7 @@ class Job:
         m = self._from_file()
         if m is not None:
             return m.key
-        return methods.identify(self.gas, self.set_name, self.generator, self.settings)
+        return methods.identify(self.gas, self.table_sha256, self.generator, self.settings)
 
     @property
     def method_file(self) -> dict | None:
@@ -290,8 +293,23 @@ class Job:
         return self.run_dir / f"w{w:02d}"
 
     @property
-    def parameters_path(self) -> Path:
+    def parameters_path(self) -> Path | None:
+        """The table's file: the package's for the gas, or the one named; None for a table a
+        method document carried."""
+        if isinstance(self.parameters, ParameterSet):
+            return self.parameters.path
         return self.parameters or parameters.default_path(self.gas)
+
+    def table(self) -> ParameterSet:
+        """The element table, read and checked: from its file, or as the method carried it.
+        Raises ParameterError."""
+        if isinstance(self.parameters, ParameterSet):
+            if self.parameters.gas != self.gas:
+                raise ParameterError(f"{self.parameters.where}: is a table for "
+                                     f"{parameters.GAS[self.parameters.gas]}, not "
+                                     f"{parameters.GAS[self.gas]}")
+            return self.parameters
+        return parameters.load(self.parameters_path, gas=self.gas)
 
 
 @dataclass(frozen=True)
@@ -305,6 +323,8 @@ class Result:
     cross_sections: dict[str, float]  # the run's reported values (the mean over sets)
     conformers: list[dict[str, float]]  # per coordinate set
     parameters: dict = dataclasses.field(default_factory=dict)  # the set's record; {} if unread
+    # the table the run rendered, None when it was not read; what the result file embeds
+    table: ParameterSet | None = dataclasses.field(default=None, compare=False, repr=False)
     stopped: bool = False  # ended by a Stop, not by itself
     waiting: bool = False  # never started: the batch was drained first (Stop.drain)
 
@@ -392,17 +412,21 @@ def size(path: Path) -> tuple[int, int]:
     return m.atoms, m.coordinate_sets
 
 
-def _table(gas: str, path: Path | None) -> tuple[str | None, str | None, str]:
+def _table(gas: str, path: Path | ParameterSet | None) -> tuple[str | None, str | None, str]:
     """The shipped set a table file is by its pin, its SHA-256, and the label's part for it:
     ``""`` for the gas's default set, ``-lj2000`` for another shipped set, ``-lj`` and eight hex
     digits of the SHA-256 for any other file, ``-lj-<stem>`` for one that cannot be read (the
-    run says why)."""
+    run says why). A table a method carried is named by the SHA-256 of the TOML file it was
+    taken from, so its runs land where the runs of that file do."""
     if path is None:
         return parameters.DEFAULT, parameters.SHA256[parameters.FILES[gas]], ""
-    try:
-        sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
-        return None, None, f"-lj-{path.stem}"
+    if isinstance(path, ParameterSet):
+        sha = path.sha256
+    else:
+        try:
+            sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return None, None, f"-lj-{path.stem}"
     name = next((n for n, f in parameters.SETS[gas].items() if parameters.SHA256[f] == sha), None)
     if name == parameters.DEFAULT:
         return name, sha, ""
@@ -613,7 +637,7 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
     stops the job's processes and is re-raised.
     """
     try:
-        pset = parameters.load(job.parameters_path, gas=job.gas)
+        pset = job.table()
     except ParameterError as e:
         return _failed(job, f"parameters refused: {e}")
     try:
@@ -645,7 +669,7 @@ def run_one(job: Job, launcher: Launcher | None = None, *,
         r, harvest = _run_split(job, command, staged, pset, _running, blocks, started)
     else:
         r = _run_serial(job, command, staged, pset, _running)
-    r = dataclasses.replace(r, parameters=pset.record())
+    r = dataclasses.replace(r, parameters=pset.record(), table=pset)
     if not r.ok and _running is not None and _running.is_set():
         r = dataclasses.replace(r, stopped=True, message=f"stopped ({r.message})")
     extra = {}
@@ -990,7 +1014,7 @@ def _write_record(r: Result, command: list[str], staged: Staged, started: dt.dat
     what came of it. Its numbers are the ``Result``'s; the output file stays the evidence.
 
     The ``input`` block names the file the job was given, its SHA-256, the staged name and the
-    size. For an ion file it adds ``format`` (``mobcal-ion``) and ``staged_sha256``, the hash of
+    size. For an ion file it adds ``format`` (``ccs-ion``) and ``staged_sha256``, the hash of
     the ``.mfj`` written from it, which the table decides as much as the file does, and
     ``ion_charges``: the charge mode and what the import record says the charges are, for the
     methods text. A ``.mfj`` is staged as it is and its block is what it always was.
@@ -1041,7 +1065,6 @@ def _join_message(a: str, b: str) -> str:
 
 GAS_FORMULA = result_file.GAS_FORMULA
 _A2, _INV = "angstrom^2", "V s m^-2"
-_METHOD_KEYS = ("parameters", "generator", *settings.NAMES)  # what a custom method overrides
 
 
 @functools.cache
@@ -1060,12 +1083,26 @@ def _method_doc(m: methods.Method) -> dict:
             return json.loads(data.decode("utf-8-sig"))
     except (OSError, ValueError):
         pass
-    table = m.table if m.table is not None else m.parameters
-    return methods.document(m.name, m.gas, table, m.table_sha256, m.generator, m.settings,
-                            m.seed, m.description)
+    return methods.document(m.name, m.gas, m.table, m.generator, m.settings, m.seed,
+                            m.description)
 
 
-def _result_method(j: Job) -> dict:
+# What a custom method overrides, as inputs.method.overrides keys it: the core's temperature
+# and the block's keys by dotted path.
+OVERRIDE_KEYS = ("temperature", *(f"{methods.BLOCK_NAME}.{k}" for k in methods.BLOCK))
+
+
+def _overrides(doc: dict, was: dict) -> dict:
+    """What a custom method's document changes from the method it was made from, keyed as
+    ``OVERRIDE_KEYS`` (``temperature``, ``mobcal.imp``)."""
+    def value(d: dict, key: str) -> object:
+        for part in key.split("."):
+            d = (d or {}).get(part)
+        return d
+    return {k: value(doc, k) for k in OVERRIDE_KEYS if value(doc, k) != value(was, k)}
+
+
+def _result_method(j: Job, table: ParameterSet | None = None) -> dict:
     """``inputs.method``: the run's method as a valid method document: shipped, from a file,
     or custom (the job's fields, named Custom, with what differs from the method it was made
     from)."""
@@ -1077,13 +1114,10 @@ def _result_method(j: Job) -> dict:
         return entry | {"source": "shipped" if m.shipped else "file", "name": j.method,
                         "file": {"name": m.path.name, "sha256": m.sha256}, "from": None,
                         "overrides": {}, "embedded": True, "document": _method_doc(m)}
-    table = j.set_name if j.set_name is not None else j.parameters_path
-    doc = methods.document("Custom", j.gas, table, j.table_sha256, j.generator, j.settings)
+    doc = methods.document("Custom", j.gas, table if table is not None else j.table(),
+                           j.generator, j.settings)
     base = j.method_from
-    overrides = {}
-    if base is not None:
-        was = _method_doc(base)
-        overrides = {k: doc[k] for k in _METHOD_KEYS if doc.get(k) != was.get(k)}
+    overrides = _overrides(doc, _method_doc(base)) if base is not None else {}
     return entry | {"source": "custom", "name": j.method, "file": None,
                     "from": base.key if base is not None else None, "overrides": overrides,
                     "embedded": True, "document": doc}
@@ -1166,14 +1200,15 @@ def _result_results(o: OutFile) -> tuple[dict | None, dict | None]:
 
 def result_document(r: Result, staged: Staged, record: dict,
                     finished: dt.datetime | None = None) -> dict:
-    """The run's result file (``docs/result-file.md``, ims-result version 1) from its
+    """The run's result file (``docs/result-file.md``, ccs-result version 1) from its
     ``Result``, its staged input and the ``record.json`` document written for it: the keys in
     the page's order, every reported value read from the output as printed, none computed."""
     j = r.job
     finished = finished or dt.datetime.now().astimezone().replace(microsecond=0)
     out = OutFile.read(r.output) if r.output is not None and r.output.is_file() else OutFile("")
     results, summary = _result_results(out)
-    st = methods.document("", j.gas, parameters.DEFAULT, None, j.generator, j.settings)
+    st = {k: methods.plain_number(v) if k == "temperature" else v
+          for k, v in j.settings.values().items()}
     pset = r.parameters
     return {
         "format": RESULT_FORMAT,
@@ -1189,7 +1224,7 @@ def result_document(r: Result, staged: Staged, record: dict,
         "gas": GAS_FORMULA[j.gas],
         "temperature": _value(st["temperature"], "K"),
         "seed": j.seed,
-        "inputs": {"ion": _result_ion(j, staged), "method": _result_method(j)},
+        "inputs": {"ion": _result_ion(j, staged), "method": _result_method(j, r.table)},
         "results": results,
         "mobcal": {
             "generator": j.generator,

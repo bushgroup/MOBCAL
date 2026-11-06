@@ -1,15 +1,152 @@
 {
-  "format": "mobcal-method",
+  "format": "ccs-method",
   "version": 1,
   "name": "MOBCAL 2012 (N2)",
   "description": "The calculation of the 2012 release in nitrogen: its element table and run settings with RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. inum and inor set the helium program's projection and hard-sphere pass, which the nitrogen program does not make.",
-  "gas": "n2",
-  "parameters": "2012",
-  "generator": "ranlux",
-  "temperature": 301,
-  "imp": 1000,
-  "itn": 10,
-  "inp": 40,
-  "inum": 250000,
-  "inor": 30
+  "gas": "N2",
+  "temperature": {
+    "value": 301,
+    "unit": "K"
+  },
+  "mobcal": {
+    "generator": "ranlux",
+    "imp": 1000,
+    "itn": 10,
+    "inp": 40,
+    "inum": 250000,
+    "inor": 30,
+    "parameters": {
+      "format": 1,
+      "name": "MOBCAL 2012 nitrogen",
+      "sha256": "06a2528ec169627d1c002c2d9561d7d8c434a459552b5642845ba69807443595",
+      "rows_sha256": "2eb315046c09aa92005a40c506ab11fb6d3cb2dc975fac41114bee171233fe85",
+      "shipped": true,
+      "gas": "N2",
+      "form": "combining",
+      "kinds": {
+        "mass": "double",
+        "epsilon": "single",
+        "sigma": "single",
+        "rhs": "double"
+      },
+      "combining": {
+        "eogas": "0.06900d0",
+        "rogas": "3.6600d0",
+        "conve": "4.2d0*0.01036427d0",
+        "convr": "0.890898718d0"
+      },
+      "element": [
+        {
+          "key": 1,
+          "symbol": "H",
+          "mass": "1.008d0",
+          "epsilon": "0.0189",
+          "sigma": "1.2409",
+          "rhs": "2.2d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 0.43"
+        },
+        {
+          "key": 12,
+          "symbol": "C",
+          "mass": "12.01d0",
+          "epsilon": "0.0977",
+          "sigma": "3.5814",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 0.93"
+        },
+        {
+          "key": 14,
+          "symbol": "N",
+          "mass": "14.01d0",
+          "epsilon": "0.0828",
+          "sigma": "4.3920",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.20, where the gas itself is unscaled UFF nitrogen; the hard-sphere radius is carbon's"
+        },
+        {
+          "key": 16,
+          "symbol": "O",
+          "mass": "16.00d0",
+          "epsilon": "0.0558",
+          "sigma": "3.2550",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 0.93; the hard-sphere radius is carbon's"
+        },
+        {
+          "key": 19,
+          "symbol": "F",
+          "mass": "19.00d0",
+          "epsilon": "0.0465",
+          "sigma": "3.1285",
+          "rhs": "2.7d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 0.93; the hard-sphere radius is carbon's"
+        },
+        {
+          "key": 23,
+          "symbol": "Na",
+          "mass": "22.99d0",
+          "epsilon": "0.03000",
+          "sigma": "2.9830",
+          "rhs": "2.853d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.00, not re-optimized when the factors were fitted; the hard-sphere radius is helium's sodium fit"
+        },
+        {
+          "key": 28,
+          "symbol": "Si",
+          "mass": "28.09d0",
+          "epsilon": "0.4020",
+          "sigma": "4.2950",
+          "rhs": "2.95d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.00, UFF silicon exactly"
+        },
+        {
+          "key": 31,
+          "symbol": "P",
+          "mass": "30.97d0",
+          "epsilon": "0.305",
+          "sigma": "4.1470",
+          "rhs": "4.2d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.00; in the source since 2015, and in nitrogen only"
+        },
+        {
+          "key": 32,
+          "symbol": "S",
+          "mass": "32.06d0",
+          "epsilon": "0.2740",
+          "sigma": "4.0350",
+          "rhs": "3.5d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.00"
+        },
+        {
+          "key": 56,
+          "symbol": "Fe",
+          "mass": "55.85d0",
+          "epsilon": "0.0130",
+          "sigma": "2.9120",
+          "rhs": "3.5d0",
+          "status": "fitted",
+          "rhs_status": "own",
+          "provenance": "UFF x 1.00"
+        }
+      ]
+    }
+  }
 }

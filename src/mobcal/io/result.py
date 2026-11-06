@@ -1,4 +1,4 @@
-"""The result file, ``NAME.result.json`` (``docs/result-file.md``, ``ims-result`` version 1),
+"""The result file, ``NAME.result.json`` (``docs/result-file.md``, ``ccs-result`` version 1),
 read back: ``Result.read`` checks it and hands the embedded documents to their own readers,
 ``Result.record`` gives the methods text what it reads from a ``record.json``, and ``unpack``
 writes the two inputs back as files and checks them against the hashes the result recorded.
@@ -19,9 +19,8 @@ task 57):
 - **The staged input**, for an ion file input: the ``.mfj`` the written ion file gives for the
   run's element table hashes to ``mobcal.staged_input.sha256``, the bytes the program read.
   ``unpack`` refuses a result for which it does not, since the record does not then describe
-  one calculation. It needs the table: a shipped one is found by its SHA-256; a table of one's
-  own only where the method names it, with that SHA-256, else the check is skipped and
-  ``unpack`` says so. For a ``.mfj`` input the program read the ``.mfj`` as given, and the one
+  one calculation. The table is the one the embedded method carries, shipped or one's own, so
+  the check needs no other file and always runs. For a ``.mfj`` input the program read the ``.mfj`` as given, and the one
   the ion file gives holds the same values (``Mfj`` equality) in MOBCAL's own layout
   (``1.0`` for ``1.0000``, wider columns), so no recorded hash can be its: ``unpack`` checks
   that the document was read from the recorded ``.mfj`` and that it runs on the table, and
@@ -47,7 +46,8 @@ from mobcal import methods, parameters, settings
 from mobcal.io import ion, strictjson
 from mobcal.io.ion import Ion, IonError
 
-FORMAT = "ims-result"
+FORMAT = "ccs-result"
+FORMERLY = "ims-result"  # the format's name before 2.1.0, in development versions only
 VERSIONS = (1,)  # the versions this reader takes
 VERSION = 1  # the version the driver writes
 SUFFIX = ".result.json"
@@ -140,6 +140,10 @@ class Result:
             if k not in doc:
                 raise ResultError(f'no {k}; a result file begins "format": "{FORMAT}", '
                                   f'"version": {VERSION}')
+        if doc["format"] == FORMERLY:
+            raise ResultError(f"format is {FORMERLY!r}: the file was written by a development "
+                              "version before 2.1.0, under the name this format had then, which "
+                              "no release wrote; the run's record.json beside it is its record")
         if doc["format"] != FORMAT:
             raise ResultError(f"format is {doc['format']!r}; this reader reads {FORMAT!r}")
         if type(doc["version"]) is not int or doc["version"] not in VERSIONS:
@@ -194,8 +198,7 @@ class Result:
         name = f["name"] if f else f"{stem(path)}{methods.SUFFIX}"
         try:
             m = methods.from_document(me["document"], path.with_name(name),
-                                      f["sha256"] if f else "", me["source"] == "shipped",
-                                      find_table=False)
+                                      f["sha256"] if f else "", me["source"] == "shipped")
         except methods.MethodError as e:
             raise ResultError(f"inputs.method.document: {e}") from None
         return cls(path, doc, the_ion, m)
@@ -285,8 +288,8 @@ class Unpacked:
     method: Written
     converted_from: str | None  # "mfj" when the run's input was a .mfj, written as an ion file
     # the staged .mfj's SHA-256 reproduced: True; False for a .mfj input, whose bytes the ion
-    # file cannot reproduce (its values it does); None when the table is not here (notes say)
-    staged: bool | None
+    # file cannot reproduce (its values it does)
+    staged: bool
     notes: tuple[str, ...]  # what the files are, beyond the hashes, for the person unpacking
     rerun: tuple[str, ...]  # the arguments of the command that runs the calculation again
 
@@ -294,27 +297,6 @@ class Unpacked:
     def command(self) -> str:
         """``rerun`` as a line to type into this platform's shell."""
         return " ".join(_quote(a) for a in self.rerun)
-
-
-def _table(r: Result) -> tuple[parameters.ParameterSet | None, str | None]:
-    """The run's element table, or None and why it cannot be had here."""
-    m, gas = r.method, r.gas
-    if m.table is None:
-        return parameters.shipped(gas, m.parameters), None
-    if not m.table.is_file():
-        return None, f"its element table {m.table} is not on this computer"
-    if _sha256(m.table.read_bytes()) != m.table_sha256:
-        return None, f"its element table {m.table} has changed since the run"
-    try:
-        return parameters.load(m.table, gas=gas), None
-    except parameters.ParameterError as e:
-        return None, f"its element table: {e}"
-
-
-def _table_sha256(m: methods.Method) -> str:
-    if m.table is not None:
-        return m.table_sha256
-    return parameters.SHA256[parameters.SETS[m.gas][m.parameters]]
 
 
 def _quote(arg: str) -> str:
@@ -344,7 +326,7 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
     m = r.method
     for what, have, want in (("gas", m.gas, r.gas), ("generator", m.generator, mb["generator"]),
                              ("settings", m.settings.values(), r.settings.values()),
-                             ("element table's SHA-256", _table_sha256(m),
+                             ("element table's SHA-256", m.table_sha256,
                               mb["parameters"]["sha256"])):
         if have != want:
             raise ResultError(f"{where}: the embedded method's {what} is {have!r} and the run's "
@@ -360,35 +342,31 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
                      f"document reading it gives; {ion_name} is that document")
 
     # the staged .mfj, from the ion as written, for the run's table
-    table, why = _table(r)
-    staged = None
+    table = m.table
     source = (r.ion.import_record or {}).get("source", {})
     if ie["converted_from"] == "mfj" and source.get("sha256") not in (None, ie["file"]["sha256"]):
         raise ResultError(f"{where}: the embedded ion was read from a .mfj of SHA-256 "
                           f"{source['sha256']}, not the run's {ie['file']['sha256']}")
-    if table is not None:
-        try:
-            data = Ion.parse(ion_text.decode("utf-8")).mfj(table).text().encode("latin-1")
-        except IonError as e:
-            raise ResultError(f"{where}: the embedded ion does not run on the run's element "
-                              f"table: {e}") from None
-        want = mb["staged_input"]["sha256"]
-        if ie["converted_from"] == "mfj":
-            # The program read the .mfj as given; the one this ion gives holds the same values
-            # in MOBCAL's layout, so no recorded hash can be its (lab record, task 57).
-            staged = False
-            notes.append(f"the .mfj this ion file gives holds the values the program read from "
-                         f"{given}, laid out as MOBCAL writes a .mfj, so its SHA-256 is not "
-                         f"the recorded one, which is {given}'s own; the result records no "
-                         "hash of the values alone")
-        elif _sha256(data) != want:
-            raise ResultError(f"{where}: the .mfj the embedded ion gives for the run's element "
-                              f"table has SHA-256 {_sha256(data)}, not the {want} the program "
-                              "read; the file does not describe one calculation")
-        else:
-            staged = True
+    try:
+        data = Ion.parse(ion_text.decode("utf-8")).mfj(table).text().encode("latin-1")
+    except IonError as e:
+        raise ResultError(f"{where}: the embedded ion does not run on the run's element "
+                          f"table: {e}") from None
+    want = mb["staged_input"]["sha256"]
+    if ie["converted_from"] == "mfj":
+        # The program read the .mfj as given; the one this ion gives holds the same values
+        # in MOBCAL's layout, so no recorded hash can be its (lab record, task 57).
+        staged = False
+        notes.append(f"the .mfj this ion file gives holds the values the program read from "
+                     f"{given}, laid out as MOBCAL writes a .mfj, so its SHA-256 is not "
+                     f"the recorded one, which is {given}'s own; the result records no "
+                     "hash of the values alone")
+    elif _sha256(data) != want:
+        raise ResultError(f"{where}: the .mfj the embedded ion gives for the run's element "
+                          f"table has SHA-256 {_sha256(data)}, not the {want} the program "
+                          "read; the file does not describe one calculation")
     else:
-        notes.append(f"the staged input was not checked: {why}")
+        staged = True
 
     # the method, under its file's name, or the result's for a custom method
     doc = dict(me["document"])
@@ -398,9 +376,6 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
     else:
         method_name = me["file"]["name"]
     method_text = methods.dumps(doc).encode("utf-8")
-    if m.table is not None:
-        notes.append(f"the method names its element table by path, {m.table}, which must be "
-                     "there with the same SHA-256 to run it" + (f" ({why})" if why else ""))
 
     files = ((out_dir / ion_name, ion_text, ie["file"]["sha256"]),
              (out_dir / method_name, method_text, me["file"]["sha256"] if me["file"] else None))
