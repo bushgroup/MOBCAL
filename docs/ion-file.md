@@ -2,15 +2,17 @@
 
 An ion file holds what MOBCAL needs to know about an ion: the element of every atom, the
 coordinates of every conformer, the partial charges, the net charge, and a record of where each
-of these came from. Its format is named `mobcal-ion`, this page specifies version 1, and a file
-is named `X.ion.json`, i.e., a JSON document that any JSON tool opens. The 2012 programs do not
+of these came from. Its format is named `ccs-ion`, for the collision cross section a
+calculation on the ion gives rather than for this program, this page specifies version 1, and
+a file is named `X.ion.json`, i.e., a JSON document that any JSON tool opens. The 2012 programs do not
 read it. Before a run, MOBCAL writes the `.mfj` input file the 2012 program reads from the ion
 file and the element table of the run, and keeps that `.mfj` in the run directory beside the
 other files the run used. The ion file is what a user keeps; the `.mfj` is written per run.
 
 Version 1 is frozen. Every later version of MOBCAL reads a version 1 file as this page
 describes it, and a change to what the file holds will be a new version number, which a reader
-of version 1 refuses by name.
+of version 1 refuses by name. Before 2.1.0 the format was written under the name `mobcal-ion`,
+by development versions only, and no release wrote it.
 
 Three things decide what a calculation computes: the ion file, the method
 ([Methods](methods.md)), and the seed. A run's record names the ion file's SHA-256 and the
@@ -33,7 +35,7 @@ shortened here:
 
 ```json
 {
-  "format": "mobcal-ion",
+  "format": "ccs-ion",
   "version": 1,
   "label": "Choline_631G++dp_pop",
   "molecular_charge": 1,
@@ -75,7 +77,7 @@ the same coordinates, element keys and charges on every atom.
 
 | Field | Required | Value |
 |---|---|---|
-| `format` | yes | `"mobcal-ion"` |
+| `format` | yes | `"ccs-ion"` |
 | `version` | yes | `1` |
 | `label` | yes | line 1 of the written `.mfj` (below) |
 | `comment` | no | any string; not read by MOBCAL |
@@ -269,8 +271,10 @@ parameters inform the record and move no number a 2012 calculation computes.
 
 MOBCAL refuses a file, naming the field, when
 
-- `format` is not `mobcal-ion`, or `version` is not one this version of MOBCAL reads (a file of
-  version 2 is refused by name, not read as version 1);
+- `format` is not `ccs-ion`, or `version` is not one this version of MOBCAL reads (a file of
+  version 2 is refused by name, not read as version 1). A file under `mobcal-ion`, the
+  format's name in development versions, is refused with a message to change `format` to
+  `ccs-ion`, since nothing else differs;
 - the file is not JSON, holds `NaN`, `Infinity` or a number too large for a double, or names
   the same key twice in one object;
 - a key appears that this page does not define, anywhere outside `import.source`;
@@ -297,3 +301,18 @@ MOBCAL refuses a file, naming the field, when
 Writing the `.mfj` refuses, in addition, an element the run's table lacks and, for a nitrogen
 run, a first conformer without a charge on every atom. MOBCAL never replaces an existing ion
 file unless it is told to.
+
+## For developers of other codes
+
+The format is named for the quantity, not the program, so that another program that computes
+collision cross sections can read and write the same file. Every key of version 1 is core,
+i.e., every key means the same for every program, and none belongs to MOBCAL alone. `label`,
+`correction_factor` and `charge_mode` are the header lines of the `.mfj` that every program of
+the MOBCAL lineage reads, MobCal-MPI included. A program with no use for them writes the label
+it likes, a correction factor of `1.0`, and `calc`, or `none` for an ion without charges.
+
+A program that records more about how a structure was made puts it under `import.source`, the
+one object whose keys a reader keeps without checking them. A new per-atom quantity is a new
+optional column, which is a new version of the format, since a reader refuses every other key
+it does not know. That refusal is what keeps every ion file of version 1 readable by every
+reader of version 1.

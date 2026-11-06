@@ -2,8 +2,9 @@
 
 A result file holds one calculation of an ion's collision cross section: the program that ran
 it, both of its inputs, the gas, the temperature and the seed, how the run ended, and every
-value the program reported, each with its unit. Its format is named `ims-result`, this page
-specifies version 1, and MOBCAL writes one into every run directory as `NAME.result.json`
+value the program reported, each with its unit. Its format is named `ccs-result`, for the
+collision cross section it reports rather than for this program, this page specifies version 1,
+and MOBCAL writes one into every run directory as `NAME.result.json`
 beside `record.json` and `mobcal.out`, where NAME is the run directory's name. A result file
 is written to be read without MOBCAL: it is JSON, its keys say what they hold, and a copy of
 it sent to a colleague carries what the calculation was and what it gave.
@@ -16,7 +17,10 @@ MOBCAL writes the core and a block of its own ([For developers of other
 codes](#for-developers-of-other-codes)).
 
 Version 1 is frozen. Every later version of MOBCAL reads a version 1 file as this page
-describes it, and a change to what the file holds will be a new version number.
+describes it, and a change to what the file holds will be a new version number. Before 2.1.0 the
+format was written under the name `ims-result`, by development versions only, and no release
+wrote it; such a file is refused by that name, and the `record.json` beside it remains the
+record of its run.
 
 The result file adds to the run directory and replaces nothing in it. `mobcal.out` is the
 program's own output and stays the evidence for every number, and `record.json` stays the
@@ -34,7 +38,7 @@ lines of the SUMMARY shortened here:
 
 ```json
 {
-  "format": "ims-result",
+  "format": "ccs-result",
   "version": 1,
   "status": "ok",
   "message": null,
@@ -54,14 +58,14 @@ lines of the SUMMARY shortened here:
   "seed": 5013489,
   "inputs": {
     "ion": {
-      "format": "mobcal-ion",
+      "format": "ccs-ion",
       "file": {"name": "Choline.mfj", "sha256": "a4cf1c4a..."},
       "converted_from": "mfj",
       "embedded": true,
-      "document": {"format": "mobcal-ion", "version": 1, "label": "Choline_631G++dp_pop", ...}
+      "document": {"format": "ccs-ion", "version": 1, "label": "Choline_631G++dp_pop", ...}
     },
     "method": {
-      "format": "mobcal-method",
+      "format": "ccs-method",
       "source": "shipped",
       "name": "2012-he",
       "file": {"name": "2012-he.method.json", "sha256": "..."},
@@ -69,19 +73,22 @@ lines of the SUMMARY shortened here:
       "overrides": {},
       "embedded": true,
       "document": {
-        "format": "mobcal-method",
+        "format": "ccs-method",
         "version": 1,
         "name": "MOBCAL 2012 (He)",
         "description": "The calculation of the 2012 release in helium: ...",
-        "gas": "he",
-        "parameters": "2012",
-        "generator": "ranlux",
-        "temperature": 301,
-        "imp": 1000,
-        "itn": 10,
-        "inp": 40,
-        "inum": 250000,
-        "inor": 30
+        "gas": "He",
+        "temperature": {"value": 301, "unit": "K"},
+        "mobcal": {
+          "generator": "ranlux",
+          "imp": 1000,
+          "itn": 10,
+          "inp": 40,
+          "inum": 250000,
+          "inor": 30,
+          "parameters": {"format": 1, "name": "MOBCAL 2012 helium", "sha256": "6e19c7ce...",
+                         "rows_sha256": "7717e975...", "shipped": true, ...}
+        }
       }
     }
   },
@@ -139,7 +146,7 @@ files of the same calculation can be compared line by line.
 
 | Key | Value |
 |---|---|
-| `format` | `"ims-result"` |
+| `format` | `"ccs-result"` |
 | `version` | `1` |
 | `status` | `"ok"`, `"failed"` or `"stopped"` |
 | `message` | why the run did not end `ok`, with the exit status; `null` when it did |
@@ -173,7 +180,7 @@ computer that ran it says nothing to the computer that reads it; `record.json` k
 
 | Key | Value |
 |---|---|
-| `format` | `"mobcal-ion"`, the format of `document` |
+| `format` | `"ccs-ion"`, the format of `document` |
 | `file` | `name` and `sha256` of the input file as given to the run |
 | `converted_from` | `"mfj"` when the input was a `.mfj`; `null` for an ion file |
 | `embedded` | `true` when `document` carries the ion, `false` when it is recorded by `file` alone |
@@ -208,25 +215,28 @@ recorded by its file alone, with `embedded` set to `false`, whatever the option 
 
 | Key | Value |
 |---|---|
-| `format` | `"mobcal-method"`, the format of `document` |
+| `format` | `"ccs-method"`, the format of `document` |
 | `source` | `"shipped"`, `"file"` or `"custom"` |
 | `name` | what `record.json`'s `method` says: a shipped method's key, a method file's name, or `custom` |
 | `file` | `name` and `sha256` of the method file, for `shipped` and `file`; `null` for `custom` |
 | `from` | for `custom`, the method the changed values were given beside, by key or name, or `null` when none was; `null` otherwise |
-| `overrides` | for `custom`, each key of the method document whose value differs from the `from` method's, with the run's value; `{}` otherwise |
+| `overrides` | for `custom`, each value of the method document that differs from the `from` method's, with the run's value, keyed `temperature` for the core's and by dotted path for the `mobcal` block's (`mobcal.imp`, `mobcal.parameters`); `{}` otherwise |
 | `embedded` | always `true` |
 | `document` | the run's method as a method document ([Method files](methods.md#method-files)) |
 
-The method is always embedded, whatever the ion option, because it is a few hundred bytes and
-because a run's method is otherwise hard to recover: a run made `custom` by `--temperature 298`
+The method is always embedded, whatever the ion option, because a run's method is otherwise
+hard to recover: a run made `custom` by `--temperature 298`
 beside `--method 2012-he` has no method file at all. For `shipped` and `file`, `document` is the
 method file's document as it was at the run, and `file.sha256` the hash of that file. For
 `custom`, `document` is the method the run's gas, element table, generator and six settings
-make, written as File ▸ Save method would write it under the name `Custom`, with the table of
-one's own by its path and SHA-256 as a method file names it. `seed` appears in `document` only
+make, written as File ▸ Save method would write it under the name `Custom`. Every method
+document carries its element table whole ([The element table in a
+method](methods.md#the-element-table-in-a-method)), a few kilobytes, so a run made with
+`--parameters` and a table of one's own reruns from the result file on a computer without that
+table's TOML file. `seed` appears in `document` only
 when the method file carried one; the run's own seed is the top-level `seed`, which a run's
 `--seeds` may have set apart from the method's. Every embedded method document is a valid
-method document of `mobcal-method` version 1, so the method of any run can be written back to
+method document of `ccs-method` version 1, so the method of any run can be written back to
 a file and run again.
 
 ## The results
@@ -364,8 +374,8 @@ Each file is checked as it is written, and `unpack` says what each check found:
   in MOBCAL's layout, with another SHA-256, and `unpack` reports both hashes.
 - **The input the program read** is checked for an ion file: the `.mfj` the written ion file
   gives for the run's element table must have the SHA-256 of `mobcal.staged_input`, and a result
-  file for which it does not is refused. A table of one's own is found where the method names it,
-  and when it is not there the check is skipped and `unpack` says so.
+  file for which it does not is refused. The table is the one the method carries, so the check
+  needs no other file and runs for every ion file.
 
 A run of a `.mfj` is written back as an ion file, since the result file holds the ion document
 that reading the `.mfj` gives and not the `.mfj` itself, and `unpack` says so. The `.mfj` that
@@ -375,7 +385,9 @@ writes a `.mfj` (`1.0` where the 2012 choline input has `1.0000`, and wider colu
 SHA-256 is not the recorded one, which is the original `.mfj`'s. For the choline input of the
 2012 release, `mobcal unpack` followed by the command it prints reproduces the cross sections of
 the 2012 reference output to the last printed digit, and the tests check this on every change
-to MOBCAL.
+to MOBCAL. A run made with a table of one's own reruns the same way after its TOML file has
+been deleted, into a run directory of the same name, with the same `parameters.tab` and the same
+output file.
 
 A result file that records its ion by reference holds no ion to write, and `unpack` refuses it,
 naming the ion file by the name and SHA-256 the result records, so that the file can be found
@@ -424,8 +436,11 @@ In VS Code, a `json.schemas` entry maps the file pattern to the schema:
 
 ## For developers of other codes
 
-The format is named for the measurement, not the program, so that another program computing
-collision cross sections can write the same core. The core is the top-level keys other than
+The format is named for the quantity, not the program, so that another program computing
+collision cross sections can write the same core. Its two inputs follow the same rule: the ion
+file and the method file each have a core that any program can write
+([The ion file](ion-file.md#for-developers-of-other-codes),
+[Methods](methods.md#for-developers-of-other-codes)). The core is the top-level keys other than
 `mobcal`: `format`, `version`, `status`, `message`, `software`, `started`, `finished`,
 `seconds`, `gas`, `temperature`, `seed`, `inputs` and `results`, with the meanings this page
 gives them. To write a result file from another program,

@@ -63,10 +63,14 @@ gives, run for run.
 
 File, Save method… writes the gas, element table, generator and six settings the form holds to
 a method file, `NAME.method.json`, asks for the name the list will show, and adds the file to the
-list. File, Load method… adds a file saved here or elsewhere and fills the fields from it. The list
-remembers its files at the next launch, and removes one that has been moved, deleted or edited
-since it was added, or that no longer loads, such as a TOML method file saved by version 2.0, with
-a message that says which and why ([Methods](methods.md#method-files)). `mobcal run --method PATH` runs the same file.
+list. The file carries the element table whole, a table of one's own included, so it runs on
+another computer without the table's TOML file ([The element table in a
+method](methods.md#the-element-table-in-a-method)). File, Load method… adds a file saved here or
+elsewhere and fills the fields from it, and a table of one's own that the file carries shows in
+the Element table field as its name followed by *(in the method)*. The list remembers its files
+at the next launch, and removes one that has been moved, deleted or edited since it was added, or
+that no longer loads, such as a TOML method file saved by version 2.0, with a message that says
+which and why ([Methods](methods.md#method-files)). `mobcal run --method PATH` runs the same file.
 
 Basics holds the gas (He or N2), the element table (the tables shipped for the gas, or a file of
 one's own for the gas, [The element tables](parameters.md)), the number of seeds per ion, and

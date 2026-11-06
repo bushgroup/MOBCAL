@@ -51,34 +51,58 @@ it at the next launch, and `mobcal run --method PATH` runs the same file.
 
 A method file is JSON, named `NAME.method.json`, and Save method gives that ending to whatever
 name is typed. The five shipped methods are files of the same form, under
-`src/mobcal/methods/` in the source code. A method file of one's own reads
+`src/mobcal/methods/` in the source code. The format is named `ccs-method`, for the collision
+cross section a calculation gives rather than for this program, and this page specifies version
+1. A method file of one's own reads, with the element table shortened here to its first row,
 
 ```json
 {
-  "format": "mobcal-method",
+  "format": "ccs-method",
   "version": 1,
   "name": "Choline at 298.15 K",
   "description": "The 2012 helium calculation at the temperature of our drift tube.",
-  "gas": "he",
-  "parameters": "2012",
-  "generator": "philox",
-  "temperature": 298.15,
-  "imp": 1000,
-  "itn": 10,
-  "inp": 40,
-  "inum": 250000,
-  "inor": 30
+  "gas": "He",
+  "temperature": {"value": 298.15, "unit": "K"},
+  "mobcal": {
+    "generator": "philox",
+    "imp": 1000,
+    "itn": 10,
+    "inp": 40,
+    "inum": 250000,
+    "inor": 30,
+    "parameters": {
+      "format": 1,
+      "name": "MOBCAL 2012 helium",
+      "sha256": "6e19c7ce13dbff2035bac9c762226db61316e706b23f52f2336028af76da18f0",
+      "rows_sha256": "7717e975d73f1c828a42958672273c0403cd2e64c27845f4c08e321e9d445f31",
+      "shipped": true,
+      "gas": "He",
+      "form": "pair",
+      "kinds": {"mass": "double", "epsilon": "double", "sigma": "double", "rhs": "double"},
+      "element": [
+        {"key": 1, "symbol": "H", "mass": "1.008d0", "epsilon": "0.6175d-03",
+         "sigma": "2.2610d0", "rhs": "2.2d0", "status": "fitted", "rhs_status": "own",
+         "provenance": "epsilon an average of ab initio values; sigma fitted to ..."},
+        ...
+      ]
+    }
+  }
 }
 ```
 
-`format` and `version` come first and name the format, `mobcal-method` version 1. A file of
-another format or version is refused for that alone, so a later version of the format cannot be
-misread as this one. `name`, `gas` (`he` or `n2`), `parameters` and `generator` (`philox` or
-`ranlux`) are required, and a key the file does not know is refused by name. The six settings are
-optional, and a setting left out takes its 2012 value. The counts are integers and are written as
-integers, `1000` and never `1000.0` or `1e3`. A key written twice in the file is refused rather
-than read as either of its values, and so are `NaN` and `Infinity`, which are not JSON numbers,
-as for the ion file ([The ion file](ion-file.md)).
+The file has two parts. The **core**, every key but `mobcal`, is what a method of any program
+that computes cross sections has: the format and its version, the name, a description, the gas
+by formula (`He` or `N2`), the temperature in kelvin, and a seed. The **`mobcal` block** holds
+what only this program's calculation has: the random number generator (`philox` or `ranlux`),
+the five sampling counts and the element table. `format` and `version` come first, and a file
+of another format or version is refused for that alone, so a later version of the format cannot
+be misread as this one. Every key is required except `description` and `seed`, in the core and
+in the block alike, and a key the file does not know is refused by name. A method whose only
+block is named for another program is refused by that program's name, since MOBCAL runs a
+method with a `mobcal` block. The counts are integers and are written as integers, `1000` and
+never `1000.0` or `1e3`. A key written twice in the file is refused rather than read as either
+of its values, and so are `NaN` and `Infinity`, which are not JSON numbers, as for the ion file
+([The ion file](ion-file.md)).
 
 `description` is optional, a sentence or two on what the method is. The Method list shows it as
 the method's tooltip, and each shipped method carries one, on where the method comes from.
@@ -93,49 +117,74 @@ wins over the method's seed, and the run is still a run of the method, since the
 of the fields that identify it. A file without `seed` starts at 5013489, as the shipped methods
 do. Save method writes the seed only when the method the form came from carries one, and then
 writes that seed. The name is 1 to 60 characters and must differ from the shipped methods' names
-and from every other file in the list. `parameters` is the name of a shipped table for the gas
-(`2012`, or `2000` in helium), or a table of one's own ([The element tables](parameters.md))
-named by its path and its SHA-256:
+and from every other file in the list.
 
-```json
-"parameters": {
-  "path": "C:/Users/me/tables/my_helium.toml",
-  "sha256": "6e19c7ce13dbff2035bac9c762226db61316e706b23f52f2336028af76da18f0"
-}
-```
+### The element table in a method
 
-A relative path is read from the method file's folder. Save method writes the table's absolute
-path and its SHA-256 at the time of saving. Loading or running the method refuses it, naming the
-table, when the table is no longer at that path or its bytes have changed, so a method file
-always means the calculation it was saved as. The window applies the same rule to its list: a
-remembered file that has been moved, deleted or edited since it was added is removed from the
-list at the next launch, with a message that names it and says why. Loading it again adds it as
-it is now.
+`parameters` is the element table itself, carried whole, whether it is one of the shipped
+tables or a table of one's own. It is the content of the table's TOML file written as JSON, key
+for key and in the same order, every value a string that holds the Fortran literal as the TOML
+file does ([The element tables](parameters.md)), with three keys of its own:
 
-Version 2.0 wrote method files in TOML, `NAME.toml`. Those files were converted to JSON when the
-format changed, and this version refuses a TOML method file with a message that says a method
-file is now `NAME.method.json`; a window that remembered one removes it from the list at the next
-launch with that message. The element tables stay TOML, since each of their values is a Fortran
-literal kept as a string beside a note on where it came from ([The element
-tables](parameters.md)).
+| Key | Value |
+|---|---|
+| `sha256` | the SHA-256 of the TOML file the rows were taken from |
+| `rows_sha256` | the SHA-256 of the table the program reads, `parameters.tab`, from its second line on |
+| `shipped` | `true` when `sha256` is that of one of the gas's shipped tables |
+
+The table rendered from a method is the table rendered from its TOML file, byte for byte, since
+its first line carries the TOML file's SHA-256 and every other line is written from the same
+strings ([The table inside a method](parameters.md#the-table-inside-a-method)). Loading a method
+checks its rows against `rows_sha256`, and a table marked `shipped` against the shipped file,
+field for field, and refuses a method that fails either check, naming the element and the field
+where a shipped table differs. Save method writes the table from its TOML file as the file is at
+the time of saving, so a method file runs on any computer with no other file present, and
+moving, editing or deleting the TOML file afterwards changes nothing about the method. To change
+a table, edit the TOML file and save the method again; rows edited in the method file itself no
+longer hash to `rows_sha256` and are refused.
+
+The window keeps its list of method files by path and SHA-256: a remembered file that has been
+moved, deleted or edited since it was added is removed from the list at the next launch, with a
+message that names it and says why, and loading it again adds it as it is now. A method that
+carries a table of one's own shows it in the Element table field as the table's name followed by
+*(in the method)*.
+
+Before 2.1.0 this format was written under the name `mobcal-method`, by development versions
+only, and no release wrote it. Such a file named its table by name or by path rather than
+carrying its rows, and it is refused with a message to load a shipped method, set the fields
+again and save it. Version 2.0 wrote method files in TOML, `NAME.toml`, and this version refuses
+a TOML method file with a message that says a method file is now `NAME.method.json`; a window
+that remembered one removes it from the list at the next launch with that message. The element
+tables stay TOML files, since each of their values is a Fortran literal kept as a string beside
+a note on where it came from, and a method carries the table it was saved with.
 
 The format is also published as a JSON Schema,
 [`src/mobcal/methods/method.schema.json`](../src/mobcal/methods/method.schema.json), for other
 programs and for editors that check a file as it is typed. The schema checks every key, its type
-and its bounds, and which shipped tables each gas has. Loading a method also checks what the file
-alone cannot show, i.e., that a table of one's own is still at its path with the same SHA-256,
-that no other method in the list has the name, that `itn` × `inp` × `imp` is at most 9,999,999,
-and that every character of the name is printable, along with the three rules of reading above
-that a schema cannot express: integers written as integers, no key twice, and no `NaN` or
-`Infinity`. In VS Code, a `json.schemas` entry in the settings that maps the file pattern
-`*.method.json` to the schema checks every method file as it is typed, without a line in the
-file itself:
+and its bounds, the element table's included. Loading a method also checks what the schema
+cannot express, i.e., that the table's rows hash to `rows_sha256` and a shipped table equals its
+file, that no element key appears twice, that no other method in the list has the name, that
+`itn` × `inp` × `imp` is at most 9,999,999, and that every character of the name is printable,
+along with the three rules of reading above: integers written as integers, no key twice, and no
+`NaN` or `Infinity`. In VS Code, a `json.schemas` entry in the settings that maps the file
+pattern `*.method.json` to the schema checks every method file as it is typed, without a line
+in the file itself:
 
 ```json
 "json.schemas": [
   {"fileMatch": ["*.method.json"], "url": "./src/mobcal/methods/method.schema.json"}
 ]
 ```
+
+### For developers of other codes
+
+A program other than MOBCAL writes the same core with one block of its own, named for the
+program, the way MOBCAL writes `mobcal`, and publishes a schema for that block. A reader of the
+core reads the name, the gas, the temperature and the seed from any program's method and skips
+a block it does not know. The keys of the core change only with the version number. A result
+file records the method of its run as a document of this format ([The
+method](result-file.md#the-method)), so that the calculation behind a cross section travels with
+it.
 
 ## What a run records
 
@@ -145,8 +194,9 @@ from a method file also records the file in `method_file`, its path and its SHA-
 `null` for the other runs. `summary.csv` and `summary.json` carry the same, and the methods
 paragraph (`mobcal methods-text`, the window's Copy methods text) names the method. The record
 does not depend on the method file to say what the method was: the gas, the generator, the
-seed, the element table by path and SHA-256 and the six settings are each in it, so a run stays
-described after its method file is moved, edited or deleted. Run
+seed, the element table by name and SHA-256 (with its path when the run read a TOML file)
+and the six settings are each in it, so a run stays described after its method file is
+moved, edited or deleted. Run
 directories are named for the input, the gas, the seed, the generator when it is RANLUX, the
 table when it is not the gas's 2012 table, and each setting that differs from 2012
 (`choline-he-5013486-ranlux-lj2000-t298-imp25`), never for the method, so the same calculation

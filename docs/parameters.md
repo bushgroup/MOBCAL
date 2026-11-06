@@ -14,7 +14,8 @@ release, from which the 2012 helium program was made, as a named alternate that 
 asked to.
 
 This page describes the file format (format 1), the table the package renders from it, the 2000
-helium set, and how a run names its table and records which one it used.
+helium set, the table a method file carries, and how a run names its table and records which one
+it used.
 
 ## Why every number is a string
 
@@ -203,6 +204,48 @@ With the release's own example and seed, that run prints the release's reference
 line, apart from three print changes. [Reproducing MOBCAL 2000](mobcal-2000.md) gives the
 comparison and lists the changes.
 
+## The table inside a method
+
+A method file ([Methods](methods.md#the-element-table-in-a-method)) carries its element table
+whole, so that a method, and the result file that records a run of it, runs on a computer that
+has never seen the table's TOML file. The carried table is the TOML file's content as JSON, i.e.,
+the same keys in the same order with the same strings, the provenance of each row included and
+the file's comments left out, plus the SHA-256 of the TOML file, the SHA-256 of the rendered
+rows and whether the table is a shipped one:
+
+```json
+"parameters": {
+  "format": 1,
+  "name": "MOBCAL 2012 nitrogen",
+  "sha256": "06a2528ec169627d1c002c2d9561d7d8c434a459552b5642845ba69807443595",
+  "rows_sha256": "2eb315046c09aa92005a40c506ab11fb6d3cb2dc975fac41114bee171233fe85",
+  "shipped": true,
+  "gas": "N2",
+  "form": "combining",
+  "kinds": {"mass": "double", "epsilon": "single", "sigma": "single", "rhs": "double"},
+  "combining": {"eogas": "0.06900d0", "rogas": "3.6600d0",
+                "conve": "4.2d0*0.01036427d0", "convr": "0.890898718d0"},
+  "element": [...]
+}
+```
+
+A number stays a string here for the reason it is a string in the TOML file: the program
+converts the literal itself, by its column's kind, and a JSON number would be read and written
+back as a double by every tool that touched it. The two expressions stay expressions. The
+`parameters.tab` a run renders from a carried table is the one it renders from the TOML file,
+byte for byte: the first line carries the TOML file's SHA-256, which the carried table keeps,
+and the other lines are written from the same strings. The run directory's name, the record's
+table hash and the method a run is identified as are therefore the same whichever of the two the
+table came from, and the test suite holds the rendering of each shipped table from its file and
+from its method to the same bytes.
+
+`rows_sha256` is the SHA-256 of the rendered table from its second line on, i.e., of every
+byte the program converts, and a carried table whose rows do not hash to it is refused with a
+message to make the table a TOML file and save the method again. A table marked `shipped` is
+checked against the shipped file field for field, and a difference is refused with the element
+and the field named. The TOML file stays the way to write a table: Save method and `--parameters`
+read it, and a method carries what they read.
+
 ## Choosing a table for a run
 
 By default a run uses the 2012 table for its gas. In the window, the Element table field under
@@ -221,7 +264,14 @@ file of your own called `2000` is named with its directory, as `./2000`. A file 
 way as the shipped ones, and a file for the other gas is refused. `mobcal render-parameters` takes
 the same names and paths. The run's record names the table it used, by path, name and hash, and says
 whether it is one of the shipped files, so that a result from another table is never mistaken for
-one from the default.
+one from the default. The run's method, which its result file carries
+([The result file](result-file.md#the-method)), carries the table that `--parameters` named, so
+the result file reruns without the TOML file.
+
+A method file that carries a table of one's own ([Methods](methods.md#method-files)) runs on that
+table, and no TOML file is read: the record names the table by name and hash, and its path is
+`null`. A method that carries a shipped table runs on the shipped file, which the carried table
+has been checked to equal.
 
 ## The record of a run
 
@@ -229,9 +279,9 @@ When a run ends, whether it finished or failed, the package writes `record.json`
 directory: the package version; the program, its path, and the record `mobcal build` wrote when
 it compiled it (compiler, flags, source hash); the input file, the name it was copied to, its
 SHA-256, its atom count and its number of coordinate sets; the seed, the random number generator
-and, for a split run, the number of processes; the parameter table, its path, name, format and
-SHA-256, whether it is the
-shipped one, and the name of the rendered table; the run settings, the temperature and the five
+and, for a split run, the number of processes; the parameter table, its path (`null` for a table
+of one's own that a method carried), name, format and SHA-256, whether it is the shipped one,
+and the name of the rendered table; the run settings, the temperature and the five
 sampling counts, with where they came from ([The run settings](settings.md)); the start time, the
 wall time, the exit status,
 the verdict and its message; the cross sections and the values for each coordinate set; and the
