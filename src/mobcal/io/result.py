@@ -20,11 +20,11 @@ task 57):
   run's element table hashes to ``mobcal.staged_input.sha256``, the bytes the program read.
   ``unpack`` refuses a result for which it does not, since the record does not then describe
   one calculation. The table is the one the embedded method carries, shipped or one's own, so
-  the check needs no other file and always runs. For a ``.mfj`` input the program read the ``.mfj`` as given, and the one
-  the ion file gives holds the same values (``Mfj`` equality) in MOBCAL's own layout
-  (``1.0`` for ``1.0000``, wider columns), so no recorded hash can be its: ``unpack`` checks
-  that the document was read from the recorded ``.mfj`` and that it runs on the table, and
-  says that the bytes differ.
+  the check needs no other file and always runs. For a ``.mfj`` input the program read the
+  ``.mfj`` as given, and the one the ion file gives holds the same values (``Mfj`` equality)
+  in MOBCAL's own layout (``1.0`` for ``1.0000``, wider columns), so no recorded hash can be
+  its: ``unpack`` checks that the document was read from the recorded ``.mfj`` and that it
+  runs on the table, and says that the bytes differ.
 - **The method.** A shipped method or a method file is embedded as its document, and
   ``methods.dumps`` writes back the bytes of every file MOBCAL saved; the recorded
   ``inputs.method.file.sha256`` is compared as for the ion. Every method is checked to make the
@@ -42,7 +42,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from mobcal import methods, parameters, settings
+from mobcal import methods, settings
 from mobcal.io import ion, strictjson
 from mobcal.io.ion import Ion, IonError
 

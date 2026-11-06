@@ -79,7 +79,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import statistics
 from collections.abc import Iterable
 from dataclasses import dataclass
