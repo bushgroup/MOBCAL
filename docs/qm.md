@@ -1,20 +1,20 @@
 # Running the quantum chemistry for an import
 
-To compute the cross section of an ion from a structure of your own, `mobcal import` needs an
-output that holds one geometry of the ion and a partial charge on every atom
-([Importing a structure and its charges](import.md)). This page gives ORCA and Gaussian inputs
-that produce such an output, the level of theory and charge scheme that reproduce the charges of
-the 2012 choline input, and how much the choice of charges moves the cross section of that ion in
-helium and in nitrogen. The worked examples are the six ORCA 6.1.1 jobs and three Gaussian 16
-Rev. B.01 jobs on the choline cation (C5H14NO+, 21 atoms, z = +1) in the source code's
-`tests/data/qm/` ([their README](../tests/data/qm/README.md)), and every number on this page was
-measured on them. The import reads both programs' outputs with cclib 1.9rc1.
+To compute the cross section of an ion from a structure of your own, `mobcal import` needs an output
+that holds one geometry of the ion and a partial charge on every atom ([Importing a structure and
+its charges](import.md)). This page gives ORCA and Gaussian inputs that produce such an output, the
+level of theory and charge scheme that reproduce the charges of the 2012 choline input, and how much
+the choice of charges moves the cross section of that ion in helium and in nitrogen. The worked
+examples are the six ORCA 6.1.1 jobs and three Gaussian 16 Rev. B.01 jobs on the choline cation
+(C5H14NO+, 21 atoms, z = +1) in `tests/data/qm/` of the source code ([their
+README](../tests/data/qm/README.md)), and every number on this page was measured on them. The import
+reads the outputs of both programs with cclib 1.9rc1.
 
 ## What the calculation provides
 
 The 2012 model takes two things from a quantum chemistry calculation: the coordinates of every
 atom and a partial charge on every atom. In helium, the trajectory calculation (TM) sums a
-Lennard-Jones term over the ion's atoms and adds the ion-induced dipole potential, which the
+Lennard-Jones term over the atoms of the ion and adds the ion-induced dipole potential, which the
 partial charges set. In nitrogen, the partial charges also interact with the three point charges
 that give the N2 molecule its quadrupole moment, so they enter two terms of the potential rather
 than one. The projection approximation (PA) and the exact hard-sphere scattering method (EHS) use
@@ -28,7 +28,7 @@ output prints ([Which geometry](import.md#which-geometry)).
 
 The 2012 choline input, `fortran/Choline.mfj`, labels its charge column `Choline_631G++dp_pop`
 and records nothing else about it. To find the calculation behind it, we ran single points at its
-coordinates in both programs, at B3LYP/6-31++G(d,p), the basis set the label names. Gaussian's
+coordinates in both programs, at B3LYP/6-31++G(d,p), the basis set the label names. The Gaussian
 Merz-Kollman fit at that level reproduces the 2012 column to within 0.005 e on every atom (root
 mean square 0.002 e). Optimizing the 2012 coordinates at the same level in Gaussian moved no atom
 by more than 0.003 Å (root mean square 0.001 Å), and the 2012 file gives its coordinates to
@@ -51,7 +51,7 @@ and `choline_2012_mk` fits Merz-Kollman charges at a fixed geometry, given as wr
 ```
 
 `Pop=MK` in place of `Pop=CHELPG` in the first route does both in one job, a route none of the
-jobs here runs as such, and `--charges mk` imports the frequency step's charges with the
+jobs here runs as such, and `--charges mk` imports the charges of the frequency step with the
 optimized geometry.
 
 Among the blocks the import reads from an ORCA output, the ESP fit is CHELPG. The ORCA job
@@ -64,29 +64,29 @@ Among the blocks the import reads from an ORCA output, the ESP fit is CHELPG. Th
 * xyzfile 1 1 choline_2012.xyz
 ```
 
-`B3LYP/G` is ORCA's name for B3LYP as Gaussian defines it (with the VWN III local correlation
-functional), whereas ORCA's `B3LYP` uses VWN V. The CHELPG charges are within 0.034 e of the
-2012 column on 20 of the 21 atoms, whereas the quaternary nitrogen is 0.17 e more positive (root
-mean square over all atoms 0.039 e). ORCA uses spherical d functions, whereas Gaussian's default
-for 6-31++G(d,p) is Cartesian d functions, so the two programs' runs differ in the basis as well
+`B3LYP/G` is the ORCA name for B3LYP as Gaussian defines it (with the VWN III local correlation
+functional), whereas `B3LYP` in ORCA uses VWN V. The CHELPG charges are within 0.034 e of the 2012
+column on 20 of the 21 atoms, whereas the quaternary nitrogen is 0.17 e more positive (root mean
+square over all atoms 0.039 e). ORCA uses spherical d functions, whereas the Gaussian default for
+6-31++G(d,p) is Cartesian d functions, so the runs of the two programs differ in the basis as well
 as in the fit.
 
-The nitrogen's offset is a property of the fit rather than of the level of theory. Gaussian's own
-CHELPG fit, at the same level and geometry as its Merz-Kollman fit, is 0.075 e from the 2012
-column (root mean square), and its largest differences are on the three methyl carbons, 0.16 to
-0.17 e more positive, with each methyl's hydrogens about 0.055 e less positive. Summed over each
-methyl group, the differences cancel to within 0.008 e. ORCA's fit moves charge between the
+The offset on the nitrogen is a property of the fit rather than of the level of theory. The CHELPG
+fit in Gaussian itself, at the same level and geometry as its Merz-Kollman fit, is 0.075 e from the
+2012 column (root mean square), and its largest differences are on the three methyl carbons, 0.16 to
+0.17 e more positive, with the hydrogens of each methyl about 0.055 e less positive. Summed over
+each methyl group, the differences cancel to within 0.008 e. The ORCA fit moves charge between the
 nitrogen and the four groups bonded to it instead: +0.17 e on the nitrogen, −0.036 to −0.046 e on
-each group. An ESP fit chooses charges that reproduce the electrostatic potential at points
-outside the ion, and that potential sets the total charge of a group of atoms more closely than it
-sets how the total is divided among them, least of all for an atom buried at the centre of the
-ion, i.e., the quaternary nitrogen or a methyl carbon under its three hydrogens. Fits that place
-their points differently, the Merz-Kollman shells (861 points here) and the CHELPG cubic grid
-(12,034), each with its program's radii, therefore disagree most on those atoms. This is
-consistent with the poor conditioning of buried-atom charges that Bayly, Cieplak, Cornell and
-Kollman described for ESP fits (*J. Phys. Chem.* 1993, 97, 10269). The cross section is far less
-sensitive to these redistributions than the per-atom charges are: all three ESP fits at this level
-move choline's TM cross section by less than 0.1 % in either gas (below).
+each group. An ESP fit chooses charges that reproduce the electrostatic potential at points outside
+the ion, and that potential sets the total charge of a group of atoms more closely than it sets how
+the total is divided among them, least of all for an atom buried at the centre of the ion, i.e., the
+quaternary nitrogen or a methyl carbon under its three hydrogens. Fits that place their points
+differently, the Merz-Kollman shells (861 points here) and the CHELPG cubic grid (12,034), each with
+the radii of its program, therefore disagree most on those atoms. This is consistent with the poor
+conditioning of buried-atom charges that Bayly, Cieplak, Cornell and Kollman described for ESP fits
+(*J. Phys. Chem.* 1993, 97, 10269). The cross section is far less sensitive to these redistributions
+than the per-atom charges are: all three ESP fits at this level move the TM cross section of choline
+by less than 0.1 % in either gas (below).
 
 ## Optimizing, then computing the charges
 
@@ -97,8 +97,8 @@ import reads each the same way, taking the last geometry and the blocks printed 
   its final geometry to `choline_opt.xyz`. The job `choline_sp` reads that file and computes the
   charges at another level (`! B3LYP D3BJ def2-TZVP CHELPG Hirshfeld`). Only the second output is
   imported.
-- **Two jobs in one file.** ORCA's `$new_job` runs a second job on the first one's final
-  geometry, as `choline_two_jobs.inp` does:
+- **Two jobs in one file.** In ORCA, `$new_job` runs a second job on the final geometry of the
+  first, as `choline_two_jobs.inp` does:
 
   ```
   ! B3LYP D3BJ def2-SVP Opt
@@ -113,7 +113,7 @@ import reads each the same way, taking the last geometry and the blocks printed 
   * xyzfile 1 1 choline_two_jobs.xyz
   ```
 
-  The import takes the second job's geometry and charges.
+  The import takes the geometry and charges of the second job.
 - **Charges from the optimization itself.** An ORCA optimization prints the Mulliken and Löwdin
   charges, and with `CHELPG` on the route the CHELPG charges, at the stationary point
   (`choline_opt_chelpg`), and a Gaussian `Opt Freq` job prints the charges its `Pop=` option asks
@@ -121,8 +121,8 @@ import reads each the same way, taking the last geometry and the blocks printed 
   optimization.
 
 The 2012 recipe is of the third kind, with the optimization and the charges at one level. Where
-the geometry and the charges come from different levels, the two-job forms keep each step's level
-on its own route line.
+the geometry and the charges come from different levels, the two-job forms keep the level of each
+step on its own route line.
 
 ## The blocks each program prints
 
@@ -159,19 +159,19 @@ split across ten processes, which gives the serial result exactly.
 | ORCA, B3LYP/G 6-31++G(d,p), Hirshfeld | 1.44 | −1.39 (−1.43 to −1.35) | −0.04 (−0.06 to 0.00) |
 | `uniform`, 1/21 e on every atom | 1.00 | −2.85 (−2.99 to −2.71) | −0.27 (−0.28 to −0.27) |
 
-ΔTM is the difference from the 2012 column (Σ|q| = 4.64 e), the mean over the three seeds with
-their range in brackets. PA and EHS are the same for every column to the printed digits, as they
-must be. In nitrogen the charges move TM from −2.85 to +0.35 %, whereas in helium they move it
-from −0.37 to +0.14 %. Note that this is one singly charged ion of 21 atoms at one geometry, and
-a larger or multiply charged ion has not been measured with this program. The three B3LYP ESP
-fits and the Löwdin charges are within 0.1 % of the 2012 column in both gases (mean of the
-seeds), and the Merz-Kollman fit is the 2012 column in Ω as it is in charge. In
-nitrogen the columns fall roughly in order of Σ|q|, i.e., how strongly polarized the ion's charge
-distribution is: Hirshfeld charges, the least polarized of the population analyses, lower TM by
-1.4 %, and a uniform distribution lowers it by 2.9 %, about 16 times the standard deviation over
-seeds of the 2012 column's own TM (0.17 %). The Mulliken charges are the exception, close to
-the ESP fits in Σ|q| and 0.64 % low, and they put −0.75 e on the buried nitrogen, where every ESP
-fit puts less than 0.2 e of either sign.
+ΔTM is the difference from the 2012 column (Σ|q| = 4.64 e), the mean over the three seeds with their
+range in brackets. PA and EHS are the same for every column to the printed digits, as they must be.
+In nitrogen the charges move TM from −2.85 to +0.35 %, whereas in helium they move it from −0.37 to
++0.14 %. Note that this is one singly charged ion of 21 atoms at one geometry, and a larger or
+multiply charged ion has not been measured with this program. The three B3LYP ESP fits and the
+Löwdin charges are within 0.1 % of the 2012 column in both gases (mean of the seeds), and the
+Merz-Kollman fit is the 2012 column in Ω as it is in charge. In nitrogen the columns fall roughly in
+order of Σ|q|, i.e., how strongly polarized the charge distribution of the ion is: Hirshfeld
+charges, the least polarized of the population analyses, lower TM by 1.4 %, and a uniform
+distribution lowers it by 2.9 %, about 16 times the TM standard deviation over seeds in the 2012
+column (0.17 %). The Mulliken charges are the exception, close to the ESP fits in Σ|q| and 0.64 %
+low, and they put −0.75 e on the buried nitrogen, where every ESP fit puts less than 0.2 e of
+either sign.
 
 To repeat a row, import the column and run it at the three seeds in each gas, e.g., for the
 Gaussian Merz-Kollman row:

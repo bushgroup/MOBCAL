@@ -49,13 +49,13 @@ def set_names() -> str:
 
 # What each shipped method is, for the --method help.
 _METHOD = {
-    "2012-he": "the 2012 release's calculation in helium, its element table and settings under "
-               "RANLUX",
+    "2012-he": "the calculation of the 2012 release in helium, its element table and settings "
+               "under RANLUX",
     "2012-n2": "the same in nitrogen",
     "2012-philox-he": "the 2012 helium table and settings under Philox4x32-10",
     "2012-philox-n2": "the same in nitrogen",
-    "2000-he": "the 2000 helium release's calculation, its table at 298 K and 25 trajectories "
-               "per block under RANLUX",
+    "2000-he": "the calculation of the 2000 helium release, its table at 298 K and 25 "
+               "trajectories per block under RANLUX",
 }
 assert set(_METHOD) == set(methods.METHODS)
 
@@ -83,22 +83,22 @@ SHARED = {
         window="A field changed afterwards makes the method Custom."),
     "parameters": Description(
         "The element table, which gives each atom of the ion its mass and its Lennard-Jones "
-        "and hard-sphere parameters in the gas: a table the package ships, or a TOML file of "
-        "one's own for one gas.",
-        cli=f"A path to a table for the method's gas, or a shipped table by name: "
+        "and hard-sphere parameters in the gas: a table the package ships, or a TOML file "
+        "written for one gas.",
+        cli=f"A path to a table for the gas of the method, or a shipped table by name: "
             f"{set_names()}.",
-        window="Other file… opens a table of one's own for the gas chosen."),
+        window="Other file… opens a TOML table written for the gas chosen."),
     "seeds": Description(
         f"One run of each ion for every seed; the 2012 seed is {DEFAULT_SEED}. A method file "
         "may carry a seed of its own.",
-        cli="A list of integers separated by commas, which wins over the method's seed.",
-        window=f"The seeds are the method's seed, {DEFAULT_SEED} unless the method carries "
+        cli="A list of integers separated by commas, which wins over the seed of the method.",
+        window=f"The seeds are the seed of the method, {DEFAULT_SEED} unless it carries "
                "one, and each integer after it. With more than one, each cross section is the "
                "mean ± s.d. over them."),
     "temperature": Description(
         "The buffer gas temperature in kelvin, 301 K in 2012 and 298 K in 2000. It sets the "
-        "trajectory method's velocity grid and the conversion of each cross section to a "
-        "mobility."),
+        "velocity grid of the trajectory method and the conversion of each cross section "
+        "to a mobility."),
     "rng": Description(
         "The random number generator: Philox4x32-10, or RANLUX, the 2012 generator, which "
         "reproduces the 2012 outputs at the 2012 seed."),
@@ -109,7 +109,7 @@ SHARED = {
         "Cycles of the trajectory method, each an independent estimate of the collision "
         "integral, whose standard deviation the output reports."),
     "inp": Description(
-        "Velocity points of the trajectory method's integration over the relative "
+        "Velocity points of the trajectory-method integration over the relative "
         "velocity."),
     "inum": Description(
         "Trajectories of the projection-approximation and exact hard-sphere pass, which the "
@@ -137,7 +137,7 @@ SHARED = {
         "How a divided calculation shares its blocks of trajectories among its processes. "
         "Static gives each process a fixed share. Claimed lets each process take the next "
         "block no other has taken, so the processes finish together and one slowed by other "
-        "work does not set the run's time. The result is the same either way.",
+        "work does not set how long the run takes. The result is the same either way.",
         cli="static or claimed."),
     "split": Description(
         "How many processes each calculation is divided among. A divided run gives the serial "
@@ -151,22 +151,22 @@ SHARED = {
     "charges": Description(
         "Which atomic charges the imported ion carries: a set the file holds, such as CHELPG or "
         "Mulliken, or uniform, the net charge spread evenly over the atoms.",
-        cli="The keys are mulliken, lowdin, chelpg and hirshfeld for an ORCA output's "
-            "blocks; mulliken, hirshfeld, cm5, natural, mk and chelpg for a Gaussian "
-            "output's; column for an .xyz file's fifth column; and uniform. Without it, the "
-            "import lists what the file holds.",
+        cli="The keys are mulliken, lowdin, chelpg and hirshfeld for the blocks of an ORCA "
+            "output; mulliken, hirshfeld, cm5, natural, mk and chelpg for those of a "
+            "Gaussian output; column for the fifth column of an .xyz file; and uniform. "
+            "Without it, the import lists what the file holds.",
         window="An ESP fit is chosen when the file holds one, Merz-Kollman (mk) before CHELPG; "
                "otherwise choose before the batch can run."),
     "net_charge": Description(
-        "The ion's net charge, in elementary charges.",
+        "The net charge of the ion, in elementary charges.",
         cli="An .xyz file needs it; for an output it must agree with the charge the output was "
             "computed at.",
         window="An .xyz file does not carry it, so give it here."),
     "result_ion": Description(
-        "Whether each run's result file, NAME.result.json, carries the ion's geometries and "
-        "charges or names the ion file by its name and SHA-256 alone, to keep result files "
-        "small when the geometries are kept elsewhere. The method is in every result file "
-        "either way.",
+        "Whether the result file of each run, NAME.result.json, carries the geometries and "
+        "charges of the ion or names the ion file by its name and SHA-256 alone, to keep "
+        "result files small when the geometries are kept elsewhere. The method is in every "
+        "result file either way.",
         cli="embed, which carries the ion, or reference.",
         window="Checked, each result file carries the ion."),
     "methods_text": Description(
@@ -203,46 +203,46 @@ WINDOW = {
     "pause_queue": "Starts no more runs of this batch. Runs in flight finish and keep their "
                    "results; the rest wait for Resume queue.",
     "pausing": "Waiting for the runs in flight to finish.",
-    "resume_queue": "Runs the paused batch's remaining runs, then the batches after it.",
+    "resume_queue": "Runs the remaining runs of the paused batch, then the batches after it.",
     "remove_queued": "Removes the selected batches. On the running batch it asks, then stops "
                      "it.",
     "progress": "Runs done of the batch.",
     "running": "Each running run and its time so far, and for a divided run, its blocks of "
                "trajectories written.",
     "results": "One row for each ion in each gas. Double-click a row to open its output.",
-    "copy": "Copies the table to the clipboard, tab-separated, with each row's input file, run "
-            "count and folder.",
-    "save_csv": "Saves the table as a CSV file, with each row's input file, run count and "
-                "folder.",
-    "show_in_folder": "Opens the selected row's run directory, or the results folder.",
-    "open_output": "Opens the selected row's mobcal.out, as double-clicking the row does.",
+    "copy": "Copies the table to the clipboard, tab-separated, with the input file, run count "
+            "and folder of each row.",
+    "save_csv": "Saves the table as a CSV file, with the input file, run count and folder of "
+                "each row.",
+    "show_in_folder": "Opens the run directory of the selected row, or the results folder.",
+    "open_output": "Opens the mobcal.out of the selected row, as double-clicking the row does.",
 }
 
 # The column headers of the window's two tables, by their text.
 COLUMNS = {
     "inputs": {
-        "File": "The input file; its full path is in the cell's tooltip.",
+        "File": "The input file; the cell tooltip gives its full path.",
         "Atoms": "Atoms in the ion.",
         "Sets": "Coordinate sets in the file; a run reports the mean over them.",
-        "Charges": "Which atomic charges the run uses. An ion file's or .mfj file's row names "
-                   "its charge mode, from file, uniform or none, read from the file; an imported "
-                   "structure's row is where to choose its charges.",
-        "Net charge": "The ion's net charge, in elementary charges. An ion file's or .mfj file's "
-                      "row shows the charge its calculation uses, read from the file and by gas "
-                      "where helium and nitrogen read it differently; an .xyz file's row asks "
-                      "for it.",
-        "Status": "ready, or what the input needs before the batch can run; an unreadable "
-                  "file's reason is in the cell's tooltip.",
+        "Charges": "Which atomic charges the run uses. The row of an ion file or .mfj file names "
+                   "its charge mode, from file, uniform or none, read from the file; the row of "
+                   "an imported structure is where to choose its charges.",
+        "Net charge": "The net charge of the ion, in elementary charges. The row of an ion file or "
+                      ".mfj file shows the charge its calculation uses, read from the file and "
+                      "by gas where helium and nitrogen read it differently; the row of an .xyz "
+                      "file asks for it.",
+        "Status": "ready, or what the input needs before the batch can run; for an unreadable "
+                  "file, the cell tooltip gives the reason.",
     },
     "results": {
-        "Ion": "The input file's name.",
+        "Ion": "The name of the input file.",
         "Gas": "The buffer gas.",
         "TM (Å²)": "The trajectory-method cross section, the mean ± s.d. over seeds when there "
                    "are several.",
         "PA (Å²)": "The projection-approximation cross section, calculated in helium alone.",
         "EHS (Å²)": "The exact hard-sphere cross section, calculated in helium alone.",
-        "Status": "ok, or how many of the seeds failed or were stopped; a failed run's reason "
-                  "is in the cell's tooltip.",
+        "Status": "ok, or how many of the seeds failed or were stopped; for a failed run, the "
+                  "cell tooltip gives the reason.",
         "Time": "The time the program took, summed over the seeds.",
     },
 }

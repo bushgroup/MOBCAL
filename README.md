@@ -30,9 +30,9 @@ without a stated decision and a stated reason. The element tables are kept as on
 gas, every number the literal the 2012 source spelled, which the package checks and renders into
 every run directory, and the programs read them from there
 ([docs/parameters.md](docs/parameters.md)); the test suite reads every row back through the
-programs' own reader and holds it to the 2012 number to the last bit. The changes to the Fortran
-so far are listed with their line counts in [fortran/README.md](fortran/README.md). Two add the
-statements that let one calculation run as several processes, one replaces the element
+reader in the programs themselves and holds it to the 2012 number to the last bit. The changes
+to the Fortran so far are listed with their line counts in [fortran/README.md](fortran/README.md).
+Two add the statements that let one calculation run as several processes, one replaces the element
 tables in the source with the reading of that file, one adds the second random number
 generator ([docs/random-numbers.md](docs/random-numbers.md)), and one makes the temperature and
 the five sampling counts run settings read from a file
@@ -41,7 +41,7 @@ program reports: a refused input now exits with status 1, an input larger than t
 refused instead of overrunning them, two output formats print what they were meant to, and the
 shipped run file names a neutral output. None of them changes a number the program computes for
 the 2012 choline input under the 2012 generator, and the regression test holds every line of
-its output to the 2012 outputs on every change, byte for byte apart from the lines those two formats print. One copy error is corrected: the nitrogen program gave silicon iron's parameters
+its output to the 2012 outputs on every change, byte for byte apart from the lines those two formats print. One copy error is corrected: the nitrogen program gave silicon the parameters of iron
 from the second coordinate set of an input on.
 
 ## Installing
@@ -127,31 +127,31 @@ the element table, the generator and the run settings (`2012-philox-he` by defau
 will use the processors and about how long they will take, runs them `--workers` at a time (by
 default, as many as the machine has processors), and prints each result as it lands. Each run
 gets a directory of its own under `--out`, named for the input, the gas and the seed, with
-`-ranlux` appended under RANLUX, the element table when it is not the gas's default (`-lj2000`,
-or `-lj` and the start of a file's SHA-256), and each setting that differs from 2012, and
-holding a copy of the input, the `mobcal.in` the program read, the element table rendered as
-`parameters.tab`, the run settings rendered as `settings.tab`, the output it wrote as
-`mobcal.out`, whatever it printed to the console as `stdout.log`, and `record.json`, which
+`-ranlux` appended under RANLUX, the element table when it is not the default for the gas
+(`-lj2000`, or `-lj` and the start of the SHA-256 of a file), and each setting that differs
+from 2012, and holding a copy of the input, the `mobcal.in` the program read, the element table
+rendered as `parameters.tab`, the run settings rendered as `settings.tab`, the output it wrote
+as `mobcal.out`, whatever it printed to the console as `stdout.log`, and `record.json`, which
 records the program and its build, the input and its hash, the seed and the generator, the
-element table and its hash, the settings and where they came from, the method they make (a
-shipped method's key, a method file's name with its path and hash, or `custom`), the times and
-the result. Beside it, `NAME.result.json` is the run's result file, written to be read without
-MOBCAL: both inputs, the gas, the temperature and the seed, how the run ended, and every value
-the program reported, each with its unit ([The result file](docs/result-file.md)).
+element table and its hash, the settings and where they came from, the method they make (the
+key of a shipped method, the name of a method file with its path and hash, or `custom`), the
+times and the result. Beside it, `NAME.result.json` is the result file of the run, written to
+be read without MOBCAL: both inputs, the gas, the temperature and the seed, how the run ended,
+and every value the program reported, each with its unit ([The result file](docs/result-file.md)).
 The directory of a run in one process is a
 complete record of the run: the program started again in that directory repeats the
 calculation. When every run has landed, `summary.csv` and `summary.json` are written beside the
 run directories, one row per run with its seed, generator and method, its status, its cross
 sections in Å², and the time the program took. For an input with several coordinate sets the
 row carries the mean over sets, as the program reports it, and `summary.json` the value for
-each set. The summaries cover every run the folder holds, not only the last command's, so one
+each set. The summaries cover every run the folder holds, not only those of the last command, so one
 results folder can hold a study: a later command adds its runs beside the earlier ones, with
 `--skip-done` leaves out the runs the folder already holds complete, and refuses to run an input
-whose name another input's run directory already carries. `mobcal methods-text runs` prints a
+whose name a run directory of another input already carries. `mobcal methods-text runs` prints a
 methods paragraph for the runs in a folder, with the program, version, method, gas, element
 table, temperature, trajectory counts, generator and seeds, and the papers to cite, and it
-reads result files as well as run directories. `mobcal unpack NAME.result.json` writes a run's
-ion file and method file back from its result file, checks each against the hash the result
+reads result files as well as run directories. `mobcal unpack NAME.result.json` writes the
+ion file and method file of a run back from its result file, checks each against the hash the result
 records, and prints the command that runs the calculation again
 ([Reading it back](docs/result-file.md#reading-it-back)).
 
@@ -160,7 +160,7 @@ commands. `--method 2012-he` and `--method 2012-n2` are the calculation of the 2
 ([`docs/mobcal-2012.md`](docs/mobcal-2012.md)) and `--method 2000-he` that of the 2000 helium
 release ([`docs/mobcal-2000.md`](docs/mobcal-2000.md)), each equal to the command lines those
 pages give; the default, `2012-philox-he`, and `2012-philox-n2` are the 2012 tables and
-settings under Philox. `--method PATH` runs a method file of one's own, `NAME.method.json`,
+settings under Philox. `--method PATH` runs a method file of your own, `NAME.method.json`,
 which names its gas, table, generator and settings ([`docs/methods.md`](docs/methods.md)). An option given beside a
 method overrides that one value, and the run records the method as `custom`. The seed is not
 part of a method. The window, `mobcal gui`, offers the same methods and saves and loads method
@@ -216,7 +216,7 @@ uv run mobcal run choline.mfj --method 2012-philox-n2 --split 8 --out runs
 runs the choline calculation in nitrogen as eight processes and reports the serial result
 exactly: the same cross section, standard deviation and failure count to every printed digit,
 because the random number stream is partitioned rather than re-drawn and the sums are made by
-the serial program's own statements. The trajectory method integrates 400 blocks of 1,000
+the statements of the serial program itself. The trajectory method integrates 400 blocks of 1,000
 trajectories per coordinate set at the 2012 settings, one per cycle and velocity point (the
 block count is the number of cycles times the number of velocity points, so other settings
 give other counts), and each of the eight
@@ -224,17 +224,17 @@ processes integrates every eighth block in velocity-major order, so that its sha
 slow collisions with the fast, reaches each of its own blocks with the random number stream in
 the state the serial run would have had, by moving the draw count past the other blocks under
 Philox or by drawing through them under RANLUX, and writes a 76-byte file per block it
-integrated, which carries the seed, the generator and the settings along with the block's
-sums. When all eight
+integrated, which carries the seed, the generator and the settings along with the sums of
+the block. When all eight
 have landed, the program runs once more in the run directory as the combining run, which
 integrates nothing, reads the 400 files back and makes the sums, the averages and the SUMMARY
-with the same statements the serial run uses. That output is the run's output, read as any
+with the same statements the serial run uses. That output is the output of the run, read as any
 other. A worker that did not write every block it owed fails the run, and the combining run
 never starts, and a run that fails or is stopped keeps every file its processes wrote. A run
-that succeeds writes into `record.json` what only its workers' directories hold (when each
+that succeeds writes into `record.json` what only the directories of its workers hold (when each
 worker started and ended, how many blocks it integrated and its exit status, which worker
 integrated each block, and the energy-conservation diagnostics a worker printed) and then
-removes the workers' directories, `w01` to `w08`, and the 400 block files, which leaves the
+removes the worker directories, `w01` to `w08`, and the 400 block files, which leaves the
 eight files of a run in one process. With `--scratch zip` the block files are packed into
 `blocks.zip` instead, and unpacked into the run directory they let the program repeat the
 combining run there; with `--scratch keep` every file stays. Choline split 20 ways in helium
@@ -275,7 +275,7 @@ projection-approximation, exact hard-sphere and trajectory-method values in heli
 trajectory-method value in nitrogen. The third requires the whole file to be byte-identical to
 the reference on the platforms listed in `tests/strict-platforms.txt`, which are all three. A
 fourth test runs the same helium calculation split across one process and across three, and
-requires each combined output to match the serial run's line for line, with no tolerance, apart
+requires each combined output to match the serial output line for line, with no tolerance, apart
 from the energy-conservation diagnostics, which the process that integrated the failing
 trajectory prints, and the one line that marks a combined output as combined; the diagnostics
 themselves must be conserved across the workers. The same helium calculation runs under
@@ -320,8 +320,8 @@ Any research that uses this code or the included Lennard-Jones parameters should
    mobility for choline and other ammonium cations in N2. *Anal. Chem.* 2008, 80, 1928-1936.
 
 The 2012 release is also kept, exactly as published, at
-[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012), and the Jarrold group's 2000
-helium release, from which the 2012 helium program was made, as distributed at
+[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012), and the 2000
+helium release of the Jarrold group, from which the 2012 helium program was made, as distributed at
 [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). Calculations made with the
 MMFF94/exp-6 programs of 2017 and 2018, a branch of the same lineage, should reference the two
 papers that their repository, [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018),

@@ -1,17 +1,17 @@
 # Reproducing MOBCAL 2012
 
-The two programs MOBCAL runs, helium and nitrogen, are the 2012 release of MOBCAL
-(Campuzano et al., *Anal. Chem.* 2012, 84, 1026), kept as published at
-[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) with its choline input and the
-two reference outputs, choline in helium and in nitrogen. The 2012 element tables, the 2012
-temperature and sampling counts, and the 2012 seed are what `mobcal run` uses when it is given
-nothing else, so the calculation of the release differs from the default run in one choice
-only, the random number generator. On the release's own example, choline (the 2012 paper's
-21-atom test ion), the shipped programs print each reference output in every line but 41, and
-each of those 41 lines is a change in how a value is printed, not in the value. One computed
-value has moved since 2012, on purpose, and it applies to nitrogen calculations of ions that
-contain silicon. This page gives the commands, says what to compare and what the test suite
-holds, lists the differences, and states that limit.
+The two programs MOBCAL runs, helium and nitrogen, are the 2012 release of MOBCAL (Campuzano et al.,
+*Anal. Chem.* 2012, 84, 1026), kept as published at
+[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012) with its choline input and the two
+reference outputs, choline in helium and in nitrogen. The 2012 element tables, the 2012 temperature
+and sampling counts, and the 2012 seed are what `mobcal run` uses when it is given nothing else, so
+the calculation of the release differs from the default run in one choice only, the random number
+generator. On the example that ships with the release, choline (the 21-atom test ion of the 2012
+paper), the shipped programs print each reference output in every line but 41, and each of those 41
+lines is a change in how a value is printed, not in the value. One computed value has moved since
+2012, on purpose, and it applies to nitrogen calculations of ions that contain silicon. This page
+gives the commands, says what to compare and what the test suite holds, lists the differences, and
+states that limit.
 
 ## The commands
 
@@ -39,7 +39,7 @@ A run under Philox is a 2012 calculation in every respect but its random numbers
 sections differ from the 2012 ones in their last digits, as a run at another seed would, and
 over many seeds the two generators give the same distribution
 ([Random numbers](random-numbers.md)). The seed belongs to the calculation rather than to
-the release, so for an ion of one's own any seed under either generator gives a 2012
+the release, so for an ion other than the example any seed under either generator gives a 2012
 calculation, whereas a number published from the 2012 program reproduces only under RANLUX at
 the seed it was computed with. The runs write their outputs to
 `runs/Choline_pop-he-5013489-ranlux/mobcal.out` and `runs/Choline_pop-n2-5013489-ranlux/mobcal.out`,
@@ -55,16 +55,15 @@ and the README records choline in nitrogen running 15.8 times faster split 20 wa
 ## Comparing with the references
 
 For helium, `mobcal self-check --choline` runs this calculation and compares its three cross
-sections with the reference in about three minutes
-([Installing MOBCAL](install.md#checking-an-installation)). To compare whole outputs, take the
-references, `Choline_He.out` and `Choline_N2.out`, the files of the release's `sample-output/`
-at tag `v1.0`, which the installation carries in `examples/sample-output/` beside the input,
-`examples/Choline.mfj` (in the source code, they are
-[`fortran/sample-output/`](../fortran/sample-output/) and `fortran/Choline.mfj`).
-They were written by g77 builds in 2012 from an input then named `Choline_pop.mfj`, and each
-output echoes its input's name twice, in its first lines and in the SUMMARY. `Choline.mfj` holds
-the same coordinates, so copy it to the echoed name before running, rather than editing either
-side:
+sections with the reference in about three minutes ([Installing
+MOBCAL](install.md#checking-an-installation)). To compare whole outputs, take the references,
+`Choline_He.out` and `Choline_N2.out`, the files in `sample-output/` of the release at tag `v1.0`,
+which the installation carries in `examples/sample-output/` beside the input, `examples/Choline.mfj`
+(in the source code, they are [`fortran/sample-output/`](../fortran/sample-output/) and
+`fortran/Choline.mfj`). They were written by g77 builds in 2012 from an input then named
+`Choline_pop.mfj`, and each output echoes the name of its input twice, in its first lines and in the
+SUMMARY. `Choline.mfj` holds the same coordinates, so copy it to the echoed name before running,
+rather than editing either side:
 
 ```
 cp <installation>/examples/Choline.mfj Choline_pop.mfj
@@ -89,7 +88,7 @@ references print them. This was measured with MSYS2 gfortran 16.2.0 on Windows o
 
 ## What the tests hold
 
-Unlike the [2000 comparison](mobcal-2000.md), this one is part of the source code's test suite,
+Unlike the [2000 comparison](mobcal-2000.md), this one is part of the test suite of the source code,
 which runs on Windows, macOS and Linux in continuous integration for every change. The suite
 compares with [`tests/reference/`](../tests/reference/README.md), which holds what the current
 programs print for choline in both gases, and a test ties those two files to the 2012 originals line
@@ -128,22 +127,22 @@ references.
 ## Silicon in nitrogen
 
 One number the 2012 nitrogen program computed is not reproduced, on purpose. The 2012 sources
-assigned each atom its parameters twice, in one routine for an input's first coordinate set and
-in another for each later set, and in the nitrogen program the second copy gave silicon iron's
-Lennard-Jones well depth and radius (0.0130 kcal/mol and 2.9120 Å, where the first copy gave
-silicon's, 0.4020 kcal/mol and 4.2950 Å). A 2012 nitrogen calculation of an ion that contains
-silicon therefore treated silicon as silicon in the first coordinate set and as iron in every
-later one. That was a copy error, and since 22 October 2026 both readers take the one row of
-the table, silicon's. So the trajectory-method cross section of the second and later coordinate
-sets of such an input, and the averages over its sets, differ from the 2012 numbers, whereas a
-single coordinate set, an ion without silicon, and every helium calculation are unaffected.
-Choline contains no silicon, and both choline references are reproduced. The test suite holds
-this boundary on a two-set test ion with one atom of each element: its nitrogen output equals
-the 2012 program's but for the second set's results, and without silicon equals it entirely.
+assigned each atom its parameters twice, in one routine for the first coordinate set of an input and
+in another for each later set, and in the nitrogen program the second copy gave silicon the
+Lennard-Jones well depth and radius of iron (0.0130 kcal/mol and 2.9120 Å, where the first copy gave
+those of silicon, 0.4020 kcal/mol and 4.2950 Å). A 2012 nitrogen calculation of an ion that contains
+silicon therefore treated silicon as silicon in the first coordinate set and as iron in every later
+one. That was a copy error, and since 22 October 2026 both readers take the one row of the table for
+silicon. So the trajectory-method cross section of the second and later coordinate sets of such an
+input, and the averages over its sets, differ from the 2012 numbers, whereas a single coordinate
+set, an ion without silicon, and every helium calculation are unaffected. Choline contains no
+silicon, and both choline references are reproduced. The test suite holds this boundary on a two-set
+test ion with one atom of each element: its nitrogen output equals that of the 2012 program but for
+the results of the second set, and without silicon equals it entirely.
 
 No input to the shipped programs reproduces the 2012 numbers for such an ion. The table has one
-row per element and both readers look the same row up, so a table of one's own that gave silicon
-iron's numbers would give them to the first coordinate set as well. A 2012 number for a
+row per element and both readers look the same row up, so a table made to give silicon the
+numbers of iron would give them to the first coordinate set as well. A 2012 number for a
 multi-set nitrogen calculation of an ion containing silicon reproduces only with the 2012
 program itself (below).
 
@@ -157,9 +156,9 @@ combined output carries one line per coordinate set recording the blocks it read
 ```
 
 followed by a blank line, and the diagnostic of a failed trajectory (`energy not conserved`, two
-lines and the blank line before them) is printed by the worker that integrated it, in that
-worker's output, instead of in the combined output. A run that succeeds copies each of those
-pairs, with its worker's number, into the `diagnostics` list of its `record.json` before it
+lines and the blank line before them) is printed by the worker that integrated it, in the output
+of that worker, instead of in the combined output. A run that succeeds copies each of those
+pairs, with the number of its worker, into the `diagnostics` list of its `record.json` before it
 removes the worker directories (`--scratch keep` leaves them, `w01` to `wW`). The count of failed
 trajectories in the SUMMARY, and every number, are those of the serial run. With those lines set
 aside, a run of choline split 20 ways differs from its reference in the same 41 lines as the
@@ -167,14 +166,14 @@ serial run, in both gases.
 
 ## The 2012 program itself
 
-The 2012 sources build and run today without a change. The release's README
+The 2012 sources build and run today without a change. The README of the release
 ([Compiling](https://github.com/bushgroup/MOBCAL-2012#compiling)) gives a gfortran line that asks
-for the static storage of local variables, as MOBCAL's own build recipe (`mobcal.fortran`)
-does, and explains why the 2012 README found that optimized and gfortran builds failed. Built
-from the sources at tag `v1.0` with that recipe and run on `Choline_pop.mfj` at seed 5013489,
-each program prints its reference byte for byte once carriage returns are stripped, but for the
-`mass of ion` line, which it prints with the `D` exponent of format 604 (gfortran 16.2.0,
-Windows, 24 October 2026). That program is the reference for any question the 41 lines leave
-open, and the only route to a 2012 nitrogen number for a multi-set ion containing silicon; for
-any other calculation, the shipped programs under `--rng ranlux` give the same numbers with this
-package's input checks, run records and parallel runs.
+for the static storage of local variables, as the MOBCAL build recipe (`mobcal.fortran`) does, and
+explains why the 2012 README found that optimized and gfortran builds failed. Built from the sources
+at tag `v1.0` with that recipe and run on `Choline_pop.mfj` at seed 5013489, each program prints its
+reference byte for byte once carriage returns are stripped, but for the `mass of ion` line, which it
+prints with the `D` exponent of format 604 (gfortran 16.2.0, Windows, 24 October 2026). That program
+is the reference for any question the 41 lines leave open, and the only route to a 2012 nitrogen
+number for a multi-set ion containing silicon; for any other calculation, the shipped programs under
+`--rng ranlux` give the same numbers with the input checks, run records and parallel runs of this
+package.

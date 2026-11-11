@@ -7,9 +7,9 @@ programs (helium and nitrogen) compiled for that platform, the 2012 choline inpu
 reference outputs, and these pages, which the window shows under Help, MOBCAL Help. To run
 MOBCAL from its source code instead, see [From source](#from-source).
 
-Released versions are on the repository's
-[Releases page](https://github.com/bushgroup/MOBCAL/releases). Between releases, every change to
-the repository builds all three packages in the
+Released versions are on the
+[Releases page](https://github.com/bushgroup/MOBCAL/releases) of the repository. Between releases,
+every change to the repository builds all three packages in the
 [`ci` workflow](https://github.com/bushgroup/MOBCAL/actions/workflows/ci.yml), which keeps them
 as artifacts of each run (`package-Windows-X64`, `package-macOS-ARM64`, `package-Linux-X64`) for
 30 days. A development build carries a version ending in `.dev0`.
@@ -39,7 +39,7 @@ tar -xzf mobcal-<version>-macos-arm64.tar.gz -C /Applications
 
 This gives `MOBCAL.app`, which opens the window, and holds the `mobcal` command in
 `MOBCAL.app/Contents/MacOS`. The program is not signed by Apple, so macOS refuses to open a copy
-that was downloaded with a web browser until the download's quarantine flag is removed:
+that was downloaded with a web browser until the quarantine flag on the download is removed:
 
 ```
 xattr -dr com.apple.quarantine /Applications/MOBCAL.app
@@ -67,8 +67,8 @@ The Fortran programs are linked statically and depend on no library. The `mobcal
 a glibc-based distribution; each build is tested in AlmaLinux 8, Ubuntu 20.04 and Debian stable
 containers that have neither a compiler nor Python installed. `mobcal gui` opens the window. It
 needs a newer system than the command does, Ubuntu 22.04, Debian 12, RHEL 9 or later, because the
-Qt libraries it is built on need the C++ runtime of GCC 11, and a desktop's X11 libraries, which
-any desktop installation has; the one a desktop may lack, `libxcb-cursor0`, is in the archive,
+Qt libraries it is built on need the C++ runtime of GCC 11, and the X11 libraries of a desktop,
+which any desktop installation has; the one a desktop may lack, `libxcb-cursor0`, is in the archive,
 and the window is tested in Ubuntu 22.04 and Debian stable containers without it.
 On a machine without a display, `mobcal run` does everything the window does.
 
@@ -82,12 +82,12 @@ checks, in under a second, that the installed copy can compute a cross section. 
 per stage, with the time each took: the version; that the element tables and the five shipped
 methods are the files this package shipped, by their checksums, and pass the checks a run puts them
 through ([The element tables](parameters.md), [Methods](methods.md)); that both Fortran programs
-are present, are the files that were built for this package, and were built from this package's
-Fortran sources with the recorded compiler flags (the folder `fortran` beside `mobcal` holds the
-programs and a `build.json` that records the compiler, the flags, the commit and a checksum of each
-file); and that each program starts and refuses an input naming an element it does not define, which
-exercises everything a calculation does except the trajectories. It ends with `self-check passed`,
-or names the stage that failed.
+are present, are the files that were built for this package, and were built from the Fortran
+sources of this package with the recorded compiler flags (the folder `fortran` beside `mobcal`
+holds the programs and a `build.json` that records the compiler, the flags, the commit and a
+checksum of each file); and that each program starts and refuses an input naming an element it
+does not define, which exercises everything a calculation does except the trajectories. It ends
+with `self-check passed`, or names the stage that failed.
 
 ```
 mobcal self-check --choline
@@ -128,7 +128,7 @@ inside the installation, which an upgrade replaces.
 MOBCAL also runs from a clone of its repository, on any platform with
 [uv](https://docs.astral.sh/uv/) and gfortran (on Windows, gfortran from MSYS2 with
 `C:\msys64\mingw64\bin` on `PATH`). uv provides Python and the packages MOBCAL needs, and
-every command runs through it from the repository's folder:
+every command runs through it from the repository folder:
 
 ```
 git clone https://github.com/bushgroup/MOBCAL.git

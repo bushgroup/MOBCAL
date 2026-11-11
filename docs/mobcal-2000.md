@@ -1,18 +1,17 @@
 # Reproducing MOBCAL 2000
 
-MOBCAL's helium program descends from the Jarrold group's 2000 release of MOBCAL
-(Mesleh et al., *J. Phys. Chem.* 1996, 100, 16082; Shvartsburg and Jarrold, *Chem. Phys. Lett.*
-1996, 261, 86), kept as distributed at
-[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The 2012 helium source
-differs from that release's `mobcal.f` in what it computes in three ways: the element table (the
-Lennard-Jones well depths and radii of hydrogen, carbon, nitrogen and oxygen, and a fluorine
-row), the temperature (298 K in 2000, 301 K in 2012), and `imp`, the trajectories per block of
-the trajectory method (25 in 2000, 1,000 in 2012). The package now ships the 2000 element
+The MOBCAL helium program descends from the 2000 release of MOBCAL by the Jarrold group (Mesleh et
+al., *J. Phys. Chem.* 1996, 100, 16082; Shvartsburg and Jarrold, *Chem. Phys. Lett.* 1996, 261, 86),
+kept as distributed at [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The 2012
+helium source differs from the `mobcal.f` of that release in what it computes in three ways: the
+element table (the Lennard-Jones well depths and radii of hydrogen, carbon, nitrogen and oxygen, and
+a fluorine row), the temperature (298 K in 2000, 301 K in 2012), and `imp`, the trajectories per
+block of the trajectory method (25 in 2000, 1,000 in 2012). The package now ships the 2000 element
 table as a named set and reads the temperature and `imp` as run settings, so the shipped helium
-program calculates every number the 2000 program calculates. On the release's own example it
-prints the release's reference output in every line but 42, and each of those 42 lines is a
-change in how a value is printed, not in the value. This page gives the command, says what to
-compare, and lists the differences.
+program calculates every number the 2000 program calculates. On the example that ships with the
+release it prints the reference output of the release in every line but 42, and each of those 42
+lines is a change in how a value is printed, not in the value. This page gives the command, says
+what to compare, and lists the differences.
 
 ## The command
 
@@ -24,12 +23,12 @@ mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux -
 ```
 
 `--method 2000-he --seeds 5013486` is the same command in fewer words, and the run records its
-method as `2000-he` whichever way it was asked for ([Methods](methods.md)). The window's MOBCAL
-2000 (He) method is the same calculation at the window's seeds, the 2012 seed and those after
-it, so it reproduces the 2000 method on an ion of one's own, whereas the release's example, run
-at 5013486, reproduces from a terminal only.
+method as `2000-he` whichever way it was asked for ([Methods](methods.md)). In the window, the
+MOBCAL 2000 (He) method is the same calculation at the seeds the window uses, the 2012 seed and
+those after it, so it reproduces the 2000 method on an ion other than the example, whereas the
+example of the release, run at 5013486, reproduces from a terminal only.
 
-Each option sets one thing to its value in the release's example run, where the default run
+Each option sets one thing to its value in the example run of the release, where the default run
 would use the 2012 value:
 
 | Option | The 2000 release | Without the option |
@@ -38,13 +37,13 @@ would use the 2012 value:
 | `--temperature 298` | 298 K | 301 K |
 | `--imp 25` | 25 trajectories per block | 1,000 |
 | `--rng ranlux` | RANLUX, luxury level 3 | Philox4x32-10 |
-| `--seeds 5013486` | the seed of the release's example | 5013489, the 2012 seed |
+| `--seeds 5013486` | the seed of the example in the release | 5013489, the 2012 seed |
 
 The other four sampling counts are the same in 2000 and 2012 (`itn = 10` cycles, `inp = 40` velocity
 points, `inum = 250,000` hard-sphere trajectories, `inor = 30` reflections), so they need no option.
 Helium is the default gas. The seed is the one choice that belongs to the calculation rather than to
-the release: for an ion of one's own, any seed gives a 2000-release calculation, and the seed the
-2000 run used gives that run's numbers. The run writes its output to
+the release: for an ion other than the example, any seed gives a 2000-release calculation, and the
+seed the 2000 run used gives the numbers of that run. The run writes its output to
 `runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out`, and its `record.json` names the table
 as `MOBCAL 2000 helium` with its SHA-256 ([The element tables](parameters.md)) and records the two
 settings ([The run settings](settings.md)).
@@ -55,7 +54,7 @@ with status 1 and writes `type not defined for atom number N`, as the 2000 progr
 is for helium only: the 2000 release had no nitrogen program, and the 2012 nitrogen program,
 though it descends from the 2000 source, has its own table.
 
-The release's example, `a10A1.mfj` (a sodiated alanine decamer, the release's test ion: 104
+The example in the release, `a10A1.mfj` (a sodiated alanine decamer, the test ion it ships: 104
 atoms, 50 coordinate sets, calculated partial charges), takes about 20 minutes on one
 workstation core, most of it the projection and hard-sphere pass, since `imp = 25` makes the
 trajectory method only 10,000 trajectories per coordinate set. `--split` divides only the
@@ -64,7 +63,7 @@ calculation saves little.
 
 ## Comparing with the reference
 
-To check the reproduction on the release's example, take `a10A1.mfj` and `a10A1.out.orig` from
+To check the reproduction on the example of the release, take `a10A1.mfj` and `a10A1.out.orig` from
 [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000) at tag `v1.0`, run the command
 above in the directory that holds them, and compare the two outputs line by line after stripping
 end-of-line carriage returns, which a build on Windows writes and the reference does not carry:
@@ -73,8 +72,8 @@ end-of-line carriage returns, which a build on Windows writes and the reference 
 diff <(tr -d '\r' < a10A1.out.orig) <(tr -d '\r' < runs/a10A1-he-5013486-ranlux-lj2000-t298-imp25/mobcal.out)
 ```
 
-Keep the input's name. The output echoes it twice, in its first line and in the SUMMARY, and the
-reference echoes `a10A1.mfj`.
+Keep the name of the input. The output echoes it twice, in its first line and in the SUMMARY, and
+the reference echoes `a10A1.mfj`.
 
 The diff shows the 42 lines of the next section and nothing else. Every cross section and
 mobility of the 50 coordinate sets, by the projection approximation, the exact hard-sphere
@@ -115,9 +114,9 @@ combined output carries one line per coordinate set recording the blocks it read
 ```
 
 followed by a blank line, and the diagnostic of a failed trajectory (`energy not conserved`, two
-lines and the blank line before them) is printed by the worker that integrated it, in that
-worker's output, instead of in the combined output. A run that succeeds copies each of those
-pairs, with its worker's number, into the `diagnostics` list of its `record.json` before it
+lines and the blank line before them) is printed by the worker that integrated it, in the output
+of that worker, instead of in the combined output. A run that succeeds copies each of those
+pairs, with the number of its worker, into the `diagnostics` list of its `record.json` before it
 removes the worker directories (`--scratch keep` leaves them, `w01` to `wW`). The count of failed
 trajectories in the SUMMARY, and every number, are those of the serial run. With those lines set
 aside, a run of the example split 40 ways differs from the reference in the same 42 lines as the
@@ -127,9 +126,9 @@ serial run.
 
 The 2000 source builds and runs today without a change. Built with the gfortran line in the
 [MOBCAL-2000 README](https://github.com/bushgroup/MOBCAL-2000#building-and-running-it-today), which
-asks for the static storage of local variables that MOBCAL's own build recipe (`mobcal.fortran`)
+asks for the static storage of local variables that the MOBCAL build recipe (`mobcal.fortran`)
 also asks for, it prints `a10A1.out.orig` byte for byte once carriage returns are stripped, `D`
 exponent included (gfortran 16.2.0, Windows, 23 October 2026). That program is the reference for any
 question the 42 lines leave open; for a calculation, the shipped helium program with the five
-options above gives the same numbers with this package's input checks, run records and parallel
-runs.
+options above gives the same numbers with the input checks, run records and parallel runs of
+this package.

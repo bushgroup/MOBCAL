@@ -173,11 +173,11 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--method", default=methods.DEFAULT, metavar="KEY|PATH",
                    help=options.cli_help("method", methods.DEFAULT))
     r.add_argument("--seeds", type=_seeds, default=None, metavar="N[,N...]",
-                   help=options.cli_help("seeds", f"the method's seed, {DEFAULT_SEED} under a "
+                   help=options.cli_help("seeds", f"the seed of the method, {DEFAULT_SEED} under a "
                                          "method without one"))
     r.add_argument("--rng", choices=sorted(GENERATORS, key=lambda g: g != DEFAULT_RNG),
                    default=None,
-                   help=options.cli_help("rng", f"the method's, {DEFAULT_RNG} under "
+                   help=options.cli_help("rng", f"that of the method, {DEFAULT_RNG} under "
                                          f"{methods.DEFAULT}"))
     r.add_argument("--workers", type=int, default=None, metavar="N",
                    help=options.cli_help("workers", "the number of processor cores divided by the "
@@ -191,7 +191,7 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("dealing", DEFAULT_DEALING))
     r.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help=options.cli_help("parameters",
-                                         f"the method's, {parameters.DEFAULT} under "
+                                         f"that of the method, {parameters.DEFAULT} under "
                                          f"{methods.DEFAULT}"))
     r.add_argument("--out", type=Path, default=DEFAULT_OUT, metavar="DIR",
                    help=options.cli_help("out", f"{DEFAULT_OUT}/"))
@@ -201,8 +201,8 @@ def parser() -> argparse.ArgumentParser:
                    help="What a divided run that succeeds keeps of the files its processes "
                         "wrote. Delete removes the folder of each process, the claim files and "
                         "the block files, after writing what only those folders held into the "
-                        "run's record.json. Zip does the same but packs the block files into "
-                        "blocks.zip, which unpacked into the run's folder lets the program redo "
+                        "record.json of the run. Zip does the same but packs the block files into "
+                        "blocks.zip, which unpacked into the run folder lets the program redo "
                         "the combining step there. Keep leaves every file. A run that fails or "
                         "is stopped keeps every file whatever this says. delete, zip or keep. "
                         f"Default: {DEFAULT_SCRATCH}.")
@@ -210,7 +210,7 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("result_ion", DEFAULT_RESULT_ION))
     s = r.add_argument_group(
         "run settings", "The temperature and the five sampling counts the 2012 programs "
-        "compiled in. Without these, every run uses its method's values: the 2012 values ("
+        "compiled in. Without these, every run uses the values of its method: the 2012 values ("
         f"{_settings_default()}.")
     s.add_argument("--temperature", type=float, default=None, metavar="T",
                    help=options.cli_help("temperature"))
@@ -223,8 +223,8 @@ def parser() -> argparse.ArgumentParser:
     k.add_argument("paths", nargs="+", type=Path, metavar="DIR",
                    help="Run directories, or folders of them.")
     k.add_argument("--scratch", choices=("delete", "zip"), default="delete",
-                   help="Delete the block files, or pack them into blocks.zip in each run's "
-                        "folder. The folder of each process and the claim files go either way. "
+                   help="Delete the block files, or pack them into blocks.zip in the folder of "
+                        "each run. The folder of each process and the claim files go either way. "
                         "Default: delete.")
     k.add_argument("--apply", action="store_true",
                    help="Remove the files. Without it, the command lists what it would remove "
@@ -248,19 +248,19 @@ def parser() -> argparse.ArgumentParser:
                    help="Where to write parameters.tab and settings.tab. Default: the current "
                         "directory.")
     p.add_argument("--method", default=None, metavar="KEY|PATH",
-                   help="Write this method's table and settings, a shipped method by its key or "
-                        "a method file by its path; it must be a method for the gas. Default: "
-                        "the gas's default table and the 2012 settings.")
+                   help="Write the table and settings of this method, a shipped method by its key "
+                        "or a method file by its path; it must be a method for the gas. Default: "
+                        "the default table for the gas and the 2012 settings.")
     p.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help="Write this TOML file, or this shipped table by name "
-                        f"({options.set_names()}), instead of the method's or the gas's "
-                        "default table.")
+                        f"({options.set_names()}), instead of the table of the method or the "
+                        "default table for the gas.")
 
     m = command("import", "Write an ion file from an ORCA or Gaussian output or an .xyz file, "
                 "with the charges you name, or from a .mfj, with its own.")
     m.add_argument("source", type=Path, metavar="SOURCE",
                    help="An ORCA or Gaussian output, an .xyz file, or a .mfj (the 2012 "
-                        "layout or MobCal-MPI's nine columns).")
+                        "layout or the nine columns of MobCal-MPI).")
     m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
     m.add_argument("--net-charge", type=int, default=None, metavar="Q",
                    help=options.cli_help("net_charge"))
@@ -279,12 +279,12 @@ def parser() -> argparse.ArgumentParser:
                         "element must be in both tables. Default: both.")
     x.add_argument("--parameters", default=None, metavar="PATH|NAME",
                    help="This TOML file, or this shipped table by name "
-                        f"({options.set_names()}), instead of the gas's default table.")
+                        f"({options.set_names()}), instead of the default table for the gas.")
     x.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
                    help="The file to write. Default: ION.mfj beside the ion file.")
     x.add_argument("--force", action="store_true", help="Replace OUT.mfj if it exists.")
 
-    u = command("unpack", "Write a result file's ion and method back as files, to run the "
+    u = command("unpack", "Write the ion and method of a result file back as files, to run the "
                 "calculation again.",
                 "The ion file and the method file of a calculation, written from its result file, "
                 "which holds both, so that the calculation can be run again from the result file "
@@ -307,13 +307,14 @@ REFERENCE_OPENING = (
     "`mobcal` is the program the window runs, typed in a terminal: one command with a "
     "subcommand for each task, running calculations, writing an input from a quantum chemistry "
     "output, writing the methods paragraph for finished runs, checking and building the "
-    "programs, and opening the window. `mobcal` runs in any terminal once the installation's "
+    "programs, and opening the window. `mobcal` runs in any terminal once the installation "
     "folder is on the `PATH`, which the Windows installer offers to do, and in the MOBCAL "
     "command prompt of the Windows Start menu either way ([Installing MOBCAL](install.md)). "
     "The options of `mobcal run` and `mobcal import` that the "
     "window also sets carry the same descriptions as its tooltips, from one table in the "
     "package, so the two say the same thing about every setting they share "
-    "([The window](window.md)). `mobcal COMMAND -h` prints a command's section of this page.")
+    "([The window](window.md)). `mobcal COMMAND -h` prints the section of this page for that "
+    "command.")
 
 
 def _code(help: str) -> str:
