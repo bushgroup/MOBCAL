@@ -9,6 +9,7 @@ nothing else, so equal staged directories are equal outputs at the same seed.
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import json
 import re
 import sys
@@ -987,6 +988,18 @@ def test_the_model_reproduces_its_own_points():
             c = estimate.cost(atoms, 1, gas)
             assert c.prologue == pytest.approx(prologue)
             assert c.trajectories == pytest.approx(tau * settings.DEFAULTS.points)
+    for gas, points in estimate.SLOWEST.items():
+        for atoms, kappa in points:
+            assert estimate.slowest(gas, atoms) == pytest.approx(kappa)
+
+
+def test_the_curve_rises_with_atoms():
+    """Through the measured points and past both ends, a larger ion never costs less."""
+    sizes = [round(10 * 1.25 ** k) for k in range(36)]  # 10 to about 26,000 atoms
+    for gas in estimate.COSTS:
+        costs = [estimate.cost(n, 1, gas) for n in sizes]
+        for a, b in itertools.pairwise(costs):
+            assert b.prologue > a.prologue and b.trajectories > a.trajectories
 
 
 def test_a_split_pays_the_prologue_twice():
@@ -1001,7 +1014,7 @@ def test_a_split_waits_on_its_costliest_block():
     assert estimate.Cost(10.0, 400.0).widest == float("inf")
     # The floor is the slowest velocity point's block: SLOWEST times the mean block, per set.
     two = estimate.cost(21, 2, "n2")
-    assert two.floor == pytest.approx(2 * 3.4 * settings.DEFAULTS.imp * 1.148e-2)
+    assert two.floor == pytest.approx(2 * 3.615 * settings.DEFAULTS.imp * 1.01e-2)
 
 
 def test_allocation(tmp_path):
@@ -1015,7 +1028,7 @@ def test_allocation(tmp_path):
     many = estimate.allocate(jobs, cpus=4, mode=most)
     assert many.workers == 4 and {j.split for j in many.jobs} == {None}
     two_cores = estimate.allocate(jobs[:1], cpus=2, mode=most)
-    assert two_cores.jobs[0].split == 2  # 2 * 2.25 + 192 / 2 is well under 0.8 * 194.6
+    assert two_cores.jobs[0].split == 2  # 2 * 1.81 + 167 / 2 is well under 0.8 * 168.6
     # The prologue dominating, as in the 2000 release's example at imp 25 with its projection
     # pass per set: no split however many cores, in any mode.
     st = settings.resolve(imp=1)
@@ -1024,7 +1037,7 @@ def test_allocation(tmp_path):
                                  mode=mode)
         assert lean.jobs[0].split is None
     # A split never exceeds what its costliest block lets it use, which is never more than
-    # the blocks there are to deal: 5 blocks, the slowest twice the mean in helium, so 3.
+    # the blocks there are to deal: 5 blocks, the slowest 1.8 times the mean in helium, so 3.
     st = settings.resolve(itn=1, inp=5, imp=100_000)
     assert estimate.allocate([Job(CHOLINE, "he", 1, tmp_path, settings=st)],
                              cpus=80).jobs[0].split == 3
@@ -1039,7 +1052,7 @@ MODES = {
     ("he", 8, "balanced"): [(1, 8)] * 4,
     ("he", 8, "throughput"): [(1, 8), (8, None), (8, None), (8, None)],
     ("he", 40, "in-order"): [(1, 40)] * 4,
-    ("he", 40, "balanced"): [(1, 40), (3, 13), (3, 13), (3, 13)],
+    ("he", 40, "balanced"): [(1, 40), (2, 20), (2, 20), (2, 20)],
     ("he", 40, "throughput"): [(1, 40), (8, 5), (40, None), (40, None)],
     ("n2", 8, "in-order"): [(1, 8)] * 4,
     ("n2", 8, "balanced"): [(1, 8)] * 4,
@@ -1070,7 +1083,7 @@ def test_the_balanced_mode_keeps_its_efficiency(tmp_path):
 
 def test_cores_a_run_cannot_use_take_another_run(tmp_path):
     """Finish in order, a run whose costliest block caps its split leaves cores over, and they
-    take a further run at the same split: 40 blocks, the slowest 3.4 times the mean, so 12."""
+    take a further run at the same split: 40 blocks, the slowest 3.6 times the mean, so 12."""
     st = settings.resolve(itn=1)
     jobs = [Job(CHOLINE, "n2", s, tmp_path, settings=st) for s in range(4)]
     p = estimate.allocate(jobs, cpus=40, mode=estimate.IN_ORDER)

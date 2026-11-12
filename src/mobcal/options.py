@@ -121,7 +121,7 @@ SHARED = {
         "runs one at a time, divided among every core it can use, so runs complete one after "
         "another and a pause waits for the run in flight. Balanced runs as many at once as keeps "
         f"each divided run at least {estimate.BALANCE:.0%} efficient (its time as one process, "
-        "over the processes times its divided time): on a 40-core workstation, three choline "
+        "over the processes times its divided time): on a 40-core workstation, two choline "
         "runs at once in helium and one in nitrogen, and on 8 cores one at a time. Most "
         "throughput runs one process per run when there are at least as many runs as cores, "
         "which finishes the batch soonest and no run before the first wave ends. The counts "

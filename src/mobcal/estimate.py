@@ -18,15 +18,27 @@ and not when the prologue does (the 2000 release's example at ``imp`` 25 is the 
 past ``trajectories / floor`` processes, and never past about 25 times however many are given.
 
 ``COSTS`` holds the measured points per gas: atoms, the prologue per set at the 2012 ``inum``,
-and seconds per trajectory, on one workstation (Windows 11, 80 threads, MSYS2 gfortran 16.2.0,
-the recorded flags). Between points the model interpolates on log-log axes and beyond them
-extrapolates with the end slope; a gas with fewer points borrows helium's slopes. In helium
-``PROJECTION_SHARE`` of the prologue scales with ``inum``. A machine slower or faster than that
-workstation scales every number, which is why the estimate is printed as "about". The costs
-hold with a core per process: with every core busy a trajectory costs 11 to 30 % more on that
-workstation, and with every hyperthread busy as well each run takes about 1.5 times as long.
-The carbon globules carry no charge, and a charged protein ion of 433 atoms in nitrogen costs
-1.6 to 1.9 times what the curve gives (lab record, task 52, open).
+and seconds per trajectory, on one workstation (Windows 11, 2 x 18 cores, 72 threads, MSYS2
+gfortran 16.2.0, the recorded flags) with 36 runs at once, every physical core busy. Helium
+rests on choline, carbon globules of 30 to 300 atoms and protein ions of 433, 1,236 and 5,220
+atoms (4+, 5+ and 12+); nitrogen on choline and the two smaller protein ions. Between points
+the model interpolates on log-log axes and beyond them, past 5,220 atoms in helium and 1,236 in
+nitrogen, extrapolates with the end slope; a gas with fewer points borrows helium's slopes. In
+helium ``PROJECTION_SHARE`` of the prologue scales with ``inum``.
+
+The curve reads atoms only, so one curve per gas costs every input, whatever its charge. In
+helium the protein ions sit near the globules and every point predicted from the others is
+within 15 %; past the last point the end slope runs high, a 10,000-atom globule 36 % in the
+prologue and 53 % per trajectory. In nitrogen a protein ion's prologue is 3.7 times a 300-atom
+globule's at 1.44 times the atoms, and the curve follows the protein ions: a singly charged
+input between 100 and 1,000 atoms is costed 1.7 to 2.3 times its prologue and 1.25 to 1.65
+times its trajectories, and the 1,236-atom ion predicted from the other two is 33 % high in
+the prologue. ``COSTS``' comment gives every point's error (lab record, task 52).
+
+A machine slower or faster than that workstation scales every number, which is why the estimate
+is printed as "about". With fewer runs at once than cores a trajectory costs less (11 to 30 %
+between a quarter and every core busy on an earlier 40-core workstation), and with every
+hyperthread busy as well each run takes about 1.5 times as long.
 
 ``allocate`` is ``--split auto`` and the window's default, in one of three ``MODES``, counting
 physical cores (``mobcal.run.cores``). A run is split only when the model says that saves at
@@ -40,9 +52,9 @@ blocks it has, and ``trajectories / floor`` rounded up.
   cap) take further runs at the same split.
 - ``balanced`` (the default): the fewest runs at once whose share of the cores keeps every
   run's efficiency, serial wall / (W * split wall), at least ``BALANCE``; a batch of no more
-  runs than that is run as ``throughput`` runs it. On a 40-core workstation choline in helium
-  goes three at a time across 13 processes, in nitrogen one at a time across 40, and the
-  433-atom ion two at a time across 19; on 8 cores each goes one at a time across 8.
+  runs than that is run as ``throughput`` runs it. On 40 cores choline in helium goes two at a
+  time across 20 processes, in nitrogen one at a time across 40, as does the 433-atom ion in
+  nitrogen; on 8 cores each goes one at a time across 8.
 
 Split equals serial to the bit, so the rule moves time and never a number.
 
@@ -66,30 +78,29 @@ from mobcal.run import size as input_size
 from mobcal.settings import DEFAULTS, Settings
 
 # (atoms, prologue seconds per coordinate set at inum 250,000, seconds per trajectory). Measured
-# 2026-10-26 as serial runs at two values of imp, two repeats, minimum wall, 28 runs at once:
-# choline (21 atoms) and carbon globules of 30 to 1,000 atoms (tests/synthetic.py). The 10,000-
-# atom helium point is a 40-way split of 2026-10-23, scaled by the ratio of the two measurements
-# at 1,000 atoms. Out of sample, the 2000 release's 104-atom example lies within 10 % of the
-# curve per set, and the model is 5 to 20 % above single serial runs of choline in both gases
-# and of that example, which ran with less else on the machine. Each run had a physical core
-# to itself; with all 40 busy a trajectory costs 11 to 30 % more, and with all 80 hyperthreads
-# busy a run takes 1.5 to 1.7 times as long (lab record, task 47). The globules carry no net
-# charge, and a 433-atom protein ion 4+ in nitrogen costs 1.6 to 1.9 times the curve (lab
-# record, task 52, open).
+# 2026-11-11 and -12 as serial runs at two values of imp, two repeats, minimum wall, with 36 runs
+# at once throughout on the 36 physical cores (lab record, task 52): choline (21 atoms), carbon
+# globules of 30 to 300 atoms (tests/synthetic.py, helium only), and protein ions from PDB 2MLT
+# (433 atoms, 4+), 1UBQ (1,236, 5+) and 1BSY (5,220, 12+, helium only). Each point predicted
+# from the others (leave one out), prologue / per trajectory: helium within 15 % (the 5,220-atom
+# ion -15 / +9 %); nitrogen choline +128 / -8 %, the 433-atom ion -19 / +2 %, the 1,236-atom ion
+# +33 / -3 %. Out of sample: the 2000 release's 104-atom example -21 / +21 % in helium and
+# +83 / +41 % in nitrogen; the 1,000-atom globule +10 / +19 % and +129 / +65 %; the 10,000-atom
+# helium globule +36 / +53 %, past the last point.
 COSTS: dict[str, tuple[tuple[int, float, float], ...]] = {
-    "he": ((21, 2.25, 4.81e-4), (30, 3.10, 6.24e-4), (100, 9.08, 2.06e-3),
-           (300, 26.6, 6.43e-3), (1000, 90.4, 2.31e-2), (10000, 1017.0, 0.272)),
-    "n2": ((21, 7.78, 1.148e-2), (30, 11.55, 1.673e-2), (100, 37.5, 5.56e-2),
-           (300, 117.3, 0.1744)),
+    "he": ((21, 1.81, 4.17e-4), (30, 2.65, 5.54e-4), (100, 7.68, 1.81e-3),
+           (300, 23.2, 5.76e-3), (433, 36.3, 8.82e-3), (1236, 106.0, 3.21e-2),
+           (5220, 552.0, 0.174)),
+    "n2": ((21, 6.80, 1.01e-2), (433, 359.0, 0.351), (1236, 1070.0, 1.24)),
 }
-# (atoms, the slowest velocity point's block over the mean block). Measured 2026-11-01 and -02
-# from the block files of split runs (lab record, tasks 46 and 47): choline 1.96 in helium and
-# 3.0 to 3.4 in nitrogen; a 433-atom protein ion 4+ in nitrogen 4.3 to 4.6.
+# (atoms, the slowest velocity point's block over the mean block). Measured 2026-11-11 and -12
+# from the block files of one split run per ion at 36 processes, 2/40/1000, on the same machine
+# (lab record, task 52; choline in helium the mean of four runs, 1.66 to 2.06).
 SLOWEST: dict[str, tuple[tuple[int, float], ...]] = {
-    "he": ((21, 2.0),),
-    "n2": ((21, 3.4), (433, 4.4)),
+    "he": ((21, 1.827), (433, 2.419), (1236, 2.366), (5220, 2.9)),
+    "n2": ((21, 3.615), (433, 4.475), (1236, 4.32)),
 }
-PROJECTION_SHARE = 0.77  # of the helium prologue that scales with inum: 0.72 to 0.78 measured
+PROJECTION_SHARE = 0.73  # of the helium prologue that scales with inum: 0.59 to 0.84 measured
 MAX_SPLIT = 40  # past this the shares are under ten blocks and the doubled prologue dominates
 MIN_GAIN = 0.8  # split only when the split wall is at most this fraction of the serial wall
 BALANCE = 0.7  # the balanced mode's least efficiency, serial wall / (W * split wall)

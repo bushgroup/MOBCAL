@@ -89,8 +89,8 @@ processors that hyperthreading doubles: on a 40-core workstation, 80 runs at onc
 
 - **Balanced**, the default, runs as many runs at once as keeps each divided run at least 70%
   efficient, where efficiency is the time of the run as one process over the processes it uses times
-  its divided time. On a 40-core workstation that is three choline runs at once in helium, each
-  across 13 processes, and one at a time in nitrogen across 40; on 8 cores, one at a time.
+  its divided time. On a 40-core workstation that is two choline runs at once in helium, each
+  across 20 processes, and one at a time in nitrogen across 40; on 8 cores, one at a time.
 - **Finish in order** runs one at a time, divided among every core it can use, so runs complete
   one after another and Pause queue waits only for the run in flight. Cores a run cannot use
   take a second run.
@@ -113,10 +113,13 @@ the average block, so a run is never divided among more processes than that bloc
 use. Unchecking the choice in Advanced sets the runs at once and the processes per run by hand.
 
 Under the form, the window says how the batch will run and about how long it will take. The
-estimate comes from timings of the programs on one workstation for ions from 21 to 10,000 atoms
-in helium and from 21 to 300 atoms in nitrogen, so it is a guide, not a promise, and a faster or
-slower machine scales it. For a large ion it also says how long each process spends before its
-first trajectory.
+estimate comes from timings of the programs on one workstation with every core busy, for ions
+from 21 to 5,220 atoms in helium and from 21 to 1,236 atoms in nitrogen, protein ions among
+them, so it is a guide, not a promise, and a faster or slower machine scales it. It reads the
+number of atoms and not the charge. In nitrogen a multiply charged protein ion takes much longer
+than a singly charged ion of similar size, and the estimate follows the protein ions, so for a
+singly charged ion of a few hundred atoms it can be about twice the time the run takes. For a
+large ion it also says how long each process spends before its first trajectory.
 
 ## The results folder
 
