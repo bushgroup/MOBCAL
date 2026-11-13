@@ -25,10 +25,12 @@ import mobcal
 from mobcal import fortran
 from mobcal.methods import REPOSITORY
 
-# The window first; the command line as the same program from a terminal; then what a method
-# is made of; then reproducing the two releases.
-ORDER = ("window.md", "install.md", "command-line.md", "methods.md", "import.md", "qm.md",
-         "parameters.md", "settings.md", "random-numbers.md", "mobcal-2012.md",
+# The window first; the command line as the same program from a terminal; then a calculation
+# in its own order: the ion, what a method is made of, what a run leaves, large ions and long
+# runs; then reproducing the two releases.
+ORDER = ("window.md", "install.md", "command-line.md", "ion-file.md", "import.md", "qm.md",
+         "methods.md", "parameters.md", "settings.md", "random-numbers.md",
+         "results-folder.md", "result-file.md", "large-ions.md", "mobcal-2012.md",
          "mobcal-2000.md")
 
 
