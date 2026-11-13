@@ -200,7 +200,7 @@ such a file read as an import source loses nothing. MOBCAL does not assign MMFF9
 | `import.elements` | `keys`, the key of each element in the tables the import checked, and `tables`, the name and SHA-256 of each table |
 
 The keys under `import.source` follow the source program and are kept as written, not refused,
-because MOBCAL does not read them back. [The record](import.md#the-record) says what
+because MOBCAL does not read them back. [The import record](import.md#the-import-record) says what
 `mobcal import` writes in each field.
 
 ## Writing the `.mfj`

@@ -917,7 +917,7 @@ def test_an_xyz_asks_for_its_net_charge(window, qtbot):
     assert item.needs_net_charge and item.charges is None
     combo = w.inputs.table.cellWidget(0, 3)
     combo.setCurrentIndex(combo.findData("uniform"))
-    assert item.problem().endswith("give the ion's net charge")
+    assert item.problem().endswith("give the net charge of the ion")
     w.inputs.table.cellWidget(0, 4).setValue(1)
     assert not item.problem() and w.add_batch_button.isEnabled()
 

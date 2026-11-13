@@ -136,7 +136,7 @@ class Input:
         if self.kind == "import" and self.charges is None:
             return f"{self.path.name}: choose its charges"
         if self.kind == "import" and self.needs_net_charge and self.net_charge is None:
-            return f"{self.path.name}: give the ion's net charge"
+            return f"{self.path.name}: give the net charge of the ion"
         if self.kind in RUN_AS_IS and gas == "n2" and not self.charge_sums:
             return (f"{self.path.name}: the nitrogen program needs a fifth column, the charge, "
                     "on every atom line")
@@ -176,8 +176,8 @@ def _read_mfj(path: Path) -> Mfj:
     """A ``.mfj`` as a run takes it: refused in MobCal-MPI's nine-column layout."""
     text = path.read_text(encoding="latin-1")
     if mobcalmpi.detect(text):
-        raise MfjError("MobCal-MPI's nine-column layout, which the 2012 program would misread; "
-                       "`mobcal import` it into an ion file and add that")
+        raise MfjError("the nine-column layout of MobCal-MPI, which the 2012 program would "
+                       "misread; `mobcal import` it into an ion file and add that")
     return Mfj.parse(text)
 
 

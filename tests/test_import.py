@@ -461,7 +461,7 @@ def test_a_gaussian_block_printed_only_before_the_last_geometry_is_refused(tmp_p
     ("choline_2012_chelpg", " Breneman (CHELPG) radii used.", " Merz-Kollman atomic radii used.",
      "mk", "the radii line names mk, and the route asks for chelpg"),
     ("choline_2012_chelpg", "Gaussian NBO Version 3.1", "NBO 7.0 (11-Nov-2026)",
-     "natural", "not from Gaussian's built-in NBO 3.1"),
+     "natural", "not from the NBO 3.1 built into Gaussian"),
 ])
 def test_a_gaussian_charge_block_the_import_refuses(tmp_path, job, old, new, key, match):
     s = structure.read(g_variant(tmp_path, job, "edited.log", lambda t: t.replace(old, new)))
@@ -476,7 +476,7 @@ def test_an_untested_esp_scheme_is_refused(tmp_path):
                 .replace(" Breneman (CHELPG) radii used.", " Francl (CHELP) radii used."))
     s = structure.read(g_variant(tmp_path, "choline_2012_chelpg", "chelp.log", chelp))
     assert "chelpg" not in s.charges
-    assert s.unpaired["chelp"] == "CHELP fits are not among the import's tested outputs"
+    assert s.unpaired["chelp"] == "CHELP fits are not among the outputs the import is tested on"
 
 
 def test_a_gaussian_log_of_another_version_imports_with_a_warning(tmp_path, capsys,
@@ -511,7 +511,7 @@ def xyz(tmp_path: Path, rows: list[str], name: str = "ion.xyz", count: int | Non
 def test_an_xyz_without_charges_takes_uniform_and_needs_the_net_charge():
     s = structure.read(ORCA / "choline_opt" / "choline_opt.xyz")
     assert (s.program, s.charges, s.net_charge) == ("xyz", {}, None)
-    with pytest.raises(StructureError, match="does not carry the ion's net charge"):
+    with pytest.raises(StructureError, match="does not carry the net charge of the ion"):
         structure.convert(s, "uniform")
     with pytest.raises(StructureError, match="no 'column' charges"):
         structure.convert(s, "column", net_charge=1)
@@ -644,7 +644,7 @@ def test_the_command_takes_an_xyz_a_net_charge_and_a_gas(tmp_path, capsys):
     p = xyz(tmp_path, ["P 0 0 0", "H 1.4 0 0", "H -1.4 0 0"], "ph2.xyz")
     out = tmp_path / "ph2.ion.json"
     assert cli.main(["import", str(p), "--charges", "uniform", "-o", str(out)]) == 2
-    assert "does not carry the ion's net charge" in capsys.readouterr().err
+    assert "does not carry the net charge of the ion" in capsys.readouterr().err
     assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
                      "-o", str(out)]) == 2
     assert "not in the He element table" in capsys.readouterr().err

@@ -254,7 +254,7 @@ def _read_output(path: Path, sha: str, data: bytes) -> Structure:
         raise StructureError(f"{path}: " + (f"a {name} output" if name else
                                             "not an output of a program cclib recognizes, "
                                             "nor an .xyz")
-                             + "; ORCA and Gaussian outputs and .xyz files are supported")
+                             + "; ORCA outputs, Gaussian outputs, and .xyz files are supported")
     reader = f"cclib {cclib.__version__}"
     try:
         out = log.parse()
@@ -317,8 +317,8 @@ def _read_output(path: Path, sha: str, data: bytes) -> Structure:
         elif len(values) != n:
             unpaired[key] = f"it has {len(values)} values for {n} atoms"
         elif key == "natural" and not last_geometry < nbo < last_block[key]:
-            unpaired[key] = ("it is not from Gaussian's built-in NBO 3.1, the only NBO program "
-                             "the import is tested on")
+            unpaired[key] = ("it is not from the NBO 3.1 built into Gaussian, the only NBO "
+                             "program the import is tested on")
         else:
             charges[key] = tuple(float(q) for q in values)
     if name == "Gaussian":
@@ -443,9 +443,10 @@ def _gaussian_esp(lines: list[str], route: str, symbols: tuple[str, ...], last_g
             why = (f"the radii line names {scheme}, and the route asks for "
                    f"{', '.join(sorted(asked)) or 'no ESP fit'}")
         elif scheme in ESP_UNTESTED:
-            why = f"{ESP_UNTESTED[scheme]} fits are not among the import's tested outputs"
+            why = f"{ESP_UNTESTED[scheme]} fits are not among the outputs the import is tested on"
         elif len(q) != len(symbols) or [s for s, _ in q] != list(symbols):
-            why = f"the import read {len(q)} rows for {len(symbols)} atoms in the geometry's order"
+            why = (f"the import read {len(q)} rows for {len(symbols)} atoms in the order of the "
+                   "geometry")
         else:
             theirs = found.get({"mk": "esp", "chelpg": "chelpg"}[scheme])
             ours = tuple(v for _, v in q)
@@ -496,7 +497,7 @@ def convert(structure: Structure, charges: str | None, net_charge: int | None = 
                              f"net charge given is {net_charge:+d}")
     q_net = s.net_charge if s.net_charge is not None else net_charge
     if q_net is None:
-        raise StructureError(f"{s.path.name} does not carry the ion's net charge; give it")
+        raise StructureError(f"{s.path.name} does not carry the net charge of the ion; give it")
     n = len(s.symbols)
     if charges == UNIFORM:
         q = (q_net / n,) * n

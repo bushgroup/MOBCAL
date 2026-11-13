@@ -498,7 +498,7 @@ def test_an_ion_file_the_reader_refuses_never_starts_the_binary(tmp_path):
 def test_a_nine_column_mfj_is_refused_with_the_way_to_run_it(tmp_path):
     r = run_one(Job(ION_DATA / "choline_mobcalmpi.mfj", "n2", 1, tmp_path), launcher)
     assert not r.ok and r.returncode is None
-    assert r.message == ("input refused: choline_mobcalmpi.mfj is in MobCal-MPI's nine-column "
-                         "layout, which the 2012 program would misread; `mobcal import` it "
+    assert r.message == ("input refused: choline_mobcalmpi.mfj is in the nine-column layout of "
+                         "MobCal-MPI, which the 2012 program would misread; `mobcal import` it "
                          "into an ion file and run that")
     assert not any(tmp_path.iterdir())
