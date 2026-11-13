@@ -233,9 +233,9 @@ def test_the_reader_refuses_a_key_twice_and_non_json(done, tmp_path):
 @pytest.mark.parametrize("change, message", [
     (lambda d: d["mobcal"]["staged_input"].update(sha256="0" * 64),
      "has SHA-256 [0-9a-f]{64}, not the 0{64} the program read"),
-    (lambda d: d["mobcal"].update(generator="ranlux"), "generator is 'philox' and the run's"),
-    (lambda d: d["mobcal"]["settings"].update(imp=25), "settings is"),
-    (lambda d: d["mobcal"]["parameters"].update(sha256="0" * 64), "element table's SHA-256"),
+    (lambda d: d["mobcal"].update(generator="ranlux"), "has generator 'philox' and the run had"),
+    (lambda d: d["mobcal"]["settings"].update(imp=25), "has settings"),
+    (lambda d: d["mobcal"]["parameters"].update(sha256="0" * 64), "an element table of SHA-256"),
 ])
 def test_unpack_refuses_a_record_of_no_one_calculation(done, tmp_path, change, message):
     r = result.Result.read(edited(done, tmp_path, change))

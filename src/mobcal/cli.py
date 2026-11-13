@@ -539,21 +539,22 @@ def _unpack(args: argparse.Namespace) -> int:
     def said(w: result.Written, what: str, mfj: bool = False) -> str:
         state = "found unchanged" if w.existed else "wrote"
         if mfj:
-            check = "converted from the run's .mfj, whose own SHA-256 no ion file can have"
+            check = "converted from the .mfj of the run, whose SHA-256 no ion file can have"
         elif w.recorded is None:
             check = "the run was given no file of it, only its values"
         elif w.identical:
             check = "the same bytes as the file the run was given (SHA-256 matches)"
         else:
             check = (f"the same document as the file the run was given, laid out as MOBCAL "
-                     f"writes it (SHA-256 {w.sha256[:12]}, the given file's {w.recorded[:12]})")
+                     f"writes it (SHA-256 {w.sha256[:12]}, that of the given file "
+                     f"{w.recorded[:12]})")
         return f"{state} {w.path}: {what}, {check}"
 
     print(said(u.ion, "the ion", u.converted_from == "mfj"))
     print(said(u.method, "the method"))
     if u.staged:
-        print("checked: the .mfj this ion file gives for the method's element table is the one "
-              "the program read (SHA-256 matches)")
+        print("checked: the .mfj this ion file gives for the element table of the method is the "
+              "one the program read (SHA-256 matches)")
     for n in u.notes:
         print(f"note: {n}")
     print("to run it again:\n  " + u.command)
