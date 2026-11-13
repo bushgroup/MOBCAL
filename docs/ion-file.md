@@ -117,8 +117,10 @@ correction factor of 1.
 `symbols` names the element of each atom with its standard symbol, in standard case (`C`, `Cl`,
 `Na`); `CL` or `cl` is refused. Each entry of `conformers` is one coordinate set of the `.mfj`,
 up to 100 (the bound of the 2012 program), every one with the same number of atoms, from 1 to
-200,000 (the bound of `fortran/mobcal_arrays.inc`). The 2012 program weights every conformer
-equally, and the ion file carries no weights.
+200,000 (the bound of `fortran/mobcal_arrays.inc`). An ion within that bound can still be too
+highly charged or too extended for the programs, and
+[settings.md](settings.md#how-charged-and-how-large-an-ion-can-be) gives those limits. The 2012
+program weights every conformer equally, and the ion file carries no weights.
 
 | Field of a conformer | Required | Value |
 |---|---|---|

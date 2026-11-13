@@ -79,6 +79,54 @@ The last bound is the field width of a 2012 output line, kept rather than widene
 coordinate set is 25 times the 2012 count, about 75 minutes in helium and a day in nitrogen on
 one workstation core, so no use so far approaches it.
 
+## How charged and how large an ion can be
+
+Before its trajectories, each program finds at each velocity point the largest impact parameter,
+b_max, at which a trajectory still deflects the gas. It integrates one trajectory at a time,
+with b² rising in steps of ro² (ro = 3.043 Å), until five in a row give 1 − cos χ under the
+cutoff of 5 × 10⁻⁴, and it refuses the ion with `ibst greater than 10000` if the walk passes
+10,000 steps, b = 304 Å. The 2012 program stopped at 500 steps, b = 68 Å. The refusal comes
+after the ion has been read, the projection and hard-sphere pass made and the potential scanned,
+so for a large ion it arrives minutes to hours into the run.
+
+b_max is largest at the slowest velocity point, and there it grows with the net charge of the
+ion, through the attraction between the charge and the dipole it induces in the gas, and with
+the size of the ion. For a compact charge, choline with every partial charge multiplied by z,
+b_max² at the slowest point is z times a slope that falls as the inverse square root of the
+temperature:
+
+| Gas | Slope at 200 K | Slope at 301 K | Slope at 500 K | First charge the 2012 program refused, 200 / 301 / 500 K |
+|---|---|---|---|---|
+| nitrogen | 47.0 ro² | 38.3 ro² | 29.7 ro² | 11+ / 13+ / 17+ |
+| helium | 16.2 ro² | 13.2 ro² | 10.3 ro² | 31+ / 38+ / 50+ |
+
+At 10,000 ro² the cap is reached by a compact charge near 260+ in nitrogen and 750+ in helium at
+301 K. An extended ion adds its size. At 1+, b_max at the slowest point lies about 11 Å beyond
+the outer atoms of an ion of protein density in helium and about 18 Å in nitrogen, so the 2012
+program refused such an ion beyond an outer radius of about 57 Å in helium and 50 Å in nitrogen,
+about 39,000 and 26,000 atoms, whereas the cap now lies far beyond the radius of an ion of
+200,000 atoms, about 98 Å. A charged protein ion sits above the line of its charge alone: a
+5,220-atom protein ion of 12+ (the β-lactoglobulin A dimer, an IM-MS size calibrant, as an
+in-vacuo MD endpoint from PDB 1BSY with OPLS-AA per-atom charges) needs b_max² = 563 ro² at 301
+K in nitrogen, which the 2012 program refused, and 262 ro² in helium. The search costs about 700
+trajectories plus one per ro² of the largest b_max², so an ion that needs no more than 500 costs
+what it did.
+
+In nitrogen a second limit arrives well before the cap. The program abandons a trajectory that
+takes more than 30,000 integration steps, prints `trajectory lost`, and counts it with a
+deflection of 90° rather than as a failure. For a compact charge at 301 K this begins near 30+,
+with an occasional lost trajectory in the Monte Carlo, and from about 50+ the search itself runs
+through lost trajectories, so that b_max at the slowest point is set by the step limit rather
+than by the deflection. Note that the output of a run in nitrogen of an ion charged this highly
+should be searched for `trajectory lost`. Helium lost no trajectory up to 100+ in the same
+tests.
+
+The walk lays b along the axis through the farthest atom of the ion, starts inside the ion, and
+ends at the first five small deflections. An atom far beyond the rest along that axis is
+therefore not reached: a 200-atom ion with one atom 40 to 100 Å out on that axis is given b_max
+= 18 Å in helium and 25 Å in nitrogen at the slowest point, whatever the distance of that atom.
+This is the 2012 convention, and both programs keep it.
+
 ## The rendered file
 
 `settings.tab` is two lines, written for the list-directed reads of the program:

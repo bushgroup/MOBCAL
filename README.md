@@ -203,8 +203,10 @@ exit or an output without that block is a failure whose message is the last line
 wrote, for example `type not defined for atom number      1` for an element its tables do not
 define. An input the
 program would stop on, such as more than 200,000 atoms, more than 100 coordinate sets, or a units
-line that is not exactly `ang` or `au`, is refused before the program starts. The command exits
-with status 1 if any run failed.
+line that is not exactly `ang` or `au`, is refused before the program starts. An ion too highly
+charged or too extended for the search over impact parameter that precedes the trajectories is
+refused by the program itself; [`docs/settings.md`](docs/settings.md#how-charged-and-how-large-an-ion-can-be)
+gives the limits in each gas. The command exits with status 1 if any run failed.
 
 The Fortran is single-threaded, so the speedup above comes from running independent calculations
 on separate processors. One calculation can also run across them:
