@@ -12,8 +12,8 @@ reads the outputs of both programs with cclib 1.9rc1.
 
 ## What the calculation provides
 
-The 2012 model takes two things from a quantum chemistry calculation: the coordinates of every
-atom and a partial charge on every atom. In helium, the trajectory calculation (TM) sums a
+The model takes two things from a quantum chemistry calculation: the coordinates of every atom
+and a partial charge on every atom. In helium, the trajectory calculation (TM) sums a
 Lennard-Jones term over the atoms of the ion and adds the ion-induced dipole potential, which the
 partial charges set. In nitrogen, the partial charges also interact with the three point charges
 that give the N2 molecule its quadrupole moment, so they enter two terms of the potential rather
@@ -83,7 +83,7 @@ the total is divided among them, least of all for an atom buried at the centre o
 quaternary nitrogen or a methyl carbon under its three hydrogens. Fits that place their points
 differently, the Merz-Kollman shells (861 points here) and the CHELPG cubic grid (12,034), each with
 the radii of its program, therefore disagree most on those atoms. This is consistent with the poor
-conditioning of buried-atom charges that Bayly, Cieplak, Cornell and Kollman described for ESP fits
+conditioning of buried-atom charges that Bayly, Cieplak, Cornell, and Kollman described for ESP fits
 (*J. Phys. Chem.* 1993, 97, 10269). The cross section is far less sensitive to these redistributions
 than the per-atom charges are: all three ESP fits at this level move the TM cross section of choline
 by less than 0.1 % in either gas (below).
@@ -93,11 +93,11 @@ by less than 0.1 % in either gas (below).
 The jobs in `tests/data/qm/` show three ways to get the charges at an optimized geometry, and the
 import reads each the same way, taking the last geometry and the blocks printed after it.
 
-- **Two jobs.** The ORCA job `choline_opt` optimizes at r2SCAN-3c (`! r2SCAN-3c Opt`) and writes
+- Two jobs. The ORCA job `choline_opt` optimizes at r2SCAN-3c (`! r2SCAN-3c Opt`) and writes
   its final geometry to `choline_opt.xyz`. The job `choline_sp` reads that file and computes the
   charges at another level (`! B3LYP D3BJ def2-TZVP CHELPG Hirshfeld`). Only the second output is
   imported.
-- **Two jobs in one file.** In ORCA, `$new_job` runs a second job on the final geometry of the
+- Two jobs in one file. In ORCA, `$new_job` runs a second job on the final geometry of the
   first, as `choline_two_jobs.inp` does:
 
   ```
@@ -114,7 +114,7 @@ import reads each the same way, taking the last geometry and the blocks printed 
   ```
 
   The import takes the geometry and charges of the second job.
-- **Charges from the optimization itself.** An ORCA optimization prints the Mulliken and Löwdin
+- Charges from the optimization itself. An ORCA optimization prints the Mulliken and Löwdin
   charges, and with `CHELPG` on the route the CHELPG charges, at the stationary point
   (`choline_opt_chelpg`), and a Gaussian `Opt Freq` job prints the charges its `Pop=` option asks
   for in the frequency step (`choline_optfreq`). The charges are then at the level of the
@@ -141,12 +141,12 @@ To measure how much the charge scheme moves the cross section, we ran the cholin
 2012 coordinates with nine charge columns that differ only in the charges: the 2012 column and
 eight others imported from the jobs in `tests/data/qm/`. Each column ran in helium under the
 `2012-philox-he` method and in nitrogen under `2012-philox-n2`, at the same three seeds (5013489,
-1234567 and 7654321), so that each difference from the 2012 column is taken between two runs that
+1234567, and 7654321), so that each difference from the 2012 column is taken between two runs that
 share their random numbers. With the 2012 column, TM is 55.30 Å² in helium and 115.77 Å² in
 nitrogen (mean of the three seeds), with a standard deviation over seeds of 0.12 and 0.20 Å², and
-the paired differences below are tighter than either. The runs were made on one workstation
-(Windows 11, MSYS2 gfortran 16.2.0, October 2026; lab record, tasks 29 and 30), the nitrogen runs
-split across ten processes, which gives the serial result exactly.
+the paired differences below are tighter than either. The runs were made on one 40-core
+workstation (Windows 11, MSYS2 gfortran 16.2.0, October 2026; lab record, tasks 29 and 30), the
+nitrogen runs each divided among ten processes, which gives the serial result exactly.
 
 | Charges | Σ\|q\| (e) | ΔTM, N2 (%) | ΔTM, He (%) |
 |---|---|---|---|
@@ -156,7 +156,7 @@ split across ten processes, which gives the serial result exactly.
 | ORCA, B3LYP/G 6-31++G(d,p), Löwdin | 3.34 | −0.03 (−0.16 to +0.07) | +0.08 (+0.05 to +0.15) |
 | ORCA, HF 6-31++G(d,p), CHELPG | 5.07 | +0.35 (+0.32 to +0.41) | +0.14 (+0.14 to +0.15) |
 | ORCA, B3LYP/G 6-31++G(d,p), Mulliken | 4.78 | −0.64 (−0.66 to −0.63) | −0.37 (−0.39 to −0.36) |
-| ORCA, B3LYP/G 6-31++G(d,p), Hirshfeld | 1.44 | −1.39 (−1.43 to −1.35) | −0.04 (−0.06 to 0.00) |
+| ORCA, B3LYP/G 6-31++G(d,p), Hirshfeld | 1.44 | −1.38 (−1.43 to −1.35) | −0.04 (−0.06 to 0.00) |
 | `uniform`, 1/21 e on every atom | 1.00 | −2.85 (−2.99 to −2.71) | −0.27 (−0.28 to −0.27) |
 
 ΔTM is the difference from the 2012 column (Σ|q| = 4.64 e), the mean over the three seeds with their
