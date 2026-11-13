@@ -765,7 +765,7 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
         for p in procs.values():
             _kill_tree(p)
             p.wait()
-        return _failed(job, "split run ended before its combining run", None,
+        return _failed(job, "divided run ended before its combining run", None,
                        time.perf_counter() - t0), None
 
     def why(w: int) -> str:
@@ -778,7 +778,7 @@ def _run_split(job: Job, command: list[str], staged: Staged, pset: ParameterSet,
         for w, names in expected.items():
             missing = [n for n in names if not (job.worker_dir(w) / n).is_file()]
             if missing:
-                problems.append(f"worker {w}: {len(missing)} of {len(names)} blocks missing "
+                problems.append(f"process {w}: {len(missing)} of {len(names)} blocks missing "
                                 f"({why(w)})")
     else:
         problems = _judge_claimed(job, every, d, why)
@@ -994,7 +994,7 @@ def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str
         else:
             unclaimed.append(n)
     for w, names in sorted(unwritten.items()):
-        who = f"worker {w}" if w else "a worker"
+        who = f"process {w}" if w else "a process"
         problems.append(f"{who}: {len(names)} claimed {'block' if len(names) == 1 else 'blocks'}"
                         f" not written, {names[0]} first ({why(w) if w else 'claim unreadable'})")
     if unclaimed:
@@ -1002,7 +1002,7 @@ def _judge_claimed(job: Job, every: list[str], d: Path, why: Callable[[int], str
                         f"claimed, {unclaimed[0]} first ({why(1)})")
     for n, ws in sorted(found.items()):
         if len(ws) > 1:
-            problems.append(f"{n} written by workers {' and '.join(map(str, ws))}")
+            problems.append(f"{n} written by processes {' and '.join(map(str, ws))}")
         elif n not in every:
             problems.append(f"{n} is not a block of this run")
     return problems

@@ -67,7 +67,7 @@ def test_a_worker_that_leaves_a_block_unwritten_fails_the_run(tmp_path):
     job = Job(write_input(tmp_path / "x.mfj", "lazy"), "he", 1, tmp_path, split=2, dealing="static")
     r = run_one(job, launcher)
     assert not r.ok and r.output is None and r.cross_sections == {}
-    assert r.message.startswith("worker 2: 1 of 200 blocks missing ("), r.message
+    assert r.message.startswith("process 2: 1 of 200 blocks missing ("), r.message
     assert not (job.run_dir / "mobcal.out").exists()  # the combining run never started
 
 
@@ -140,7 +140,7 @@ def test_a_claimed_block_a_worker_never_writes_fails_the_run(tmp_path):
               dealing="claimed")
     r = run_one(job, launcher)
     assert not r.ok and r.output is None
-    assert r.message.startswith("worker 2: 1 claimed block not written, block-001-"), r.message
+    assert r.message.startswith("process 2: 1 claimed block not written, block-001-"), r.message
     assert not (job.run_dir / "mobcal.out").exists()
 
 
@@ -159,7 +159,7 @@ def test_a_block_written_twice_fails_the_run(tmp_path):
               dealing="claimed")
     r = run_one(job, launcher)
     assert not r.ok
-    assert "block-001-00001.dat written by workers 1 and 2" in r.message, r.message
+    assert "block-001-00001.dat written by processes 1 and 2" in r.message, r.message
 
 
 def test_stale_claims_are_removed_before_a_run(tmp_path):
