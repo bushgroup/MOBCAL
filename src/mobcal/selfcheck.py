@@ -147,8 +147,8 @@ def _choline() -> tuple[bool, str, list[str]]:
         got, want = r.cross_sections.get(k), ref.get(k)
         within = got is not None and want is not None and abs(got / want - 1) <= TOLERANCE
         ok &= within
-        detail.append(f"{k:3s} {got if got is not None else 'missing'} A^2 against 2012's "
-                      f"{want}" + ("" if within else f"  (outside {TOLERANCE:.1%})"))
+        detail.append(f"{k:3s} {got if got is not None else 'missing'} A^2 against the "
+                      f"{want} of 2012" + ("" if within else f"  (outside {TOLERANCE:.1%})"))
     return ok, (f"choline in helium at seed {CHOLINE_SEED} under RANLUX, against the 2012 "
                 "output"), detail
 

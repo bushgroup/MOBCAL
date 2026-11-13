@@ -79,6 +79,23 @@ process computes them, so the combined output is the serial output either way. U
 claiming worker takes the slowest blocks first, which is what keeps the workers finishing
 together; under RANLUX it can only take them in the order of the stream.
 
+### The output of a divided run
+
+A divided run adds differences of its own to the output of the program, the same ones for any
+ion. The combined output carries one line per coordinate set recording the blocks it read, such as
+
+```
+ blocks of imp trajectories: integrated    0, read from files  400, empty    0 (worker  0 of 20)
+```
+
+together with a blank line, and the diagnostic of a trajectory that failed energy conservation
+(`energy not conserved`, two lines and the blank line before them) is printed by the process that
+integrated it, in the output of that process, instead of in the combined output. A run that
+succeeds copies each of those pairs, with the number of its process, into the `diagnostics` list
+of the `split` block of its `record.json` before it removes the worker directories (`--scratch
+keep` leaves them, `w01` to `wW`). The count of failed trajectories in the SUMMARY, and every
+number, are those of the run as one process.
+
 ## How a batch uses the cores
 
 By default the window and `mobcal run --split auto` choose how many runs are in flight at once

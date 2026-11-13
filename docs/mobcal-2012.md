@@ -16,16 +16,17 @@ states that limit.
 ## The commands
 
 To calculate a cross section as the 2012 release would have, run the program for the gas under
-the 2012 random number generator. In the window that is the method MOBCAL 2012 (He) or MOBCAL
-2012 (N2), whose first seed is the 2012 seed; from a terminal,
+the 2012 random number generator. In the window, choose the method **MOBCAL 2012 (He)** or
+**MOBCAL 2012 (N2)**, whose first seed is the 2012 seed. From a terminal, run
 
 ```
 mobcal run Choline_pop.mfj --method 2012-he
 mobcal run Choline_pop.mfj --method 2012-n2
 ```
 
-and `--rng ranlux` alone is the same as the first command ([Methods](methods.md)). Everything
-else a calculation depends on is already the 2012 value:
+`--rng ranlux` alone is the same as the first command, and the run records its method as
+`2012-he` either way ([Methods](methods.md)). Everything else a calculation depends on is already
+the 2012 value:
 
 | What it sets | The 2012 release | A run without options |
 |---|---|---|
@@ -36,92 +37,123 @@ else a calculation depends on is already the 2012 value:
 | Random number generator | RANLUX, luxury level 3 | Philox4x32-10, unless `--rng ranlux` |
 
 A run under Philox is a 2012 calculation in every respect but its random numbers: its cross
-sections differ from the 2012 ones in their last digits, as a run at another seed would, and
-over many seeds the two generators give the same distribution
-([Random numbers](random-numbers.md)). The seed belongs to the calculation rather than to
-the release, so for an ion other than the example any seed under either generator gives a 2012
-calculation, whereas a number published from the 2012 program reproduces only under RANLUX at
-the seed it was computed with. The runs write their outputs to
-`runs/Choline_pop-he-5013489-ranlux/mobcal.out` and `runs/Choline_pop-n2-5013489-ranlux/mobcal.out`,
-and each `record.json` names the table, `MOBCAL 2012 helium` or `MOBCAL 2012 nitrogen`, with its
-SHA-256 ([The element tables](parameters.md)), and records the settings as the 2012 ones
-([The run settings](settings.md)).
+sections differ from the 2012 ones by a few tenths of a percent, as a run at another seed would,
+and over many seeds the two generators give the same distribution ([How the two
+compare](random-numbers.md#how-the-two-compare)). The seed belongs to the calculation, not to the
+release ([The seed](random-numbers.md#the-seed)). For an ion other than the example, any seed under
+either generator therefore gives a 2012 calculation, whereas a number published from the 2012
+program reproduces only under RANLUX at the seed it was computed with.
 
-Choline takes about 3 minutes in helium and about an hour in nitrogen on one workstation core.
-`--split` divides the trajectory method among processes and reports the serial result exactly,
-and the README records choline in nitrogen running 15.8 times faster split 20 ways than serially
-([README](../README.md#running-calculations)).
+The two runs write their outputs to `runs/Choline_pop-he-5013489-ranlux/mobcal.out` and
+`runs/Choline_pop-n2-5013489-ranlux/mobcal.out`. The `record.json` beside each names the element
+table, `MOBCAL 2012 helium` or `MOBCAL 2012 nitrogen`, with its SHA-256, and records the settings
+as the 2012 ones ([The record of a run](results-folder.md#the-record-of-a-run)).
+
+As one process, choline took 3 min in helium and 70 min in nitrogen on a 40-core workstation.
+Divided among twenty processes with `--split 20`, which reports the result of one process exactly,
+it took 4.4 min in nitrogen (Windows 11, MSYS2 gfortran 16.2.0, October 2026; [Divided
+runs](large-ions.md#divided-runs)).
 
 ## Comparing with the references
 
 For helium, `mobcal self-check --choline` runs this calculation and compares its three cross
-sections with the reference in about three minutes ([Installing
-MOBCAL](install.md#checking-an-installation)). To compare whole outputs, take the references,
-`Choline_He.out` and `Choline_N2.out`, the files in `sample-output/` of the release at tag `v1.0`,
-which the installation carries in `examples/sample-output/` beside the input, `examples/Choline.mfj`
-(in the source code, they are [`fortran/sample-output/`](../fortran/sample-output/) and
-`fortran/Choline.mfj`). They were written by g77 builds in 2012 from an input then named
-`Choline_pop.mfj`, and each output echoes the name of its input twice, in its first lines and in the
-SUMMARY. `Choline.mfj` holds the same coordinates, so copy it to the echoed name before running,
-rather than editing either side:
+sections with the reference in about three minutes ([Checking an
+installation](install.md#checking-an-installation)). To compare whole outputs, take the
+references, `Choline_He.out` and `Choline_N2.out`, the files in `sample-output/` of the release at
+tag `v1.0`. An installation carries them in `examples/sample-output/` beside the input,
+`examples/Choline.mfj`, and in the source code they are
+[`fortran/sample-output/`](../fortran/sample-output/) and `fortran/Choline.mfj`. They were written
+by g77 builds in 2012 from an input then named `Choline_pop.mfj`, and each output echoes the name
+of its input twice, in its first line and in the SUMMARY. `Choline.mfj` holds the same
+coordinates, so copy it to the echoed name before running, and edit neither side:
 
 ```
 cp <installation>/examples/Choline.mfj Choline_pop.mfj
 ```
 
-Then run the commands above in that directory and compare each output with its reference line by
+Then run the two commands in that folder and compare each output with its reference line by
 line, after stripping end-of-line carriage returns, which a build on Windows writes and the
-references do not carry. In a POSIX shell (on Windows, Git Bash):
+references do not carry. In a POSIX shell (Git Bash on Windows):
 
 ```bash
 diff <(tr -d '\r' < <installation>/examples/sample-output/Choline_He.out) <(tr -d '\r' < runs/Choline_pop-he-5013489-ranlux/mobcal.out)
 diff <(tr -d '\r' < <installation>/examples/sample-output/Choline_N2.out) <(tr -d '\r' < runs/Choline_pop-n2-5013489-ranlux/mobcal.out)
 ```
 
-Each diff shows the 41 lines of the next section and nothing else. Every cross section and
-mobility, every standard deviation, the three trajectories in helium that failed energy
-conservation with their diagnostics, and the SUMMARY are the 2012 lines: 61.075 Å² by the
-projection approximation, 63.473 Å² by the exact hard-sphere method and 55.402 Å² by the
-trajectory method in helium, and 115.92 Å² by the trajectory method in nitrogen, as the
-references print them. This was measured with MSYS2 gfortran 16.2.0 on Windows on 24 October
-2026, serial and split 20 ways (below).
+Each diff shows the 41 lines of [The differences in the output](#the-differences-in-the-output)
+and nothing else. Every cross section and mobility, every standard deviation, the three
+trajectories in helium that failed energy conservation with their diagnostics, and the SUMMARY
+are the 2012 lines: 61.075 Å² by the projection approximation, 63.473 Å² by the exact hard-sphere
+method, and 55.402 Å² by the trajectory method in helium, and 115.92 Å² by the trajectory method
+in nitrogen, as the references print them. This was measured with MSYS2 gfortran 16.2.0 on
+Windows on 24 October 2026, as one process and divided among 20 ([Divided runs](#divided-runs)),
+and again on 13 November 2026, in helium as one process and in both gases divided among 20.
 
 ## What the tests hold
 
-Unlike the [2000 comparison](mobcal-2000.md), this one is part of the test suite of the source code,
-which runs on Windows, macOS and Linux in continuous integration for every change. The suite
-compares with [`tests/reference/`](../tests/reference/README.md), which holds what the current
-programs print for choline in both gases, and a test ties those two files to the 2012 originals line
-by line: each differs from its original in exactly the 41 lines below, the atom count changed only
-in width and each q1st value equal to four times the 2012 value within its rounding. Against those
-references every run of the suite holds the helium output in three tiers, the lines that do not
-depend on the random numbers character for character, the cross sections within 0.1 %, and the whole
-file byte for byte, carriage returns aside, on all three platforms, and holds nitrogen through one
-of its ten cycles. The full nitrogen comparison takes about an hour, so it runs every Monday in
-continuous integration and otherwise only when asked for. The
-[README](../README.md#testing-against-the-2012-outputs) describes each test and how to run it.
+Unlike the [2000 comparison](mobcal-2000.md), this one is part of the test suite of the source
+code, which continuous integration runs on Windows, macOS, and Linux for every change. To check
+that a build still computes the 2012 numbers, the suite runs `Choline.mfj` through each program
+under RANLUX at seed 5013489, staged under the name the references echo, and compares the output
+with [`tests/reference/`](../tests/reference/README.md). Those two files hold what the shipped
+programs print for choline in the two gases, and a test ties them to the 2012 originals line by
+line: each differs from its original in exactly the 41 lines of the next section, the atom count
+changed only in width and each q1st value equal to four times the 2012 value within its rounding.
+A build that passes against them therefore reproduces every number of the 2012 outputs.
+
+The comparison has three tiers:
+
+1. Every line that does not depend on the random numbers matches character for character.
+   `tests/stochastic-lines.txt` lists the lines that do depend on them, so a line that is not
+   listed has to match, and a line the 2012 program never wrote fails the test.
+2. Each reported cross section is within 0.1 % of the reference: the projection-approximation,
+   exact hard-sphere, and trajectory-method values in helium, and the trajectory-method value in
+   nitrogen.
+3. The whole file is the reference byte for byte, carriage returns aside, on the platforms
+   listed in `tests/strict-platforms.txt`, which are all three.
+
+Helium goes through the three tiers in every run of the suite. The full nitrogen comparison
+takes about an hour, so every run of the suite checks one tenth of it. The 2012 calculation is
+ten cycles of 40,000 trajectories, and a calculation divided among ten processes gives the tenth
+process exactly the trajectories of cycle 10, drawn from the random number stream where the nine
+cycles before it leave off. The test runs that one process on choline in nitrogen and requires
+its lines of the first tier, and the cross section and inverse mobility it prints for cycle 10,
+to match the nitrogen reference character for character. The full nitrogen comparison runs every
+Monday in continuous integration, on a manual run of the `ci` workflow with its nitrogen option
+selected, and from the source code with
+
+```
+uv run pytest -m nitrogen
+```
+
+The suite also holds a divided run to the run as one process. Choline in helium runs under
+RANLUX divided among one process and among three, and under Philox as one process and divided
+among 10 and among 40. Each combined output must match the output of one process under the same
+generator line for line, with no tolerance, apart from the lines a divided run adds or moves
+([The output of a divided run](large-ions.md#the-output-of-a-divided-run)), and the
+energy-conservation diagnostics of the processes together must be those of the one process.
 
 ## The differences in the output
 
 Two print changes made since 2012 account for all 41 lines in each gas:
 
-| Line | 2012 reference | This program | Why it changed |
+| Line | 2012 reference | The shipped program | Why it changed |
 |---|---|---|---|
-| `number of atoms =` (1 line) | `21` in four columns | `21` in seven columns | The atom bound is now 200,000, and a count of that size needs seven columns. |
-| `average values for q1st`, third column (40 lines) | e.g. `1.0661E+00` | e.g. `4.2644E+00` | The column is a sum over the `itn` cycles and was divided by `inp`, the number of velocity points, 40, rather than by `itn`, 10. It is now divided by `itn`, so it prints four times the 2012 value. |
+| `number of atoms =` (1 line) | `21` in four columns | `21` in seven columns | The atom bound is 200,000, and a count of that size needs seven columns. |
+| `average values for q1st`, third column (40 lines) | e.g., `1.0661E+00` | e.g., `4.2644E+00` | The column is a sum over the `itn` cycles and was divided by `inp`, the number of velocity points, 40, where it should be divided by `itn`, 10. It is divided by `itn`, so it prints four times the 2012 value. |
 
 The q1st column is a printed diagnostic: nothing reads it back, and the collision integrals, the
-cross sections and the standard deviation are accumulated separately. Each 2012 value times four
-equals the value this program prints to within the last printed digit, since both are rounded
-to five significant figures. The `gst2` and `wgst` columns of that table are the 2012 lines, and
-with the division corrected the `wgst`-weighted sum of the q1st column equals the printed
-`mean OMEGA*(1,1)`, 1.9045 in helium and 3.9847 in nitrogen, where before it was a quarter of
-it. [`fortran/README.md`](../fortran/README.md) in the source code records each change, with
+cross sections, and the standard deviation are accumulated separately. Each 2012 value times four
+equals the value the shipped program prints to within the last printed digit, since both are
+rounded to five significant figures. The `gst2` and `wgst` columns of that table are the 2012
+lines, and with the division corrected the `wgst`-weighted sum of the q1st column equals the
+printed `mean OMEGA*(1,1)`, 1.9045 in helium and 3.9847 in nitrogen, where before it was a quarter
+of it. [`fortran/README.md`](../fortran/README.md) in the source code records each change, with
 the lines it touched, under Changes since 2012.
 
 The `mass of ion` line, which the 2000 comparison counts among its differences, is not one here.
 Format 604 was `1pd11.4`, which g77 printed with an `E` exponent, as the 2012 references show,
-and gfortran with a `D`. It is now `1pe11.4`, and the shipped programs print the `E` of the
+and gfortran with a `D`. It is `1pe11.4`, and the shipped programs print the `E` of the
 references.
 
 ## Silicon in nitrogen
@@ -143,37 +175,28 @@ the results of the second set, and without silicon equals it entirely.
 No input to the shipped programs reproduces the 2012 numbers for such an ion. The table has one
 row per element and both readers look the same row up, so a table made to give silicon the
 numbers of iron would give them to the first coordinate set as well. A 2012 number for a
-multi-set nitrogen calculation of an ion containing silicon reproduces only with the 2012
-program itself (below).
+nitrogen calculation of several coordinate sets of an ion containing silicon reproduces only with
+[the 2012 program itself](#the-2012-program-itself).
 
-## Split runs
+## Divided runs
 
-A run with `--split W` adds differences of its own, the same ones it adds to any output: the
-combined output carries one line per coordinate set recording the blocks it read, such as
-
-```
- blocks of imp trajectories: integrated    0, read from files  400, empty    0 (worker  0 of 20)
-```
-
-followed by a blank line, and the diagnostic of a failed trajectory (`energy not conserved`, two
-lines and the blank line before them) is printed by the worker that integrated it, in the output
-of that worker, instead of in the combined output. A run that succeeds copies each of those
-pairs, with the number of its worker, into the `diagnostics` list of its `record.json` before it
-removes the worker directories (`--scratch keep` leaves them, `w01` to `wW`). The count of failed
-trajectories in the SUMMARY, and every number, are those of the serial run. With those lines set
-aside, a run of choline split 20 ways differs from its reference in the same 41 lines as the
-serial run, in both gases.
+A run divided among processes with `--split` adds one line per coordinate set to the output and
+moves the diagnostics of failed trajectories out of it, as it does for any ion ([The output of a
+divided run](large-ions.md#the-output-of-a-divided-run)). With those lines set aside, a run of
+choline divided among 20 processes differs from its reference in the same 41 lines as the run as
+one process, in both gases, and the count of failed trajectories in the SUMMARY and every number
+are the 2012 ones.
 
 ## The 2012 program itself
 
 The 2012 sources build and run today without a change. The README of the release
 ([Compiling](https://github.com/bushgroup/MOBCAL-2012#compiling)) gives a gfortran line that asks
-for the static storage of local variables, as the MOBCAL build recipe (`mobcal.fortran`) does, and
-explains why the 2012 README found that optimized and gfortran builds failed. Built from the sources
-at tag `v1.0` with that recipe and run on `Choline_pop.mfj` at seed 5013489, each program prints its
-reference byte for byte once carriage returns are stripped, but for the `mass of ion` line, which it
-prints with the `D` exponent of format 604 (gfortran 16.2.0, Windows, 24 October 2026). That program
-is the reference for any question the 41 lines leave open, and the only route to a 2012 nitrogen
-number for a multi-set ion containing silicon; for any other calculation, the shipped programs under
-`--rng ranlux` give the same numbers with the input checks, run records and parallel runs of this
-package.
+for the static storage of local variables, as the build recipe of MOBCAL (`mobcal.fortran`) does,
+and explains why the README of 2012 found that optimized builds and gfortran builds failed. Built
+from the sources at tag `v1.0` with that recipe and run on `Choline_pop.mfj` at seed 5013489, each
+program prints its reference byte for byte once carriage returns are stripped, but for the `mass
+of ion` line, which it prints with the `D` exponent of format 604 (gfortran 16.2.0, Windows, 24
+October 2026). That program is the reference for any question the 41 lines leave open, and the
+only route to a 2012 nitrogen number for several coordinate sets of an ion containing silicon. For
+any other calculation, the shipped programs under the methods `2012-he` and `2012-n2` give the
+same numbers with the input checks, run records, and parallel runs of this package.
