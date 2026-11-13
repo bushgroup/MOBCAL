@@ -1,8 +1,16 @@
 # The results folder
 
 Every calculation leaves a run directory in the results folder, i.e., the folder chosen
-in the window or named by `--out` on the command line. This page describes the record
-the package writes into each run directory, `record.json`.
+in the window or named by `--out` on the command line. This page describes how a run
+directory is named and the record the package writes into it, `record.json`.
+
+## The name of a run directory
+
+Run
+directories are named for the input, the gas, the seed, the generator when it is RANLUX, the
+table when it is not the 2012 table for the gas, and each setting that differs from 2012
+(`choline-he-5013486-ranlux-lj2000-t298-imp25`), never for the method, so the same calculation
+lands in the same directory whichever way it was asked for.
 
 ## The record of a run
 
@@ -29,3 +37,9 @@ file of the program is unchanged by any of this, so it still compares byte for b
 references. `summary.json` names the table each run used and its SHA-256 as well, and both
 summary files name the random number generator each run used in their `rng` column
 ([Random numbers](random-numbers.md)).
+
+The record does not depend on the method file to say what the method was ([What a run
+records](methods.md#what-a-run-records)): the gas, the generator, the
+seed, the element table by name and SHA-256 (with its path when the run read a TOML file)
+and the six settings are each in it, so a run stays described after its method file is
+moved, edited or deleted.

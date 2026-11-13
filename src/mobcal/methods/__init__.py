@@ -229,8 +229,8 @@ def load(path: Path | str, shipped: bool = False) -> Method:
     path = Path(path)
     if path.suffix.lower() == ".toml":
         raise MethodError(f"{path}: a TOML method file, which this version of MOBCAL does not "
-                          f"read; a method file is JSON, NAME{SUFFIX} (the guide's Methods page "
-                          "gives the format)")
+                          f"read; a method file is JSON, NAME{SUFFIX} (the Methods page of the "
+                          "guide gives the format)")
     try:
         data = path.read_bytes()
     except OSError as e:
@@ -404,7 +404,7 @@ def get(ref: str | Path) -> Method:
     p = Path(ref)
     if p.suffix.lower() not in (".json", ".toml") and not p.exists():
         raise MethodError(f"no method is named {str(ref)!r}; the methods are "
-                          + ", ".join(METHODS) + ", or a method file's path")
+                          + ", ".join(METHODS) + ", or the path of a method file")
     return load(p)
 
 

@@ -916,8 +916,8 @@ def test_a_batch_round_trips_through_the_queue_file(tmp_path):
     got, problems = batch.load(path)
     assert got == [b1, b2, b3] and [b.jobs() for b in got] == [b1.jobs(), b2.jobs(), b3.jobs()]
     assert problems == ["queued batch 4: no method is named '1996'; the methods are 2012-he, "
-                        "2012-n2, 2012-philox-he, 2012-philox-n2, 2000-he, or a method file's "
-                        "path"]
+                        "2012-n2, 2012-philox-he, 2012-philox-n2, 2000-he, or the path of a "
+                        "method file"]
     assert [b.title() for b in got] == ["Custom (from MOBCAL 2012 (He))", "MOBCAL 2000 (He)",
                                         "Mine"]
 
