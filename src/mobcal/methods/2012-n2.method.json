@@ -2,7 +2,7 @@
   "format": "ccs-method",
   "version": 1,
   "name": "MOBCAL 2012 (N2)",
-  "description": "The calculation of the 2012 release in nitrogen: its element table and run settings with RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. inum and inor set the helium program's projection and hard-sphere pass, which the nitrogen program does not make.",
+  "description": "The calculation of the 2012 release in nitrogen: its element table and run settings with RANLUX, the 2012 generator, which reproduces the 2012 outputs at the 2012 seed. inum and inor set the projection and hard-sphere pass of the helium program, which the nitrogen program does not make.",
   "gas": "N2",
   "temperature": {
     "value": 301,

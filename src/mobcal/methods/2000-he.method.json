@@ -2,7 +2,7 @@
   "format": "ccs-method",
   "version": 1,
   "name": "MOBCAL 2000 (He)",
-  "description": "The calculation of the Jarrold group's 2000 helium release: its element table at 298 K and 25 trajectories per block, with RANLUX. The 2000 release has no nitrogen form.",
+  "description": "The calculation of the 2000 helium release of the Jarrold group: its element table at 298 K and 25 trajectories per block, with RANLUX. The 2000 release has no nitrogen form.",
   "gas": "He",
   "temperature": {
     "value": 298,

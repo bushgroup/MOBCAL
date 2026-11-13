@@ -2,7 +2,7 @@
   "format": "ccs-method",
   "version": 1,
   "name": "MOBCAL 2012 with Philox (N2)",
-  "description": "The 2012 element table and run settings in nitrogen, with random numbers from Philox4x32-10, whose divided runs give the serial result exactly. inum and inor set the helium program's projection and hard-sphere pass, which the nitrogen program does not make.",
+  "description": "The 2012 element table and run settings in nitrogen, with random numbers from Philox4x32-10, whose divided runs give the serial result exactly. inum and inor set the projection and hard-sphere pass of the helium program, which the nitrogen program does not make.",
   "gas": "N2",
   "temperature": {
     "value": 301,

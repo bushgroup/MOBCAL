@@ -100,10 +100,10 @@ SUFFIX = ".method.json"  # a method file's name: KEY.method.json shipped, NAME.m
 # The shipped method files as committed (LF line endings, see .gitattributes), by key.
 SHA256 = {
     "2012-he": "8895d44d884f433427572c41633990afc3acf1d843de65fc1782c60aee505a8f",
-    "2012-n2": "de021afd66ccf4e9d3de4f152a95e35cfdcc5df4cedd77e2c0c3594731197a76",
+    "2012-n2": "1aeddf641e3a65229ad621ff2b82e741249e15244f0f4f45764ac956252d2eb5",
     "2012-philox-he": "80d1cfc6f6c00f2e06a95126591364e901eff83e8f7442900775cfdd05413aaf",
-    "2012-philox-n2": "44e74ab1cad7b2c9e8441aad234fe880db562fd03fb68bfcdbd7a0613c5287d2",
-    "2000-he": "8acd5a7ba89ff39ee21c60dfd449aecff7b76bbb9aa5b574663b973f8adbd26f",
+    "2012-philox-n2": "4b23b8bd4df355a90e4527cba2c1bd91a8bdc06be3d1b87f86df0477e0e6ab09",
+    "2000-he": "7e27c0c13c8636a158ba127268d3d0f26a68125497ea905aec5e24f08291bb58",
 }
 
 FORMAT = "ccs-method"
