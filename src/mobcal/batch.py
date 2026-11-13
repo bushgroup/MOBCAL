@@ -229,7 +229,7 @@ def _table(value: object) -> str | parameters.ParameterSet | None:
     """A queue file's ``parameters``: a name or a path as written, or a table it holds whole."""
     if isinstance(value, dict):
         try:
-            return parameters.from_document(value, "the queued batch's element table")
+            return parameters.from_document(value, "the element table of the queued batch")
         except parameters.ParameterError as e:
             raise BatchError(str(e)) from None
     return value
