@@ -12,6 +12,12 @@ table when it is not the 2012 table for the gas, and each setting that differs f
 (`choline-he-5013486-ranlux-lj2000-t298-imp25`), never for the method, so the same calculation
 lands in the same directory whichever way it was asked for.
 
+The name of the run directory carries each value that differs from 2012, in the order
+temperature, `imp`, `itn`, `inp`, `inum`, `inor`, so two
+runs of one input and seed at different settings never share a directory:
+`choline-he-5013489-ranlux-t298-imp25`, or, with the 2000 element table as well,
+`choline-he-5013489-ranlux-lj2000-t298-imp25`.
+
 ## The record of a run
 
 When a run ends, whether it finished or failed, the package writes `record.json` into its
@@ -43,3 +49,8 @@ records](methods.md#what-a-run-records)): the gas, the generator, the
 seed, the element table by name and SHA-256 (with its path when the run read a TOML file)
 and the six settings are each in it, so a run stays described after its method file is
 moved, edited or deleted.
+
+`record.json` in each run directory and the per-run entries of `summary.json` carry a
+`settings` block: the six values, whether they are the 2012 ones, the values set over the 2012
+ones, by the method or singly, and the name of the rendered file.
+`summary.csv` carries the six values as columns after the method.

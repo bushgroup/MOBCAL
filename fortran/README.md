@@ -22,7 +22,7 @@ file: it keeps the 84-line header of that release unchanged and has the run file
 The 2000 release had no nitrogen program. Since the table, the temperature and the sampling counts
 became files the programs read (Changes, below), the shipped helium program reproduces the reference
 output of the 2000 release on its own example, given the table of that release as a parameter file
-and `--temperature 298 --imp 25` ([docs/settings.md](../docs/settings.md)).
+and `--temperature 298 --imp 25` ([docs/mobcal-2000.md](../docs/mobcal-2000.md)).
 
 The MMFF94/exp-6 programs of 2017 and 2018, kept as distributed at
 [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018), are a branch of this lineage
