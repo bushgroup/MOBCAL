@@ -164,7 +164,8 @@ This version treats what version 2.0 wrote as follows.
   versions gives one methods paragraph. The record of such a run also carries the path and
   SHA-256 of the settings file the run named, `null` when it named none.
 - A divided run of version 2.0 kept the folder of each process and every block file.
-  `mobcal clean` removes them, as a run of this version does itself when it succeeds
+  `mobcal clean` writes into the record of such a run what only those folders held, and then
+  removes them, as a run of this version does itself when it succeeds
   ([`mobcal clean`](command-line.md#mobcal-clean)).
 - A queue that the window of version 2.0 saved is offered back when the window opens. A batch
   in it that no longer reads, e.g., one under a TOML method file, is listed as not restored.
