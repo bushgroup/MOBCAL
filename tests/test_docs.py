@@ -101,8 +101,8 @@ def test_every_link_outside_the_guide_goes_to_the_web_or_the_repository():
 def test_a_repository_link_opens_at_the_versions_ref():
     assert docs.ref("2.0.0.dev0") == "main"
     assert docs.ref("2.0.0") == "v2.0.0" and docs.ref("2.0.0rc1") == "v2.0.0rc1"
-    t = docs.target("../README.md#running-calculations", "install.md", "2.0.0")
-    assert t == docs.Target(url=f"{REPOSITORY}/blob/v2.0.0/README.md#running-calculations")
+    t = docs.target("../README.md#from-source", "install.md", "2.1.0")
+    assert t == docs.Target(url=f"{REPOSITORY}/blob/v2.1.0/README.md#from-source")
     assert docs.target("../fortran/README.md", "mobcal-2012.md", "2.0.0.dev0").url == \
         f"{REPOSITORY}/blob/main/fortran/README.md"
     assert docs.target("https://example.org/a#b", "x.md").url == "https://example.org/a#b"
