@@ -6,9 +6,10 @@ reads both sources and requires one bare ``stop`` in each, the normal end, and `
 other. The rest drive the refusals that a small input reaches in well under a second, on the
 binary itself and outside the driver, and require exit 1 with the refusal as the output's last
 line. The refusals they cannot reach quickly (``masses do not add up`` in a second coordinate set,
-``Problem orientating along x axis``, ``ibst greater than 500``) the static test covers; the
-``ifail`` cap is driven in ``test_split.py``, and the normal end's exit 0 by the regression gate's
-choline runs.
+``Problem orientating along x axis``) the static test covers; the b2max search's cap,
+``ibst greater than 10000``, is driven at the 2012 cap of 500 in ``test_b2max_cap.py``, the
+``ifail`` cap in ``test_split.py``, and the normal end's exit 0 by the regression gate's choline
+runs.
 
 The element table's refusals come first: before the input is opened, the program reads
 ``parameters.tab`` from its working directory, and a table that is missing, not of its format,

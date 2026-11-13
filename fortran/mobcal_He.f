@@ -1483,7 +1483,10 @@ c     All integrations Monte Carlo (except over velocity).
 c
       implicit double precision (a-h,m-z)
       dimension pgst(100),wgst(100),b2max(100)
-      dimension q1st(100),q2st(100),cosx(0:500)
+c     the b2max search below walks b2 in steps of ro2 up to ibstmx;
+c     the 2012 program stopped at 500 (b to 68 A), ibstmx is 10000
+      parameter (ibstmx=10000)
+      dimension q1st(100),q2st(100),cosx(0:ibstmx)
       dimension om11st(100),om12st(100),om13st(100),om22st(100)
       logical lblk
       character*20 fnblk,fnclm
@@ -1686,9 +1689,9 @@ c
      ?cosx(ibst-2).lt.cmin.and.cosx(ibst-3).lt.cmin.and.
      ?cosx(ibst-4).lt.cmin) goto 3020
  3010 ibst=ibst+1
-      if(ibst.gt.500) then
-      write(8,653)
-  653 format(1x,'ibst greater than 500')
+      if(ibst.gt.ibstmx) then
+      write(8,653) ibstmx
+  653 format(1x,'ibst greater than',i6)
       close (8)
       stop 1     
       endif
