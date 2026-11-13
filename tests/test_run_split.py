@@ -99,7 +99,7 @@ def test_run_many_takes_split_jobs_and_reports_their_blocks(tmp_path):
     _, json_path = s.write(tmp_path / "runs")
     text = json_path.read_text(encoding="utf-8")
     assert '"split": null' in text and '"split": 2' in text
-    assert str(s.results[1]).endswith("(2 workers)")
+    assert str(s.results[1]).endswith("(2 processes)")
 
 
 @pytest.mark.parametrize("generator", ["ranlux", "philox"])

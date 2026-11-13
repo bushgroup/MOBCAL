@@ -62,24 +62,25 @@ assert set(_METHOD) == set(methods.METHODS)
 # How the batch divides the cores when it chooses (mobcal.estimate.allocate), shared by
 # --split auto and the window's check box; the mode's entry says how each mode weighs it.
 AUTO_RULE = ("chooses the runs in flight and the processes per run from the run count, the "
-             "processor cores and the ion sizes, in the mode chosen, dividing a run among at "
+             "cores, and the ion sizes, in the mode chosen, dividing a run among at "
              f"most {estimate.MAX_SPLIT} processes, no more than its slowest block of "
              "trajectories lets it use, and only when that saves at least "
-             f"{1 - estimate.MIN_GAIN:.0%} of its time")
+             f"{(1 - estimate.MIN_GAIN) * 100:.0f} % of its time")
 
 SHARED = {
     "inputs": Description(
         "The ions to run, one calculation for each input and seed.",
         cli="Paths to .mfj or .ion.json files, or globs.",
-        window="Ion files (.ion.json) and .mfj files run as they are; ORCA and Gaussian "
-               "outputs and .xyz files are imported at Add batch, into imported/ in the results "
-               "folder. Add files, or drop them here."),
+        window="Ion files (.ion.json) and .mfj files run as they are; ORCA outputs, Gaussian "
+               "outputs, and .xyz files are imported at Add batch, into imported/ in the "
+               "results folder. Add files, or drop them here."),
     "method": Description(
-        "A preset of the gas, the element table, the random number generator and the six run "
+        "A preset of the gas, the element table, the random number generator, and the six run "
         "settings.",
         cli="The methods are " + "; ".join(f"{k}, {v}" for k, v in _METHOD.items())
-            + "; or the path of a method file. A table, generator or setting given beside it "
-            "overrides it, and the run records custom.",
+            + "; or the path of a method file. A table, generator, or setting given beside it "
+            "overrides it, and the run records custom, or the shipped method the values "
+            "make.",
         window="A field changed afterwards makes the method Custom."),
     "parameters": Description(
         "The element table, which gives each atom of the ion its mass and its Lennard-Jones "
@@ -117,17 +118,19 @@ SHARED = {
     "inor": Description(
         "The most reflections followed per trajectory of the exact hard-sphere pass."),
     "mode": Description(
-        "How a batch of more runs than fit at once uses the processor cores. Finish in order "
+        "How a batch of more runs than fit at once uses the cores. Finish in order "
         "runs one at a time, divided among every core it can use, so runs complete one after "
         "another and a pause waits for the run in flight. Balanced runs as many at once as keeps "
-        f"each divided run at least {estimate.BALANCE:.0%} efficient (its time as one process, "
+        f"each divided run at least {estimate.BALANCE * 100:.0f} % efficient (its time as one "
+        "process, "
         "over the processes times its divided time): on a 40-core workstation, two choline "
         "runs at once in helium and one in nitrogen, and on 8 cores one at a time. Most "
         "throughput runs one process per run when there are at least as many runs as cores, "
         "which finishes the batch soonest and no run before the first wave ends. The counts "
         "are physical cores, not the logical processors hyperthreading doubles, which add a "
         "quarter to a third more throughput and make every run take about half as long again.",
-        cli=f"in-order, balanced or throughput; given alone, it implies --split {AUTO}.",
+        cli=f"in-order, balanced, or throughput; given alone, it implies --split {AUTO}, and "
+            "beside --split W it is refused.",
         window="It is a preference of the window, kept for the next launch, and a batch "
                "waiting in the queue starts under the mode chosen when it starts."),
     "workers": Description(
@@ -146,13 +149,13 @@ SHARED = {
         window="Set here when the box above is unchecked; 1 runs each calculation as one "
                "process."),
     "out": Description(
-        "The folder for a study: each batch adds its run directories here, and summary.csv "
-        "and summary.json are rewritten to cover every run it holds."),
+        "The results folder of a study: each batch adds its run directories here, and "
+        "summary.csv and summary.json are rewritten to cover every run it holds."),
     "charges": Description(
         "Which atomic charges the imported ion carries: a set the file holds, such as CHELPG or "
         "Mulliken, or uniform, the net charge spread evenly over the atoms.",
-        cli="The keys are mulliken, lowdin, chelpg and hirshfeld for the blocks of an ORCA "
-            "output; mulliken, hirshfeld, cm5, natural, mk and chelpg for those of a "
+        cli="The keys are mulliken, lowdin, chelpg, and hirshfeld for the blocks of an ORCA "
+            "output; mulliken, hirshfeld, cm5, natural, mk, and chelpg for those of a "
             "Gaussian output; column for the fifth column of an .xyz file; and uniform. "
             "Without it, the import lists what the file holds.",
         window="An ESP fit is chosen when the file holds one, Merz-Kollman (mk) before CHELPG; "
@@ -172,9 +175,9 @@ SHARED = {
     "methods_text": Description(
         "A methods paragraph for the completed runs, written from their records or result "
         "files: the program and version, method, gas, element table, temperature, trajectory "
-        "counts, generator and seeds, with the papers to cite; and the partial charges, when "
+        "counts, generator, and seeds, with the papers to cite; and the partial charges, when "
         "every run is of an ion file that carries its import record.",
-        cli="Printed for the run directories, folders and result files named.",
+        cli="Printed for the run directories, folders, and result files named.",
         window="Copied to the clipboard once a batch has completed runs."),
 }
 
@@ -183,14 +186,14 @@ WINDOW = {
            "changes the method.",
     "load_method": "Adds a method file to the Method list, remembered at the next launch, and "
                    "fills the fields from it.",
-    "save_method": "Writes the gas, the element table, the generator and the six run settings "
-                   "to a method file, and adds it to the Method list.",
-    "advanced": "Shows the generator, the five sampling counts and how the batch uses the "
+    "save_method": "Writes the gas, the element table, the generator, and the six run "
+                   "settings to a method file, and adds it to the Method list.",
+    "advanced": "Shows the generator, the five sampling counts, and how the batch uses the "
                 "cores.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "
                   "it.",
-    "add_files": "Adds ion files and .mfj files, or imports ORCA and Gaussian outputs and .xyz "
-                 "files. Files can also be dropped on the list.",
+    "add_files": "Adds ion files and .mfj files, or imports ORCA outputs, Gaussian outputs, "
+                 "and .xyz files. Files can also be dropped on the list.",
     "remove_inputs": "Removes the selected inputs.",
     "choose_folder": "Chooses the results folder.",
     "net_charge_read": "Read from the output, which was computed at this charge.",
@@ -210,10 +213,10 @@ WINDOW = {
     "running": "Each running run and its time so far, and for a divided run, its blocks of "
                "trajectories written.",
     "results": "One row for each ion in each gas. Double-click a row to open its output.",
-    "copy": "Copies the table to the clipboard, tab-separated, with the input file, run count "
-            "and folder of each row.",
-    "save_csv": "Saves the table as a CSV file, with the input file, run count and folder of "
-                "each row.",
+    "copy": "Copies the table to the clipboard, tab-separated, with the input file, run "
+            "count, and folder of each row.",
+    "save_csv": "Saves the table as a CSV file, with the input file, run count, and folder "
+                "of each row.",
     "show_in_folder": "Opens the run directory of the selected row, or the results folder.",
     "open_output": "Opens the mobcal.out of the selected row, as double-clicking the row does.",
 }
@@ -225,7 +228,7 @@ COLUMNS = {
         "Atoms": "Atoms in the ion.",
         "Sets": "Coordinate sets in the file; a run reports the mean over them.",
         "Charges": "Which atomic charges the run uses. The row of an ion file or .mfj file names "
-                   "its charge mode, from file, uniform or none, read from the file; the row of "
+                   "its charge mode, from file, uniform, or none, read from the file; the row of "
                    "an imported structure is where to choose its charges.",
         "Net charge": "The net charge of the ion, in elementary charges. The row of an ion file or "
                       ".mfj file shows the charge its calculation uses, read from the file and "

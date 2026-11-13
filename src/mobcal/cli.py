@@ -108,7 +108,7 @@ def _split(text: str) -> int | str:
     try:
         return int(text)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"--split takes a worker count or {AUTO}, "
+        raise argparse.ArgumentTypeError(f"--split takes a number of processes or {AUTO}, "
                                          f"not {text!r}") from None
 
 
@@ -162,13 +162,16 @@ def parser() -> argparse.ArgumentParser:
     c.add_argument("--report", type=Path, metavar="PATH",
                    help="Write the report to this file as well.")
 
-    b = command("build", "Compile the 2012 Fortran with gfortran.")
+    b = command("build", "Compile the helium and nitrogen programs with gfortran, from a "
+                "source checkout.",
+                "Compile the helium and nitrogen programs with gfortran, from a source "
+                "checkout. An installed copy carries its programs and refuses this command.")
     b.add_argument("--gas", choices=fortran.GASES, help="One gas. Default: both.")
     b.add_argument("--out", type=Path, default=ROOT / "build" / "fortran",
                    metavar="DIR",
                    help="The output directory. Default: build/fortran/.")
 
-    r = command("run", "Run calculations in parallel, one process per run.")
+    r = command("run", "Run calculations in parallel.")
     r.add_argument("inputs", nargs="+", metavar="INPUT", help=options.cli_help("inputs"))
     r.add_argument("--method", default=methods.DEFAULT, metavar="KEY|PATH",
                    help=options.cli_help("method", methods.DEFAULT))
@@ -180,7 +183,7 @@ def parser() -> argparse.ArgumentParser:
                    help=options.cli_help("rng", f"that of the method, {DEFAULT_RNG} under "
                                          f"{methods.DEFAULT}"))
     r.add_argument("--workers", type=int, default=None, metavar="N",
-                   help=options.cli_help("workers", "the number of processor cores divided by the "
+                   help=options.cli_help("workers", "the number of cores divided by the "
                                          "processes per run, or under --split auto, the "
                                          "number it chooses"))
     r.add_argument("--split", type=_split, default=None, metavar="W|auto",
@@ -196,15 +199,16 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--out", type=Path, default=DEFAULT_OUT, metavar="DIR",
                    help=options.cli_help("out", f"{DEFAULT_OUT}/"))
     r.add_argument("--skip-done", action="store_true",
-                   help="Leave out the runs the output folder already holds complete.")
+                   help="Leave out the runs the results folder already holds complete.")
     r.add_argument("--scratch", choices=SCRATCH_MODES, default=DEFAULT_SCRATCH,
                    help="What a divided run that succeeds keeps of the files its processes "
-                        "wrote. Delete removes the folder of each process, the claim files and "
+                        "wrote. Delete removes the folder of each process, the claim files, and "
                         "the block files, after writing what only those folders held into the "
                         "record.json of the run. Zip does the same but packs the block files into "
-                        "blocks.zip, which unpacked into the run folder lets the program redo "
-                        "the combining step there. Keep leaves every file. A run that fails or "
-                        "is stopped keeps every file whatever this says. delete, zip or keep. "
+                        "blocks.zip, which unpacked into the run directory lets the program "
+                        "redo the combining step there. Keep leaves every file. A run that "
+                        "fails or is stopped keeps every file whatever this says. delete, zip, "
+                        "or keep. "
                         f"Default: {DEFAULT_SCRATCH}.")
     r.add_argument("--result-ion", choices=RESULT_ION_MODES, default=DEFAULT_RESULT_ION,
                    help=options.cli_help("result_ion", DEFAULT_RESULT_ION))
@@ -219,12 +223,13 @@ def parser() -> argparse.ArgumentParser:
                        help=options.cli_help(name))
 
     k = command("clean", "Remove the files the processes of finished divided runs left, as a "
-                "run now does when it succeeds.")
+                "run does itself when it succeeds.")
     k.add_argument("paths", nargs="+", type=Path, metavar="DIR",
                    help="Run directories, or folders of them.")
     k.add_argument("--scratch", choices=("delete", "zip"), default="delete",
-                   help="Delete the block files, or pack them into blocks.zip in the folder of "
-                        "each run. The folder of each process and the claim files go either way. "
+                   help="Delete the block files, or pack them into blocks.zip in each run "
+                        "directory. The folder of each process and the claim files go either "
+                        "way. "
                         "Default: delete.")
     k.add_argument("--apply", action="store_true",
                    help="Remove the files. Without it, the command lists what it would remove "
@@ -256,10 +261,10 @@ def parser() -> argparse.ArgumentParser:
                         f"({options.set_names()}), instead of the table of the method or the "
                         "default table for the gas.")
 
-    m = command("import", "Write an ion file from an ORCA or Gaussian output or an .xyz file, "
-                "with the charges you name, or from a .mfj, with its own.")
+    m = command("import", "Write an ion file from an ORCA output, a Gaussian output, or an "
+                ".xyz file, with the charges you name, or from a .mfj, with its own.")
     m.add_argument("source", type=Path, metavar="SOURCE",
-                   help="An ORCA or Gaussian output, an .xyz file, or a .mfj (the 2012 "
+                   help="An ORCA output, a Gaussian output, an .xyz file, or a .mfj (the 2012 "
                         "layout or the nine columns of MobCal-MPI).")
     m.add_argument("--charges", metavar="KEY", help=options.cli_help("charges"))
     m.add_argument("--net-charge", type=int, default=None, metavar="Q",
@@ -268,7 +273,7 @@ def parser() -> argparse.ArgumentParser:
                    help="Whose element table the atoms must be in. Default: both.")
     m.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.ion.json",
                    help="The ion file to write. Default: SOURCE-STEM_KEY.ion.json in the "
-                        "current directory.")
+                        "current directory, or SOURCE-STEM.ion.json for a .mfj.")
     m.add_argument("--force", action="store_true",
                    help="Replace OUT.ion.json if it exists.")
 
@@ -304,17 +309,16 @@ def parser() -> argparse.ArgumentParser:
 REFERENCE = Path("docs") / "command-line.md"
 REFERENCE_WIDTH = 88  # the usage lines' wrap, fixed so the page does not follow the terminal
 REFERENCE_OPENING = (
-    "`mobcal` is the program the window runs, typed in a terminal: one command with a "
-    "subcommand for each task, running calculations, writing an input from a quantum chemistry "
-    "output, writing the methods paragraph for finished runs, checking and building the "
-    "programs, and opening the window. `mobcal` runs in any terminal once the installation "
-    "folder is on the `PATH`, which the Windows installer offers to do, and in the MOBCAL "
-    "command prompt of the Windows Start menu either way ([Installing MOBCAL](install.md)). "
-    "The options of `mobcal run` and `mobcal import` that the "
-    "window also sets carry the same descriptions as its tooltips, from one table in the "
-    "package, so the two say the same thing about every setting they share "
-    "([The window](window.md)). `mobcal COMMAND -h` prints the section of this page for that "
-    "command.")
+    "`mobcal` is the command line of MOBCAL, one command with a subcommand for each task. "
+    "Everything the window does, the command line does too, by the same rules and with the "
+    "same records ([The window](window.md)), and it also checks an installation and builds "
+    "the programs from source. `mobcal` runs in any terminal once the installation folder is "
+    "on the `PATH`, which the Windows installer offers to do, and in the **MOBCAL command "
+    "prompt** of the Windows Start menu either way ([Installing MOBCAL](install.md)). The "
+    "options of `mobcal run` and `mobcal import` that the window also sets carry the same "
+    "descriptions as its tooltips, from one table in the package, so the two say the same "
+    "thing about every setting they share. `mobcal COMMAND -h` prints the section of this "
+    "page for that command.")
 
 
 def _code(help: str) -> str:
@@ -603,7 +607,7 @@ def batch_from_args(args: argparse.Namespace) -> Batch:
     if args.mode is not None and args.split is None:
         args.split = AUTO
     if isinstance(args.split, int) and not 1 <= args.split <= s.blocks_per_set:
-        raise UsageError(f"--split takes a worker count from 1 to {s.blocks_per_set} "
+        raise UsageError(f"--split takes a number of processes from 1 to {s.blocks_per_set} "
                          f"(itn {s.itn} * inp {s.inp} blocks per coordinate set) or {AUTO}")
     try:
         batch = Batch(tuple(inputs), args.out, method.ref,

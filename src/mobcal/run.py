@@ -350,7 +350,7 @@ class Result:
         return row(self.record())
 
     def __str__(self) -> str:
-        split = f"  ({self.job.split} workers)" if self.job.split else ""
+        split = f"  ({self.job.split} processes)" if self.job.split else ""
         if not self.ok:
             return f"{self.job.label}  {self.status.upper()}  {self.message}{split}"
         cs = "  ".join(f"{k} {v:g}" for k, v in self.cross_sections.items())
