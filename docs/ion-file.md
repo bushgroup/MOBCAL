@@ -91,27 +91,31 @@ factor, and the same coordinates, element key, and charge on every atom.
 | `written` | no | when the file was written, ISO 8601, UTC |
 | `written_by` | yes | `program`, `version`, and `commit` (40 hexadecimal digits, with `-dirty` when the program was built from a tree with changes no commit holds), or `null` where the program does not know its commit |
 
-**The label.** Line 1 of a `.mfj` is read as the first 30 characters of the line, with leading
-blanks kept and trailing blanks dropped, and the program prints it in its output. The ion file
-stores the label as that line will be written: at most 30 characters, no line break (none of the
-characters U+000A to U+000D, U+001C to U+001E, and U+0085, each of which ends a line for some
-reader), no trailing blank, and only characters of ISO 8859-1 (the `.mfj` is written in that
-encoding). The label is never derived from the name of the file when the `.mfj` is written, so
-renaming an ion file does not change the input of a run. `mobcal import` chooses the label once.
-From an ORCA output, a Gaussian output, or an `.xyz` file, it is the stem of the source file and
-the charge choice joined by `_`, with every character other than a printing ASCII character
-replaced by `_`, cut to 30 characters; from a `.mfj`, it is line 1 of that file
-([Importing a structure and its charges](import.md)). The user can edit it in the ion file.
+### The label
 
-**The unit and the correction factor.** Coordinates are stored as they were read, in the unit
-`units` names, and the correction factor is stored beside them and never applied. The program
-converts bohr to ångström with its own constant (0.52917706) and multiplies every centred
-coordinate by the correction factor, after it centres the ion on its centre of mass. Applying
-either before the file is written would change the last digits of the coordinates the program
-reads, and would put the constant of the program into a file that should not depend on it, so
-the ion file leaves both to the program. An ion file that `mobcal import` writes from an ORCA
-output, a Gaussian output, or an `.xyz` file is in ångström with a correction factor of 1,
-whereas one written from a `.mfj` keeps the unit and the factor of that file.
+Line 1 of a `.mfj` is read as the first 30 characters of the line, with leading blanks kept and
+trailing blanks dropped, and the program prints it in its output. The ion file stores the label
+as that line will be written: at most 30 characters, no line break (none of the characters
+U+000A to U+000D, U+001C to U+001E, and U+0085, each of which ends a line for some reader), no
+trailing blank, and only characters of ISO 8859-1 (the `.mfj` is written in that encoding). The
+label is never derived from the name of the file when the `.mfj` is written, so renaming an ion
+file does not change the input of a run. `mobcal import` chooses the label once. From an ORCA
+output, a Gaussian output, or an `.xyz` file, it is the stem of the source file and the charge
+choice joined by `_`, with every character other than a printing ASCII character replaced by
+`_`, cut to 30 characters; from a `.mfj`, it is line 1 of that file ([Importing a structure and
+its charges](import.md)). The user can edit it in the ion file.
+
+### The unit and the correction factor
+
+Coordinates are stored as they were read, in the unit `units` names, and the correction factor
+is stored beside them and never applied. The program converts bohr to ångström with its own
+constant (0.52917706) and multiplies every centred coordinate by the correction factor, after it
+centres the ion on its centre of mass. Applying either before the file is written would change
+the last digits of the coordinates the program reads, and would put the constant of the program
+into a file that should not depend on it, so the ion file leaves both to the program. An ion
+file that `mobcal import` writes from an ORCA output, a Gaussian output, or an `.xyz` file is in
+ångström with a correction factor of 1, whereas one written from a `.mfj` keeps the unit and the
+factor of that file.
 
 ## Atoms and conformers
 
@@ -142,15 +146,19 @@ line, so that the coordinates of each atom take one line of the file.
 
 ## Charges
 
-**The net charge.** `molecular_charge` is the integer z the ion carries, stored apart from the
-partial charges. In `calc` mode, when z is given, the charges of every conformer must sum to z
-within 0.001 e, the tolerance `mobcal import` applies to the charges of a quantum chemistry
-output: the Hirshfeld charges that ORCA integrates on a grid sum to z + 0.0002 for the 21-atom
-choline cation. The charges are written as read and never rescaled to z. A file with no charges,
-or one read from a `.mfj` whose charges do not sum to an integer, carries `null`.
+### The net charge
 
-**The charge mode.** `charge_mode` is line 5 of the `.mfj` and keeps the meaning the helium and
-nitrogen programs give it, which differs between them:
+`molecular_charge` is the integer z the ion carries, stored apart from the partial charges. In
+`calc` mode, when z is given, the charges of every conformer must sum to z within 0.001 e, the
+tolerance `mobcal import` applies to the charges of a quantum chemistry output: the Hirshfeld
+charges that ORCA integrates on a grid sum to z + 0.0002 for the 21-atom choline cation. The
+charges are written as read and never rescaled to z. A file with no charges, or one read from a
+`.mfj` whose charges do not sum to an integer, carries `null`.
+
+### The charge mode
+
+`charge_mode` is line 5 of the `.mfj` and keeps the meaning the helium and nitrogen programs
+give it, which differs between them:
 
 | `charge_mode` | Helium program | Nitrogen program | `charges` |
 |---|---|---|---|
