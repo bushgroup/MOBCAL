@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/ion.schema.json",
   "title": "ccs-ion, version 1",
-  "description": "An ion's elements, conformer geometries and charges, and how they were made; the input from which MOBCAL writes the .mfj the 2012 program reads. docs/ion-file.md is the specification. This schema checks the structure; the cross-field rules (array lengths, the charge sum against molecular_charge, null charges only outside calc mode, conformer symbols beside per-atom columns) are checked by mobcal.io.ion and listed on that page.",
+  "description": "The elements of an ion, its conformer geometries and charges, and how they were made; the input from which MOBCAL writes the .mfj the 2012 program reads. docs/ion-file.md is the specification. This schema checks the structure; the cross-field rules (array lengths, the charge sum against molecular_charge, null charges only outside calc mode, conformer symbols beside per-atom columns) are checked by mobcal.io.ion and listed on that page.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "version", "label", "molecular_charge", "units", "correction_factor",
@@ -19,7 +19,7 @@
     },
     "comment": {"type": "string"},
     "molecular_charge": {
-      "description": "The ion's net charge z in e, an integer, or null where it is not known.",
+      "description": "The net charge z of the ion in e, an integer, or null where it is not known.",
       "type": ["integer", "null"]
     },
     "units": {"enum": ["angstrom", "bohr"]},
@@ -79,7 +79,7 @@
         "required": ["geometry"],
         "properties": {
           "symbols": {
-            "description": "Present only where this conformer's atom order differs from the top-level symbols.",
+            "description": "Present only where the atom order of this conformer differs from the top-level symbols.",
             "type": "array",
             "minItems": 1,
             "items": {"$ref": "#/$defs/symbol"}

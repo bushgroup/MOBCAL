@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/bushgroup/MOBCAL/blob/main/src/mobcal/io/result.schema.json",
   "title": "ccs-result, version 1, as MOBCAL writes it",
-  "description": "One calculation of an ion's collision cross section: the program, both inputs, the gas, the temperature, the seed, how the run ended, the cross sections with their units, and a block of what only MOBCAL reports. The file is JSON, NAME.result.json, written into each run directory beside record.json. docs/result-file.md is the specification. The core keys (every top-level key but mobcal) are the format any ion-mobility program can fill; mobcal is this program's extension block. The embedded ion and method documents are checked here by $ref to the schemas of their formats, which the two relative references below resolve to by those schemas' $id; the rules those formats state beyond their schemas are checked by mobcal.io.ion and mobcal.methods when a document is read back, and are not repeated here. Every unit string is fixed per key in version 1.",
+  "description": "One calculation of the collision cross section of an ion: the program, both inputs, the gas, the temperature, the seed, how the run ended, the cross sections with their units, and a block of what only MOBCAL reports. The file is JSON, NAME.result.json, written into each run directory beside record.json. docs/result-file.md is the specification. The core keys (every top-level key but mobcal) are the format any ion-mobility program can fill; mobcal is the extension block of this program. The embedded ion and method documents are checked here by $ref to the schemas of their formats, which the two relative references below resolve to by the $id of those schemas; the rules those formats state beyond their schemas are checked by mobcal.io.ion and mobcal.methods when a document is read back, and are not repeated here. Every unit string is fixed per key in version 1.",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "version", "status", "message", "software", "started", "finished",
@@ -31,7 +31,7 @@
           "pattern": "^[0-9a-f]{40}(-dirty)?$"
         },
         "build": {
-          "description": "The executable's entry in the build.json written beside it when it was built (compiler, flags, the SHA-256 of each source and of the executable); null when there is none.",
+          "description": "The entry of the executable in the build.json written beside it when it was built (compiler, flags, the SHA-256 of each source and of the executable); null when there is none.",
           "type": ["object", "null"]
         }
       }
@@ -141,7 +141,7 @@
       }
     },
     "inverse_mobility": {
-      "description": "An inverse reduced mobility 1/K0 in V s m^-2, as the 2012 program prints it: at z = 1 whatever the ion's charge, and at the number density of a gas at 273.15 K and 101325 Pa.",
+      "description": "An inverse reduced mobility 1/K0 in V s m^-2, as the 2012 program prints it: at z = 1 whatever the charge of the ion, and at the number density of a gas at 273.15 K and 101325 Pa.",
       "type": "object",
       "additionalProperties": false,
       "required": ["value", "unit"],
@@ -178,11 +178,11 @@
       "properties": {
         "format": {"const": "ccs-method"},
         "source": {
-          "description": "shipped: a method MOBCAL ships, by its key; file: a method file of one's own; custom: values given beside a method, or in the window, made a method of no file.",
+          "description": "shipped: a method MOBCAL ships, by its key; file: a method file that MOBCAL does not ship; custom: values given beside a method, or in the window, made a method of no file.",
           "enum": ["shipped", "file", "custom"]
         },
         "name": {
-          "description": "What record.json's method says: a shipped method's key, a method file's name, or custom.",
+          "description": "What the method key of record.json says: the key of a shipped method, the name of a method file, or custom.",
           "type": "string", "minLength": 1
         },
         "file": {
@@ -190,11 +190,11 @@
           "oneOf": [{"type": "null"}, {"$ref": "#/$defs/file"}]
         },
         "from": {
-          "description": "For custom, the method the values were given beside (a shipped key or a method file's name), null when none was; null otherwise.",
+          "description": "For custom, the method the values were given beside (a shipped key or the name of a method file), null when none was; null otherwise.",
           "type": ["string", "null"]
         },
         "overrides": {
-          "description": "For custom, each key of the method document whose value differs from the from method's, with the run's value: the core's temperature, and the mobcal block's keys by dotted path (mobcal.imp); empty otherwise.",
+          "description": "For custom, each key of the method document whose value differs from that of the from method, with the value of the run: the temperature of the core, and the keys of the mobcal block by dotted path (mobcal.imp); empty otherwise.",
           "type": "object",
           "propertyNames": {"enum": ["temperature", "mobcal.generator", "mobcal.imp",
                                      "mobcal.itn", "mobcal.inp", "mobcal.inum", "mobcal.inor",
@@ -218,13 +218,13 @@
       "required": ["cross_sections", "conformers", "trajectories"],
       "properties": {
         "cross_sections": {
-          "description": "The run's cross sections, each the mean over coordinate sets: PA (projection approximation) and EHS (exact hard spheres) in helium, TM (trajectory method) in both gases.",
+          "description": "The cross sections of the run, each the mean over coordinate sets: PA (projection approximation) and EHS (exact hard spheres) in helium, TM (trajectory method) in both gases.",
           "$ref": "#/$defs/cross_sections",
           "propertyNames": {"enum": ["PA", "EHS", "TM"]},
           "minProperties": 1
         },
         "conformers": {
-          "description": "One entry per coordinate set, in the input's order.",
+          "description": "One entry per coordinate set, in the order of the input.",
           "type": "array",
           "minItems": 1,
           "maxItems": 100,
@@ -237,7 +237,7 @@
           }
         },
         "trajectories": {
-          "description": "The trajectory method's trajectories: itn x inp x imp in all, and those the program counted as failed.",
+          "description": "The trajectories of the trajectory method: itn x inp x imp in all, and those the program counted as failed.",
           "type": "object",
           "additionalProperties": false,
           "required": ["total", "failed"],
@@ -298,7 +298,7 @@
           "$ref": "#/$defs/file"
         },
         "files": {
-          "description": "The names, within the run directory, of the program's output, the run's record and the program's console output.",
+          "description": "The names, within the run directory, of the output of the program, the record of the run and the console output of the program.",
           "type": "object",
           "additionalProperties": false,
           "required": ["output", "record", "console_log"],
