@@ -1387,4 +1387,4 @@ class Summary:
         return (f"{n} run{'s' if n != 1 else ''}, {len(self.ok)} ok, {bad} failed, "
                 + (f"{stopped} stopped, " if stopped else "")
                 + (f"{waiting} waiting, " if waiting else "")
-                + f"{self.seconds:.0f} s wall on {w} worker{'s' if w != 1 else ''}")
+                + f"{self.seconds:.0f} s wall, {w} run{'s' if w != 1 else ''} at once")

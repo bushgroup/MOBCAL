@@ -117,7 +117,7 @@ writes its run directory and `summary.csv` under `runs` in the current directory
 which is how a long nitrogen calculation is made short on a machine with cores to spare: on
 one 80-thread workstation choline in nitrogen took 70 minutes serial, 8 minutes across ten
 processes and 4.5 minutes across twenty. The window makes the same choice by itself
-([The window](window.md#how-a-batch-uses-the-processors-and-the-estimate)). The run draws its
+([The window](window.md#how-a-batch-uses-the-cores-and-the-estimate)). The run draws its
 random numbers from Philox4x32-10 unless `--rng ranlux` is added, which selects the generator of
 the 2012 release and, at the default seed, reproduces the 2012 choline values above
 ([Random numbers](random-numbers.md)). Run calculations from a folder of your own, not from

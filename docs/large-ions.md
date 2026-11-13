@@ -56,7 +56,7 @@ This is the 2012 convention, and both programs keep it.
 ## Divided runs
 
 A calculation split across processes (by the choice the window makes,
-[The window](window.md#how-a-batch-uses-the-processors-and-the-estimate), or by `--split`) deals
+[The window](window.md#how-a-batch-uses-the-cores-and-the-estimate), or by `--split`) deals
 `itn` × `inp` blocks per coordinate set among its workers, 400 at the 2012 values and up to
 10,000 at the bounds, so `--split` takes any worker count up to that product. Each block file
 carries the settings its block was integrated under, after the seed and the generator, and the
@@ -73,3 +73,47 @@ under both: the trajectories of a block depend only on its place in the random s
 process computes them, so the combined output is the serial output either way. Under Philox a
 claiming worker takes the slowest blocks first, which is what keeps the workers finishing
 together; under RANLUX it can only take them in the order of the stream.
+
+## How a batch uses the cores
+
+By default the window and `mobcal run --split auto` choose how many runs are in flight at once
+and how many processes each run is divided among, in one of three modes. The count is of physical
+cores, not the logical processors that hyperthreading doubles: on a 40-core workstation, 80 runs
+at once gave 1.28 to 1.36 times the trajectories per second of 40, and each run took about half
+as long again.
+
+- **Balanced**, the default, runs as many runs at once as keeps each divided run at least 70 %
+  efficient, where efficiency is the time of the run as one process over the processes it uses times
+  its divided time. On a 40-core workstation that is two choline runs at once in helium, each
+  across 20 processes, and one at a time in nitrogen across 40; on 8 cores, one at a time.
+- **Finish in order** runs one at a time, divided among every core it can use, so runs complete
+  one after another and Pause queue waits only for the run in flight. Cores a run cannot use
+  take a second run.
+- **Most throughput** runs one process per run when there are at least as many runs as cores,
+  and otherwise starts every run at once, each divided among its share of the cores. It
+  finishes a long batch soonest, and no run finishes before the first wave does.
+
+A batch of no more runs than Balanced would put in flight runs them all at once, as Most
+throughput does.
+
+In every mode a run is divided among at most 40 processes, and only when that saves at least a
+fifth of its time. A divided run gives the serial result exactly ([Random numbers](random-numbers.md)),
+so the choice changes how long a batch takes and never a number. Every process of a divided run
+reads the ion and, in helium, repeats the projection and hard-sphere pass before its first
+trajectory, so dividing helps little when that part dominates, as in the example of the 2000
+release at 25 trajectories per block. A divided run also cannot finish before its costliest block of
+trajectories, the one at the slowest velocity point, which costs 1.8 to 2.9 times the average
+block in helium and 3.6 to 4.5 times in nitrogen, so a run is never divided among more processes
+than that block lets it use.
+
+## The estimate
+
+Before a batch runs, the window and `mobcal run` say how the batch will run and about how long it
+will take. The estimate comes from timings of the programs on one 36-core workstation with every
+core busy, for ions from 21 to 5,220 atoms in helium and from 21 to 1,236 atoms in nitrogen,
+protein ions among them, so it is a guide, not a promise, and a faster or slower machine scales
+it. It reads the number of atoms and not the charge. In nitrogen a multiply charged protein ion
+takes much longer than a singly charged ion of similar size, and the estimate follows the protein
+ions, so for a singly charged ion of 100 to 1,000 atoms it is 1.25 to 1.65 times the time the
+trajectories of the run take. When each process spends a minute or more before its first
+trajectory, the estimate says how long.

@@ -53,8 +53,8 @@ def test_the_spec_ships_every_page():
 
 
 @pytest.mark.parametrize("heading, anchor", [
-    ("How a batch uses the processors, and the estimate",
-     "how-a-batch-uses-the-processors-and-the-estimate"),
+    ("How a batch uses the cores, and the estimate",
+     "how-a-batch-uses-the-cores-and-the-estimate"),
     ("macOS (Apple silicon)", "macos-apple-silicon"),
     ("mobcal self-check", "mobcal-self-check"),
     ("The 2000 helium set", "the-2000-helium-set"),

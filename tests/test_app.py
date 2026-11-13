@@ -315,9 +315,8 @@ def test_the_estimate_and_add_batch(window, qtbot):
     assert not w.add_batch_button.isEnabled() and "add an input" in w.estimate_label.text()
     add(qtbot, w, CHOLINE)
     assert w.add_batch_button.isEnabled()
-    assert w.estimate_label.text().startswith("MOBCAL 2012 with Philox (He): 1 run on 1 "
-                                              "worker, each across 8 processes (balanced); "
-                                              "about")
+    assert w.estimate_label.text().startswith("MOBCAL 2012 with Philox (He): 1 run, divided "
+                                              "among 8 processes (balanced); about")
     w.counts["itn"].setValue(100)
     w.counts["inp"].setValue(100)  # 100 * 100 * 1000 points: over the program's 9,999,999
     assert not w.add_batch_button.isEnabled() and "points per coordinate set" in \

@@ -186,7 +186,7 @@ WINDOW = {
     "save_method": "Writes the gas, the element table, the generator and the six run settings "
                    "to a method file, and adds it to the Method list.",
     "advanced": "Shows the generator, the five sampling counts and how the batch uses the "
-                "processors.",
+                "cores.",
     "auto_cores": f"When checked, the batch {AUTO_RULE}. Unchecked, the two fields below set "
                   "it.",
     "add_files": "Adds ion files and .mfj files, or imports ORCA and Gaussian outputs and .xyz "

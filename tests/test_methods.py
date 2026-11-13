@@ -1118,7 +1118,7 @@ def test_the_estimate_follows_the_queue(tmp_path):
     p = estimate.plan([Job(CHOLINE, "he", s, tmp_path) for s in range(3)], workers=2)
     one = estimate.cost(21, 1, "he").wall()
     assert p.seconds == pytest.approx(2 * one) and p.walls == (pytest.approx(one),) * 3
-    assert estimate.describe(p) == "3 runs on 2 workers; about 6 min"
+    assert estimate.describe(p) == "3 runs, 2 at once; about 6 min"
     missing = estimate.plan([Job(tmp_path / "nothing.mfj", "he", 1, tmp_path)], workers=1)
     assert missing.walls == (None,) and "no estimate" in estimate.describe(missing)
 

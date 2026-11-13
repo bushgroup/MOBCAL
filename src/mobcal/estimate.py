@@ -284,11 +284,11 @@ def describe(p: Plan) -> str:
     """One line for the command line and the window: the allocation and the estimate."""
     n = len(p.jobs)
     splits = sorted({j.split for j in p.jobs if j.split})
-    how = f"{n} run{'s' if n != 1 else ''} on {p.workers} worker{'s' if p.workers != 1 else ''}"
+    how = "1 run" if n == 1 else f"{n} runs, {p.workers} at once"
     if splits:
-        across = splits[0] if len(splits) == 1 else f"{splits[0]} to {splits[-1]}"
-        every = all(j.split for j in p.jobs)
-        how += f", {'each' if every else 'some'} across {across} processes"
+        among = splits[0] if len(splits) == 1 else f"{splits[0]} to {splits[-1]}"
+        which = "" if n == 1 else "each " if all(j.split for j in p.jobs) else "some "
+        how += f", {which}divided among {among} processes"
     if p.mode:
         how += f" ({MODE_TITLES[p.mode].lower()})"
     if any(w is None for w in p.walls):
@@ -297,5 +297,5 @@ def describe(p: Plan) -> str:
     if p.prologue >= 60:
         line += (f", of which about {duration(p.prologue)} per process before its first "
                  "trajectory (reading the ion and the projection pass, repeated by every "
-                 "process of a split)")
+                 "process of a divided run)")
     return line

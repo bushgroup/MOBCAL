@@ -24,7 +24,7 @@ numbers before it. Its uniforms resolve 2^−52, and none is exactly 0 or 1.
 ## Why there are two
 
 A calculation split across processes (by the choice the window makes,
-[The window](window.md#how-a-batch-uses-the-processors-and-the-estimate), or by `--split`) gives
+[The window](window.md#how-a-batch-uses-the-cores-and-the-estimate), or by `--split`) gives
 each process a share of the trajectory blocks, and each process must reach its own blocks with
 the random number stream in the state the serial run would have reached. Under RANLUX a process
 gets there by drawing through every block that is not its own, whereas under Philox it moves
