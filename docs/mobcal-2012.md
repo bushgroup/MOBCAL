@@ -49,9 +49,9 @@ The two runs write their outputs to `runs/Choline_pop-he-5013489-ranlux/mobcal.o
 table, `MOBCAL 2012 helium` or `MOBCAL 2012 nitrogen`, with its SHA-256, and records the settings
 as the 2012 ones ([The record of a run](results-folder.md#the-record-of-a-run)).
 
-As one process, choline took 3 min in helium and 70 min in nitrogen on a 40-core workstation.
-Divided among twenty processes with `--split 20`, which reports the result of one process exactly,
-it took 4.4 min in nitrogen (Windows 11, MSYS2 gfortran 16.2.0, October 2026; [Divided
+As one process, choline took 2.8 min in helium and 67 min in nitrogen on a 36-core workstation
+(Windows 11, MSYS2 gfortran 16.2.0, November 2026). `--split 20` divides the calculation among
+twenty processes and reports the result of one process exactly ([Divided
 runs](large-ions.md#divided-runs)).
 
 ## Comparing with the references

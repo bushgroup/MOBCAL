@@ -143,13 +143,21 @@ it lists what it would remove until it is given `--apply`
 
 Every process repeats the part of the calculation that precedes its first trajectory, and the
 combining run repeats it once more, so a divided run falls short of its number of processes by
-that fixed cost and by the unevenness of the shares. On one 40-core workstation, choline at the
-2012 settings took 188 s in helium as one process and 103, 47, 28, and 20 s divided among 2, 5,
-10, and 20 processes, i.e., it ran 1.8, 4.0, 6.6, and 9.5 times faster. In nitrogen it took 70 min
-as one process, 7.9 min divided among ten processes, and 4.4 min divided among twenty, i.e., 8.8
-and 15.8 times faster (Windows 11, MSYS2 gfortran 16.2.0, October 2026, under RANLUX with the
-static dealing; each helium time is the shorter of two runs, and each divided nitrogen run was
-made once; lab record, task 11). Dividing pays most on the longest calculations.
+that fixed cost, and it cannot finish before its costliest block of trajectories. To measure
+this, choline in nitrogen was run at 2 cycles, i.e., 80,000 trajectories, from 1 to 72 processes
+on one 36-core workstation (Windows 11, MSYS2 gfortran 16.2.0, November 2026, under Philox with
+the claimed dealing, each time the shorter of two runs; lab record, task 32). It took 810 s as
+one process and 420, 217, 118, 97, 56, and 54 s divided among 2, 4, 8, 10, 20, and 40 processes,
+i.e., it ran 1.9, 3.7, 6.9, 8.3, 14.5, and 15.0 times faster. From 20 processes up the time is a
+floor that no number of processes lowers: the 6.6 s before the first trajectory, paid twice, and
+the 41 s of the costliest block. Divided among 72 processes, two to a core, the run took 63 s.
+
+A 433-atom protein ion (from PDB 2MLT, 4+) reached its floor in the same way. In nitrogen it ran
+12.2 times faster than as one process from 20 processes up (28,272 s, from one run, to 2,310 s).
+In helium it ran 7.1 times faster among 36 (741 s to 104 s), since there the part that every
+process repeats is 10 % of the run as one process. The gain of a divided run is therefore set by
+the costliest block and the repeated part, as fractions of the run, and not by the number of
+processes.
 
 ### The output of a divided run
 
