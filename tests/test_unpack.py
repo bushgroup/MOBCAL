@@ -267,6 +267,57 @@ def test_the_command_prints_the_checks_and_the_rerun(done, tmp_path, capsys):
     assert out.endswith(f"to run it again:\n  {u.command}\n")
 
 
+# --- a result another program wrote -----------------------------------------------------------
+
+def other_program(d: dict) -> None:
+    """``d`` as another program would write it (docs/result-file.md § For developers of other
+    codes): its own name and block, a method given as values, a gas MOBCAL has not, no seed."""
+    d["software"] = {"name": "othercode", "version": "1.0", "commit": None, "build": None}
+    d["othercode"] = {"anything": [1, 2, 3]}
+    del d["mobcal"]
+    d.update(gas="Ar", seed=None)
+    d["results"]["cross_sections"]["TM"].pop("standard_deviation", None)
+    m = d["inputs"]["method"]
+    m.update(source="custom", name="custom", file=None, overrides={})
+    m["document"] = {"format": "ccs-method", "version": 1, "name": "Othercode in Ar", "gas": "Ar",
+                     "temperature": {"value": 300.0, "unit": "K"},
+                     "othercode": {"ranks": 40, "line": "10 40 1000"}}
+
+
+def test_a_result_another_program_wrote_is_read_for_its_core(done, tmp_path, capsys):
+    path = edited(done, tmp_path, other_program)
+    r = result.Result.read(path)
+    assert r.software == "othercode" and not r.is_mobcal and r.method is None
+    assert r.ion is not None and r.ion.label == "ok"  # every key of an ion file is core
+    assert r.status == "ok" and r.seed is None
+    assert r.doc["results"]["cross_sections"]["TM"]["unit"] == "angstrom^2"
+    assert result.Result.read(done.result_path).is_mobcal
+    with pytest.raises(result.ResultError, match="written by othercode, not MOBCAL; unpack"):
+        result.unpack(r, tmp_path / "u")
+    assert not (tmp_path / "u").exists()
+    with pytest.raises(result.ResultError, match="written by othercode, not MOBCAL; the methods"):
+        methods.read_records([path])
+    assert cli.main(["unpack", str(path), "-o", str(tmp_path / "u")]) == 1
+    assert "written by othercode, not MOBCAL" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("change, message", [
+    (lambda d: d["software"].update(name=""), "software.name must name the program"),
+    (lambda d: d.pop("inputs"), "has no 'inputs'"),
+    (lambda d: d["inputs"].pop("method"), "inputs has no 'method'"),
+    (lambda d: d.update(seed=1.5), "seed is 1.5, not an integer or null"),
+    (lambda d: d.update(gas=2), "gas is 2"),
+    (lambda d: d["inputs"]["ion"]["document"].pop("symbols"), "inputs.ion.document: "),
+    (lambda d: d["inputs"]["method"]["document"].pop("gas"), "inputs.method.document has no"),
+    (lambda d: d["inputs"]["method"]["document"].update(version=2), "version 2; this reader"),
+    (lambda d: d["inputs"]["method"].update(format="othercode-method"), "inputs.method.format"),
+])
+def test_the_core_of_another_programs_result_is_checked(done, tmp_path, change, message):
+    path = edited(done, tmp_path, lambda d: (other_program(d), change(d)))
+    with pytest.raises(result.ResultError, match=f"^{re.escape(str(path))}: .*{message}"):
+        result.Result.read(path)
+
+
 # --- the methods text -------------------------------------------------------------------------
 
 def test_the_methods_text_from_a_result_file_is_the_records(tmp_path):

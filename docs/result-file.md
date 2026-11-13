@@ -453,16 +453,27 @@ gives them. To write a result file from another program,
    identifies its executable, or `null`;
 2. give `seed` as `null` if the program has no seed, and `gas` by formula (`He`, `N2`, `Ar`,
    `CO2`);
-3. list under `inputs` each input file the calculation read, each with `format` naming the
-   format of its `document`, `file` naming the file, `embedded`, and `document`;
+3. give `inputs` the two entries `ion` and `method` that [The inputs](#the-inputs) describes,
+   the ion as an ion document ([The ion file](ion-file.md#for-developers-of-other-codes)) and
+   the method as a method document of the core and a block of the program
+   ([Methods](methods.md#for-developers-of-other-codes)). A program that takes its method as
+   values, from a run line or a command line, and not from a file, writes the method entry as
+   `custom`, with `file` and `from` set to `null` and `overrides` to `{}`: a method of no file,
+   made from the values of the run;
 4. report under `results.cross_sections` the methods the program computes, by the keys `PA`,
    `EHS` and `TM` where the method is one of these three, each in `angstrom^2`, and under
-   `results.conformers` the same per structure;
+   `results.conformers` the same per structure. `standard_deviation` is the standard deviation
+   of the values over cycles that [The results](#the-results) defines, and a program that
+   reports another measure of uncertainty, such as an interval of the mean, puts it in its own
+   block and leaves `standard_deviation` out;
 5. put whatever else the program reports in one block named by `software.name`, the way MOBCAL
    uses `mobcal`, and publish a schema for it.
 
 A reader of the core reads those keys from the file of any program and skips a block it does not
-know. `result.schema.json` is the schema of the file as MOBCAL writes it, with `software.name`,
+know. MOBCAL reads a result file of another program this way: it checks the core, reads the
+embedded ion as it reads any ion file, checks the core of the embedded method, and skips the
+block. `mobcal unpack` and `mobcal methods-text` refuse such a file, naming the program that
+wrote it, since both work from the `mobcal` block of a calculation MOBCAL ran. `result.schema.json` is the schema of the file as MOBCAL writes it, with `software.name`,
 `gas` and the two inputs fixed to those of MOBCAL; a program of its own writes its own schema,
 which keeps the keys, types and unit strings of the core and replaces the `mobcal` block with its
 own. The keys of the core change only with the version number, as those of MOBCAL do.

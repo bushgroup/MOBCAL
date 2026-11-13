@@ -6,6 +6,12 @@ writes the two inputs back as files and checks them against the hashes the resul
 The writer is ``mobcal.run.result_document``; the format's constants are here, so that the
 reader need not import the driver. No Qt, no subprocess.
 
+A result another program wrote (``software.name`` other than ``mobcal``) is read for its core,
+as ``docs/result-file.md`` § For developers of other codes has a reader do: its block is
+skipped, its gas may be any formula and its seed null, its embedded ion is read as any ion file
+is, and of its embedded method only the core is checked. Neither ``record`` nor ``unpack``
+takes one, since both describe or rerun MOBCAL's own calculation.
+
 What ``unpack`` can check, and how (each established on the files MOBCAL writes, lab record,
 task 57):
 
@@ -55,6 +61,8 @@ GAS_FORMULA = {"he": "He", "n2": "N2"}  # the result's gas, by formula, for each
 GAS = {v: k for k, v in GAS_FORMULA.items()}
 KEYS = ("format", "version", "status", "message", "software", "started", "finished", "seconds",
         "gas", "temperature", "seed", "inputs", "results", "mobcal")
+SOFTWARE = "mobcal"  # software.name of a file MOBCAL wrote, and the name of its block
+CORE = KEYS[:-1]  # what a result file of any program holds (docs/result-file.md)
 ENTRY = {"ion": ("format", "file", "converted_from", "embedded", "document"),
          "method": ("format", "source", "name", "file", "from", "overrides", "embedded",
                     "document")}
@@ -101,11 +109,13 @@ def _file(v: object, where: str) -> dict | None:
 @dataclass(frozen=True)
 class Result:
     """A result file as read: the document, the embedded ion (None when recorded by reference)
-    and the embedded method, both checked by their own readers."""
+    and the embedded method, both checked by their own readers. A result another program
+    wrote is read for its core (``software`` names the program): its method is None, since
+    its method's block is that program's, and ``record`` and ``unpack`` refuse it."""
     path: Path
     doc: dict = field(repr=False)
     ion: Ion | None = field(repr=False)
-    method: methods.Method = field(repr=False)
+    method: methods.Method | None = field(repr=False)
 
     @classmethod
     def read(cls, path: Path | str) -> Result:
@@ -149,6 +159,12 @@ class Result:
         if type(doc["version"]) is not int or doc["version"] not in VERSIONS:
             raise ResultError(f"version is {doc['version']!r}; this version of MOBCAL reads "
                               f"version {', '.join(map(str, VERSIONS))} of {FORMAT}")
+        _get(doc, CORE, "the document")
+        sw = _get(doc["software"], ("name",), "software")
+        if not isinstance(sw["name"], str) or not sw["name"]:
+            raise ResultError("software.name must name the program, as a string")
+        if sw["name"] != SOFTWARE:
+            return cls._check_core(doc, path)
         _get(doc, KEYS, "the document")
         if doc["gas"] not in GAS:
             raise ResultError(f"gas is {doc['gas']!r}; MOBCAL's gases are "
@@ -203,12 +219,61 @@ class Result:
             raise ResultError(f"inputs.method.document: {e}") from None
         return cls(path, doc, the_ion, m)
 
+    @classmethod
+    def _check_core(cls, doc: dict, path: Path) -> Result:
+        """A result another program wrote: its core is checked and its block, named by
+        ``software.name``, skipped. The embedded ion is read as any ion file is, since every
+        key of an ion file is core; of the embedded method only the core is checked, since
+        its block is the other program's."""
+        if not isinstance(doc["gas"], str) or not doc["gas"]:
+            raise ResultError(f"gas is {doc['gas']!r}; it is the buffer gas by formula")
+        if doc["seed"] is not None and type(doc["seed"]) is not int:
+            raise ResultError(f"seed is {doc['seed']!r}, not an integer or null")
+        inputs = _get(doc["inputs"], ("ion", "method"), "inputs")
+        ie = _get(inputs["ion"], ("format", "file", "embedded", "document"), "inputs.ion")
+        if ie["format"] != ion.FORMAT:
+            raise ResultError(f"inputs.ion.format is {ie['format']!r}, not {ion.FORMAT!r}")
+        _file(ie["file"], "inputs.ion.file")
+        if ie["embedded"] is not (ie["document"] is not None):
+            raise ResultError("inputs.ion.embedded does not say whether document holds the ion")
+        the_ion = None
+        if ie["embedded"]:
+            try:
+                the_ion = Ion.from_dict(ie["document"])
+            except IonError as e:
+                raise ResultError(f"inputs.ion.document: {e}") from None
+        me = _get(inputs["method"], ("format", "file", "embedded", "document"), "inputs.method")
+        if me["format"] != methods.FORMAT:
+            raise ResultError(f"inputs.method.format is {me['format']!r}, not "
+                              f"{methods.FORMAT!r}")
+        _file(me["file"], "inputs.method.file")
+        md = _get(me["document"], ("format", "version", "name", "gas", "temperature"),
+                  "inputs.method.document")
+        if md["format"] != methods.FORMAT or md["version"] not in methods.VERSIONS:
+            raise ResultError(f"inputs.method.document is {md['format']!r} version "
+                              f"{md['version']!r}; this reader reads {methods.FORMAT!r} "
+                              f"version {', '.join(map(str, methods.VERSIONS))}")
+        return cls(path, doc, the_ion, None)
+
     # --- what the document says ------------------------------------------------------------
 
     @property
     def name(self) -> str:
         """The run directory's name, the file's without ``.result.json``."""
         return stem(self.path)
+
+    @property
+    def software(self) -> str:
+        """The program that wrote the file, ``mobcal`` for MOBCAL."""
+        return self.doc["software"]["name"]
+
+    @property
+    def is_mobcal(self) -> bool:
+        return self.software == SOFTWARE
+
+    def _mobcal_only(self, what: str) -> None:
+        if not self.is_mobcal:
+            raise ResultError(f"{self.path}: written by {self.software}, not MOBCAL; {what}")
 
     @property
     def status(self) -> str:
@@ -244,7 +309,9 @@ class Result:
     def record(self) -> dict:
         """What ``methods.text`` reads from a run's ``record.json``, from this file: the same
         keys, filled from the result's own. The charges are said as the record says them, for
-        an ion file with an import record; a ``.mfj`` input's or a referenced ion's are not."""
+        an ion file with an import record; a ``.mfj`` input's or a referenced ion's are not.
+        Refuses a result another program wrote, whose calculation the text does not describe."""
+        self._mobcal_only("the methods text describes MOBCAL's calculations")
         mb, me, ie = self.doc["mobcal"], self.method_entry, self.ion_entry
         inp: dict = {"path": ie["file"]["name"], "sha256": ie["file"]["sha256"]}
         if ie["converted_from"] is None:
@@ -313,6 +380,7 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
     Refuses, writing nothing, a result whose ion is recorded by reference, one whose method or
     staged input does not agree with its ``mobcal`` block, and a file already there with other
     bytes unless ``force``. Raises ResultError, or OSError from writing."""
+    r._mobcal_only("unpack writes back the inputs of MOBCAL's runs")
     out_dir = Path(out_dir)
     ie, me, mb = r.ion_entry, r.method_entry, r.doc["mobcal"]
     where = r.path.name
