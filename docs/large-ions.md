@@ -64,6 +64,11 @@ combining run refuses a block from other settings as it refuses one from another
 generator. The test suite runs choline in helium at 3 cycles of 7 velocity points split four
 ways, under both generators, and holds the combined output to the serial one line for line.
 
+On one 40-core workstation, choline in nitrogen at the 2012 settings took 70 min as one process,
+7.9 min divided among ten processes, and 4.4 min divided among twenty (Windows 11, MSYS2
+gfortran 16.2.0, October 2026, under RANLUX with the static dealing, one run each; lab record,
+task 11).
+
 The blocks are shared among the workers in one of two ways, `--dealing claimed`, the default,
 or `--dealing static`. Claimed lets each worker take the next block that no worker has taken
 yet, so a worker that finishes its blocks early keeps working until none is left, and a worker
