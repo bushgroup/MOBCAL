@@ -199,7 +199,7 @@ uv run mobcal gui
 `mobcal build` compiles the helium and nitrogen programs into `build/fortran/`, and from then on
 each `mobcal` command on these pages is `uv run mobcal` in that folder. The example input and the
 2012 references are under `fortran/`, not `examples/`. The [README](../README.md) gives the
-build, the tests, and the run in more detail.
+checks a clone runs on itself and the layout of the repository.
 
 ## Source code
 
