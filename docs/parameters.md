@@ -6,7 +6,7 @@ release wrote these tables into the Fortran as a chain of `if(imass(iatom).eq.NN
 elements for helium and ten for nitrogen, and wrote each chain twice, once in each of the two
 routines that read coordinates. MOBCAL now keeps the table for each gas as one data file instead,
 `mobcal_He.toml` and `mobcal_N2.toml`, which ship with the program (in the source code, under
-`src/mobcal/parameters/`), and renders a short table from it into the directory of every run. No
+`src/mobcal/parameters/`), and renders a short table from it into every run directory. No
 number has changed: every value in the two files is the literal the 2012 source spells, character
 for character, and the test suite holds each file to the source row for row. These two tables are
 the default for every run. Beside them the package ships a second helium table, the eight rows of
@@ -86,7 +86,7 @@ source, with 4.2 kJ/kcal where the conversion is 4.184, so every nitrogen well d
 higher than the literal conversion would make it. The per-element factors were fitted with that
 constant in place, and it stays as the source writes it.
 
-`status`, `rhs_status` and `provenance` describe a row and do not enter the calculation. Every
+`status`, `rhs_status`, and `provenance` describe a row and do not enter the calculation. Every
 row of the two shipped files is `fitted` and `own`, and its provenance line says where the 2012
 source says the row came from. Format 1 keeps this record to a minimum on purpose; a later
 format will extend it.
@@ -104,20 +104,23 @@ patterns measured from the compiled source.
 
 ### What a file must satisfy
 
-The package refuses a file, naming the file, the element key and the field, when any of these
+The package refuses a file, naming the file, the element key, and the field, when any of these
 fails:
 
-- `format` is 1, `gas` is `He` or `N2`, and `form` is the one the program for that gas implements;
-- `name` is 1 to 60 characters of letters, digits, blanks and `._()+-`;
+- `format` is 1, `gas` is `He` or `N2`, `form` is the one the program for that gas implements,
+  and the file has no key at the top but those shown above;
+- `name` is 1 to 60 characters of letters, digits, blanks, and `._()+-`, with no blank at either
+  end;
 - `[kinds]` declares exactly the four columns, each `single` or `double`, and in a nitrogen file
   `[combining]` gives exactly the four constants, each double precision;
-- there are 1 to 100 elements, each with every field and no other, keys positive and unique;
-- every numeric token is a string of at most 32 characters, digits, one `.`, digits and an
-  optional `d` exponent, with no sign, no `e` exponent, no blank, comma or slash, spelled with
+- there are 1 to 100 elements, each with every field and no other, keys positive and unique, and
+  each `symbol` a capital letter followed by at most two small ones;
+- every numeric token is a string of at most 32 characters, digits, one `.`, digits, and an
+  optional `d` exponent, with no sign, no `e` exponent, no blank, comma, or slash, spelled with
   the declared kind of the column, and greater than zero; no token but the two expressions above
   holds an operator;
 - `status` is `fitted` or `provisional`, `rhs_status` is `own` or `borrowed`, and `provenance`
-  is one line.
+  is one line that is not empty.
 
 ## The rendered table
 
@@ -137,7 +140,7 @@ MOBCAL-LJ 1 He MOBCAL_2012_helium 6e19c7ce13dbff2035bac9c762226db61316e706b23f52
 
 The first line carries a fixed word, the format number of the rendered table itself, the gas, the
 name of the set with blanks made underscores, and the SHA-256 of the TOML file it was rendered
-from. The second gives the kind of the mass, well-depth, radius and hard-sphere columns in bytes,
+from. The second gives the kind of the mass, well-depth, radius, and hard-sphere columns in bytes,
 4 for single precision and 8 for double. The nitrogen table has one more line here, the four
 `[combining]` constants in the order `eogas rogas conve convr`. Then come the number of elements
 and one row per element: the key and the four tokens, each copied verbatim from the file except
@@ -154,12 +157,12 @@ mobcal render-parameters he path/to/run
 
 The programs read this table and nothing else. Started in a directory without one, or with a
 table that is not of this format, is for the other gas, declares a kind other than 4 or 8
-bytes, has more than 100 rows or cannot be read to its end, a program stops with status 1 and
-says which, on the screen and as the only line of its output file. The name and hash of the set
-are printed to the screen; the output file gains no line, so it still compares byte for byte with
-the 2012 references. The test suite reads every row of both 2012 tables back through the reader
-in the programs themselves and holds each number to the one the 2012 source computed, to the
-last bit.
+bytes, does not have 1 to 100 rows, or cannot be read to its end, a program stops with status 1
+and says which, on the screen and as the only line of its output file. The name and hash of the
+set are printed to the screen; the output file gains no line, so it still compares byte for byte
+with the 2012 references. The test suite reads every row of both 2012 tables back through the
+reader in the programs themselves and holds each number to the one the 2012 source computed, to
+the last bit.
 
 ## The 2000 helium set
 
@@ -169,15 +172,15 @@ al., *J. Phys. Chem.* 1996, 100, 16082; Shvartsburg and Jarrold, *Chem. Phys. Le
 To make numbers calculated with that release reproducible with this package, its helium table
 ships beside the 2012 tables as `mobcal_He_2000.toml`, a set named `2000` (its `name` is
 `MOBCAL 2000 helium`). The file holds eight rows, hydrogen, carbon, nitrogen, oxygen, sodium,
-silicon, sulfur and iron, and every token in it is the literal of the `if(imass(iatom).eq.NN)`
+silicon, sulfur, and iron, and every token in it is the literal of the `if(imass(iatom).eq.NN)`
 chain in the `fcoord` routine of `mobcal.f` in that release (tag `v1.0`, lines 581 to 662),
 character for character; the chain in `ncoord` is identical. The file is pinned by its SHA-256
 as the 2012 tables are, and `mobcal self-check` verifies it.
 
 The 2000 and 2012 tables differ in eight numbers. The well depths and radii of hydrogen,
-carbon, nitrogen and oxygen in the 2012 table are the 2000 values multiplied by one factor per
-element, 0.95, 0.99, 1.10 and 0.80, the same factor for both columns, whereas the masses, the
-hard-sphere radii and the sodium, silicon, sulfur and iron rows are the same literals in both.
+carbon, nitrogen, and oxygen in the 2012 table are the 2000 values multiplied by one factor per
+element, 0.95, 0.99, 1.10, and 0.80, the same factor for both columns, whereas the masses, the
+hard-sphere radii, and the sodium, silicon, sulfur, and iron rows are the same literals in both.
 In the 2000 table nitrogen and oxygen carry the well depth and radius of carbon, as the comments
 in the release say. The test suite holds the file to its source without a network connection: a
 record of the eight rows, taken from the release with its SHA-256 recorded, gives the literals of
@@ -192,65 +195,25 @@ writes `type not defined for atom number N`, as the 2000 program did. This is co
 set is not patched with a fluorine row from 2012. The set is for helium only; the nitrogen
 program has no 2000 table. The release also ran at 298 K with `imp = 25`, where the 2012 values
 are 301 K and `imp = 1000`, and those two numbers are run settings, not part of the table
-([The run settings](settings.md)). Reproducing a number calculated with the 2000 release
-therefore takes the set and two settings, which the MOBCAL 2000 (He) method in the window sets,
-or from a terminal:
-
-```
-mobcal run a10A1.mfj --parameters 2000 --temperature 298 --imp 25 --rng ranlux --seeds 5013486
-```
-
-With the example and seed that ship with the release, that run prints the reference output of the
-release line for line, apart from three print changes. [Reproducing MOBCAL 2000](mobcal-2000.md)
-gives the comparison and lists the changes.
+([The run settings](settings.md)). The method **MOBCAL 2000 (He)**, `--method 2000-he`, sets the
+table and both settings, and [Reproducing MOBCAL 2000](mobcal-2000.md) gives the command for the
+example of the release and compares the output with its reference.
 
 ## The table inside a method
 
-A method file ([Methods](methods.md#the-element-table-in-a-method)) carries its element table
-whole, so that a method, and the result file that records a run of it, runs on a computer that
-has never seen the TOML file of the table. The carried table is the content of the TOML file as
-JSON, i.e., the same keys in the same order with the same strings, the provenance of each row
-included and the comments in the file left out, plus the SHA-256 of the TOML file, the SHA-256 of
-the rendered rows and whether the table is a shipped one:
-
-```json
-"parameters": {
-  "format": 1,
-  "name": "MOBCAL 2012 nitrogen",
-  "sha256": "06a2528ec169627d1c002c2d9561d7d8c434a459552b5642845ba69807443595",
-  "rows_sha256": "2eb315046c09aa92005a40c506ab11fb6d3cb2dc975fac41114bee171233fe85",
-  "shipped": true,
-  "gas": "N2",
-  "form": "combining",
-  "kinds": {"mass": "double", "epsilon": "single", "sigma": "single", "rhs": "double"},
-  "combining": {"eogas": "0.06900d0", "rogas": "3.6600d0",
-                "conve": "4.2d0*0.01036427d0", "convr": "0.890898718d0"},
-  "element": [...]
-}
-```
-
-A number stays a string here for the reason it is a string in the TOML file: the program
-converts the literal itself, by the kind of its column, and a JSON number would be read and
-written back as a double by every tool that touched it. The two expressions stay expressions. The
-`parameters.tab` a run renders from a carried table is the one it renders from the TOML file,
-byte for byte: the first line carries the SHA-256 of the TOML file, which the carried table
-keeps, and the other lines are written from the same strings. The name of the run directory, the
-table hash in the record and the method a run is identified as are therefore the same whichever
-of the two the table came from, and the test suite holds the rendering of each shipped table from
-its file and from its method to the same bytes.
-
-`rows_sha256` is the SHA-256 of the rendered table from its second line on, i.e., of every
-byte the program converts, and a carried table whose rows do not hash to it is refused with a
-message to make the table a TOML file and save the method again. A table marked `shipped` is
-checked against the shipped file field for field, and a difference is refused with the element
-and the field named. The TOML file stays the way to write a table: Save method and `--parameters`
-read it, and a method carries what they read.
+A method file carries its element table whole, so that a method, and the result file that
+records a run of it, runs on a computer that has never seen the TOML file of the table. The
+carried table is the content of the TOML file as JSON with the two hashes that tie it to that
+file, and `parameters.tab` rendered from it is the one rendered from the TOML file, byte for
+byte ([The element table in a method](methods.md#the-element-table-in-a-method)). The TOML file
+stays the way to write a table: **File ▸ Save method…** and `--parameters` read it, and a method
+carries what they read.
 
 ## Choosing a table for a run
 
-By default a run uses the 2012 table for its gas. In the window, the Element table field under
-Basics lists the tables shipped for the gas and takes a file of your own. From a terminal, pass
-the name of a shipped set or the path of a file to `--parameters`:
+By default a run uses the 2012 table for its gas. In the window, **Element table** under Basics
+lists the tables shipped for the gas, and **Other file…** opens a TOML file of your own. From a
+terminal, pass the name of a shipped set or the path of a file to `--parameters`:
 
 ```
 mobcal run ion.mfj --parameters 2000
@@ -263,12 +226,13 @@ a set stands for the set of that name in the gas of the method, so
 is not the name of a set is read as a path; a file of your own called `2000` is named with its
 directory, as `./2000`. A file is checked the same way as the shipped ones, and a file for the
 other gas is refused. `mobcal render-parameters` takes the same names and paths. The record of the
-run ([The results folder](results-folder.md#the-record-of-a-run)) names the table it used, by path, name and hash, and says whether it is one of the shipped
-files, so that a result from another table is never mistaken for one from the default. The
-method of the run, which its result file carries ([The result file](result-file.md#the-method)),
-carries the table that `--parameters` named, so the result file reruns without the TOML file.
+run ([The record of a run](results-folder.md#the-record-of-a-run)) names the table it used, by
+path, name, and hash, and says whether it is one of the shipped files, so that a result from
+another table is never mistaken for one from the default. The method of the run, which its
+result file carries ([The method](result-file.md#the-method)), carries the table that
+`--parameters` named, so the result file reruns without the TOML file.
 
-A method file that carries a table of your own ([Methods](methods.md#method-files)) runs on that
-table, and no TOML file is read: the record names the table by name and hash, and its path is
-`null`. A method that carries a shipped table runs on the shipped file, which the carried table
-has been checked to equal.
+A method file that carries a table of your own ([Method files](methods.md#method-files)) runs on
+that table, and no TOML file is read: the record names the table by name and hash, and its path
+is `null`. A method that carries a shipped table runs on the shipped file, which the carried
+table has been checked to equal.
