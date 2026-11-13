@@ -60,7 +60,7 @@ MODE_WORDS = {"calc": "from file", "equal": "uniform", "none": "none"}
 MODE_TIPS = {
     "calc": "Line 5 reads calc: the charges are the fifth column as given, in both gases.",
     "equal": "Line 5 reads equal: helium gives every atom 1/N, so the ion is +1 whatever the "
-             "column sums to; nitrogen gives every atom the column's sum over N.",
+             "column sums to; nitrogen gives every atom the sum of the column over N.",
     "none": "Line 5 reads none: no charge enters the potential in either gas, so the ion is 0.",
 }
 

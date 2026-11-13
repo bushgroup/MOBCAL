@@ -444,7 +444,7 @@ def _check(data: object) -> Ion:
     if _LINE_BREAK.search(label):
         _fail("label", "holds a line break")
     if any(ord(c) > 0xFF for c in label):
-        _fail("label", "holds a character outside ISO 8859-1, the .mfj's encoding")
+        _fail("label", "holds a character outside ISO 8859-1, the encoding of the .mfj")
     if label != label.rstrip(" "):
         _fail("label", "ends in a blank, which line 1 of a .mfj drops")
     comment = _string(d["comment"], "comment") if "comment" in d else None
