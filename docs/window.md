@@ -86,9 +86,9 @@ Basics holds the gas (He or N2), the element table, the number of seeds per ion,
 temperature. **Element table** lists the tables shipped for the gas, and **Other file…** opens a
 TOML table written for that gas ([The element tables](parameters.md)). The first seed is the
 method seed when the method file carries one, which **Seeds per ion** then shows (", from seed
-42"), and the 2012 seed, 5013489, otherwise; each further seed is the next integer ([Method
-files](methods.md#method-files)). With several seeds, each cross section is shown as the mean and
-the sample standard deviation over them.
+42"), and the 2012 seed, 5013489, otherwise; each further seed is the next integer ([The
+seed](random-numbers.md#the-seed)). With several seeds, each cross section is shown as the mean
+and the sample standard deviation over them.
 
 Advanced, which opens at its arrow, holds the generator ([Random numbers](random-numbers.md)), the
 five sampling counts ([The run settings](settings.md)), and how the batch uses the cores.
