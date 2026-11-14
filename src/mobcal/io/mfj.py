@@ -27,6 +27,14 @@ refuses too), a unit or charge mode the program would stop on, a missing or shor
 and a file that ends before its last set. Nothing about charge or geometry is checked; the
 program's own checks (``masses do not add up``) stand.
 
+It refuses one file the program reads to the end: MobCal-MPI's nine-column layout
+(``mobcal.io.mobcalmpi``), recognized by nine fields on line 8 where line 7 carries other than
+nine. Intact, line 7 is MobCal-MPI's run line; damaged, it is whatever the damage left. Either
+way the program would take line 7 for the first atom and each mass for an element key. A file
+of the 2018 MMFF94 programs has nine fields on every atom line from line 7 and no run line;
+the program reads its first five fields as a 2012 atom line, the mass rounding to the element
+key, and so does this reader.
+
 Two points where the nitrogen source differs from the helium source, both in ``fcoord`` and
 neither in ``ncoord``: ``mobcal_N2.f`` reads five fields per atom of the first set whatever the
 charge mode, so a four-column file in ``equal`` or ``none`` mode fails its first read; and its
@@ -53,13 +61,18 @@ MAX_SETS = 100
 UNITS = ("ang", "au")
 CHARGE_MODES = ("equal", "calc", "none")
 FIELD_WIDTH = 30  # the a30 edit descriptor
+# MobCal-MPI's nine-column layout, which mobcal.io.mobcalmpi reads and this reader refuses
+NINE_FIELDS = ("x", "y", "z", "mass", "charge", "alpha", "N", "A", "G")
+RUN_LINE = ("itn", "inp", "imp", "igas", "seed", "T_bath", "T_eff,max", "n_grid")
 
 _SEPARATORS = re.compile(r"[\s,]+")
 _D_EXPONENT = re.compile(r"(?<=[\d.])[dD](?=[+-]?\d)")
+_INTEGER = re.compile(r"[+-]?\d+")
 
 
 class MfjError(ValueError):
-    """The file is not one the 2012 program would read to the end."""
+    """The file is not one the 2012 program would read to the end, or is MobCal-MPI's
+    nine-column layout, which it would misread."""
 
 
 @dataclass(frozen=True)
@@ -89,6 +102,33 @@ def _real(token: str, what: str, lineno: int) -> float:
         return float(_D_EXPONENT.sub("e", token))
     except ValueError:
         raise MfjError(f"line {lineno}: {what} is not a number: {token!r}") from None
+
+
+def _is_run_line(tokens: list[str]) -> bool:
+    """MobCal-MPI's run line: six to eight fields, the first five integers."""
+    return 6 <= len(tokens) <= len(RUN_LINE) and all(_INTEGER.fullmatch(t) for t in tokens[:5])
+
+
+def _not_a_run_line(line: str) -> str:
+    return (f"line 7: {line.strip()!r} is not a run line ({' '.join(RUN_LINE[:6])}, then "
+            f"optionally {' '.join(RUN_LINE[6:])})")
+
+
+def _nine_column(lines: list[str]) -> str | None:
+    """Why the text is MobCal-MPI's nine-column layout, intact or with its run line damaged, or
+    None: nine fields on line 8 and other than nine on line 7."""
+    if len(lines) < 8 or len(_tokens(lines[7])) != len(NINE_FIELDS):
+        return None
+    seven = _tokens(lines[6])
+    if len(seven) == len(NINE_FIELDS):
+        return None  # the 2018 MMFF94 layout, which the program reads
+    if _is_run_line(seven):
+        return ("lines 7 and 8 are a run line and an atom line of nine fields: the nine-column "
+                "layout of MobCal-MPI, which the 2012 program would misread; `mobcal import` "
+                "reads it into an ion file")
+    return (f"{_not_a_run_line(lines[6])}, and line 8 carries the nine fields "
+            f"{' '.join(NINE_FIELDS)}: a nine-column MobCal-MPI file with a damaged run line, "
+            "which the 2012 program would misread with line 7 as the first atom")
 
 
 def _integer(line: str, what: str, lineno: int) -> int:
@@ -144,6 +184,9 @@ class Mfj:
         if mode not in CHARGE_MODES:
             raise MfjError(f"line 5: charge mode {mode!r}; the program stops unless it is "
                            f"exactly {', '.join(CHARGE_MODES)} (a leading blank counts)")
+        nine = _nine_column(lines)
+        if nine:
+            raise MfjError(nine)
 
         sets: list[tuple[Atom, ...]] = []
         i = 6

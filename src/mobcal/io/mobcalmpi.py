@@ -24,23 +24,33 @@ every element the tables hold; a mass in no element's window, or in two, is refu
 
 ``detect`` says whether a text has this layout: line 7 carries six to eight fields of which
 the first five are integers, and line 8 nine fields. A 2012 file's line 7 is an atom line,
-whose coordinates are reals, and no 2012 input carries nine fields on an atom line.
+whose coordinates are reals, and its line 8 carries four or five fields. A file with nine
+fields on line 8 that ``detect`` passes over, its line 7 not a run line, is refused by
+``mobcal.io.mfj`` unless line 7 carries nine fields too, as in the 2018 MMFF94 layout, which
+has no run line and which the 2012 program reads.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from mobcal import parameters
-from mobcal.io.mfj import CHARGE_MODES, MAX_ATOMS, UNITS, _a30, _integer, _real, _tokens
+from mobcal.io.mfj import (
+    CHARGE_MODES,
+    MAX_ATOMS,
+    NINE_FIELDS,
+    UNITS,
+    _a30,
+    _integer,
+    _is_run_line,
+    _not_a_run_line,
+    _real,
+    _tokens,
+)
 
 MASS_TOLERANCE = 0.25  # u; of the tables' elements Si differs most between the two, by 0.11
-FIELDS = 9
-RUN_LINE = ("itn", "inp", "imp", "igas", "seed", "T_bath", "T_eff,max", "n_grid")
+FIELDS = len(NINE_FIELDS)
 GASES = ("he", "n2")  # whose default tables name an atom's element
-
-_INTEGER = re.compile(r"[+-]?\d+")
 
 
 class MobcalMpiError(ValueError):
@@ -103,9 +113,7 @@ class MobcalMpiMfj:
             raise MobcalMpiError(f"line 5: charge mode {mode!r}; one of "
                                  f"{', '.join(CHARGE_MODES)}")
         if not _is_run_line(run):
-            raise MobcalMpiError(f"line 7: {lines[6].strip()!r} is not a run line ("
-                                 f"{' '.join(RUN_LINE[:6])}, then optionally "
-                                 f"{' '.join(RUN_LINE[6:])})")
+            raise MobcalMpiError(_not_a_run_line(lines[6]))
         atoms = []
         for a in range(n_atoms):
             i = 7 + a
@@ -115,7 +123,7 @@ class MobcalMpiMfj:
                                      f"MobCal-MPI input is x y z mass charge alpha N A G")
             try:
                 atoms.append(Atom(*(_real(v, w, i + 1) for v, w in zip(
-                    t, ("x", "y", "z", "mass", "charge", "alpha", "N", "A", "G"), strict=True))))
+                    t, NINE_FIELDS, strict=True))))
             except ValueError as e:
                 raise MobcalMpiError(str(e)) from None
         if any(s.strip() for s in lines[7 + n_atoms:]):
@@ -153,6 +161,3 @@ def element_masses() -> dict[str, float]:
             found.setdefault(e.symbol, float(e.mass.lower().replace("d", "e")))
     return dict(sorted(found.items(), key=lambda kv: kv[1]))
 
-
-def _is_run_line(tokens: list[str]) -> bool:
-    return 6 <= len(tokens) <= len(RUN_LINE) and all(_INTEGER.fullmatch(t) for t in tokens[:5])

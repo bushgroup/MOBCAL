@@ -179,8 +179,9 @@ empirical high-field correction of MobCal-MPI and not a coordinate factor, line 
 (`itn inp imp igas seed T_bath`, optionally followed by T_eff,max and the number of temperature
 points), and each atom line holds x, y, z, a mass, a charge, and the MMFF94 parameters α, N, A,
 and G of the MMFF94 type of the atom. The import recognizes this layout by a run line of six to
-eight fields, the first five of them integers, at line 7 and by nine fields on the first atom
-line; a file without both is read by the first layout. The element of each atom is the one whose
+eight fields, the first five of them integers, at line 7 and by nine fields on line 8, the first
+atom line; a file without both is read by the first layout, unless it is refused as the next
+paragraph describes. The element of each atom is the one whose
 mass in the shipped tables lies within 0.25 u of the mass the file gives, a window that holds
 both the average mass of every element the tables hold and its monoisotopic mass, which the
 MobCal-MPI input generator writes for C, N, O, and S. A mass in the window of no element, or of
@@ -191,6 +192,14 @@ no factor to the coordinates. MobCal-MPI reads one coordinate set, and a nine-co
 more is refused. `mobcal run` refuses a nine-column file given to it directly, before the
 program starts, since the program would read its run line as the first atom; the ion file
 imported from it runs instead.
+
+A file with nine fields on line 8 whose line 7 is not a run line is refused, naming line 7. Such
+a file is a nine-column file with a damaged run line, which the programs would read as the first
+atom, taking the mass of every atom after it for an element key, and `mobcal run` and the window
+refuse it too, before the program starts. A file with nine fields on line 7 as well has no run
+line, which is the layout of the 2018 MMFF94 programs. The programs read the first five fields of
+each of its atom lines, the mass rounding to the key of the element, and the import reads it by
+the first layout, as it reads any other file.
 
 In both layouts the charges are the charge column of the file, the charge mode is that of the
 file, and the net charge is the integer the charges of every coordinate set sum to within
@@ -230,6 +239,7 @@ import adds no element to either table.
   an element symbol and three coordinates;
 - a `.mfj` the program would not read to the end, a key no shipped table defines, or `--charges`
   or `--net-charge` given with a `.mfj`;
+- a `.mfj` with nine fields on line 8 and a line 7 that is neither a run line nor nine fields;
 - a nine-column MobCal-MPI `.mfj` with more than one coordinate set, an atom line of other than
   nine fields, a mass within 0.25 u of no element of the shipped tables or of two, or lines
   after the last atom;

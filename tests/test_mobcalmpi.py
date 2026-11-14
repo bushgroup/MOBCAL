@@ -17,7 +17,7 @@ import pytest
 from mobcal import cli, fortran, parameters
 from mobcal.io import ion, mobcalmpi, structure
 from mobcal.io.ion import Ion, IonError
-from mobcal.io.mfj import Mfj
+from mobcal.io.mfj import Mfj, MfjError
 from mobcal.io.mobcalmpi import MobcalMpiError, MobcalMpiMfj
 
 TESTS = Path(__file__).resolve().parent
@@ -145,6 +145,70 @@ def test_a_refusal_reaches_from_mfj_as_an_ion_error(tmp_path):
     ls[1] = "3"
     with pytest.raises(IonError, match="MobCal-MPI layout: line 2: 3 coordinate sets"):
         ion.from_mfj(_write(ls, tmp_path))
+
+
+# --- the layout the 2012 program reads, and nine fields on line 8 -----------------------------
+
+DAMAGED = ("line 7: '10 40 1000 {} 5013489' is not a run line (itn inp imp igas seed T_bath, "
+           "then optionally T_eff,max n_grid), and line 8 carries the nine fields x y z mass "
+           "charge alpha N A G: a nine-column MobCal-MPI file with a damaged run line, which "
+           "the 2012 program would misread with line 7 as the first atom")
+
+
+def _damaged(igas: int, d: Path) -> Path:
+    """The fixture with its run line cut to five fields, which the 2012 layout reads as an atom
+    line: in helium, key 1 (a hydrogen at (10, 40, 1000) carrying 5013489 e) or key 2."""
+    ls = lines()
+    ls[6] = f"10 40 1000 {igas} 5013489"
+    return _write(ls, d)
+
+
+@pytest.mark.parametrize("igas", [1, 2])
+def test_a_damaged_run_line_is_refused_by_import_run_and_the_window(igas, tmp_path, capsys,
+                                                                     monkeypatch):
+    from mobcal import run
+    from mobcal.app import inputs
+
+    p = _damaged(igas, tmp_path)
+    message = DAMAGED.format(igas)
+    assert not mobcalmpi.detect(p.read_text(encoding="latin-1"))
+    with pytest.raises(MfjError) as e:
+        Mfj.read(p)
+    assert str(e.value) == message
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["import", p.name]) == 2
+    assert capsys.readouterr().err == f"error: x.mfj: {message}\n"
+    assert not (tmp_path / "x.ion.json").exists()
+    for gas in ("he", "n2"):
+        with pytest.raises(MfjError, match="damaged run line"):
+            run.stage(p, parameters.shipped(gas))
+    with pytest.raises(MfjError, match="damaged run line"):
+        inputs._read_mfj(p)
+
+
+def test_the_2012_reader_refuses_the_intact_layout_too():
+    with pytest.raises(MfjError, match=r"^lines 7 and 8 are a run line and an atom line of nine "
+                                       r"fields: the nine-column layout of MobCal-MPI"):
+        Mfj.read(NINE)
+
+
+def test_every_2012_input_still_reads():
+    for path in TWELVE:
+        assert Mfj.read(path).atoms, path.name
+
+
+def test_the_2018_mmff94_layout_reads_as_the_2012_program_reads_it(tmp_path):
+    """Nine fields on every atom line from line 7 and no run line, as the 2018 MMFF94 programs
+    read: the 2012 program reads five fields, the mass rounding to the element key."""
+    ls = lines()
+    ls[5] = "1.0000"
+    del ls[6]
+    p = _write(ls, tmp_path)
+    assert not mobcalmpi.detect(p.read_text(encoding="latin-1"))
+    assert Mfj.read(p) == Mfj.read(CHOLINE)
+    i = ion.from_mfj(p)
+    assert i.import_record["source"]["program"] == "mfj" and i.molecular_charge == 1
+    assert i.mfj(parameters.shipped("he")) == Mfj.read(CHOLINE)
 
 
 # --- mobcal import X.mfj ---------------------------------------------------------------------
