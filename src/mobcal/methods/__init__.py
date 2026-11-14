@@ -51,10 +51,19 @@ seed.
 
 ``method.schema.json`` beside this module is the format as a JSON Schema (``SCHEMA``), for
 other tools, editors and the tests, never loaded here; its description lists the rules only
-``load`` applies (the table's two hashes and its unique keys, the name against the list, a
-finite temperature, counts written as integers, ``settings.MAX_POINTS``, the name's printable
-characters beyond the controls). The tests hold its keys, enums and bounds to the constants
-here.
+``load`` applies (the table's two hashes and its unique keys, the name against the shipped
+methods and the list, a finite temperature, counts written as integers,
+``settings.MAX_POINTS``, the name's printable characters beyond the controls). The tests hold
+its keys, enums and bounds to the constants here.
+
+A file not shipped is refused by ``load`` and ``save`` when its name, case-folded, is a shipped
+method's name or key, or ``custom`` (``clash``), whatever its values: a run records a file by
+its name, and the methods text describes a shipped method by its key, so the record of such a
+file would name another method. A file equal to the shipped method field for field is refused
+too, and the message says so; the shipped method makes the same runs. ``from_document`` makes
+no such check, so a result file written before the refusal still reads (``mobcal.io.result``
+renames such a method when it writes it back). The window refuses besides a name another file
+in its list carries.
 
 ``identify`` names the shipped method a run used from what the run used, so a run made with
 ``--rng ranlux`` and nothing else is a ``2012-he`` run whether or not ``--method 2012-he`` was
@@ -225,7 +234,9 @@ def _check_name(name: object, where: str) -> str:
 
 
 def load(path: Path | str, shipped: bool = False) -> Method:
-    """Read and check a method file. Raises MethodError naming the file and the key."""
+    """Read and check a method file. A file not shipped whose name is a shipped method's, or
+    the name of custom settings, is refused (``clash``). Raises MethodError naming the file
+    and the key."""
     path = Path(path)
     if path.suffix.lower() == ".toml":
         raise MethodError(f"{path}: a TOML method file, which this version of MOBCAL does not "
@@ -241,7 +252,10 @@ def load(path: Path | str, shipped: bool = False) -> Method:
         raise MethodError(f"{path}: not UTF-8 text: {e}") from None
     except strictjson.StrictJSONError as e:
         raise MethodError(f"{path}: {e}") from None
-    return from_document(doc, path, hashlib.sha256(data).hexdigest(), shipped)
+    m = from_document(doc, path, hashlib.sha256(data).hexdigest(), shipped)
+    if not shipped:
+        _refuse_clash(m)
+    return m
 
 
 def _keys(d: dict, allowed: tuple[str, ...], required: tuple[str, ...], where: str,
@@ -374,19 +388,23 @@ def document(name: str, gas: str, table: parameters.ParameterSet, generator: str
 
 def save(path: Path | str, name: str, gas: str, table: str | Path | parameters.ParameterSet,
          generator: str, st: Settings, seed: int | None = None,
-         description: str | None = None) -> Method:
+         description: str | None = None, shipped: bool = False) -> Method:
     """Write a method file with every key, the table whole (a shipped set's name, a TOML
     file's path, or a table already read), and ``seed`` and ``description`` when they are
     given, and return it as ``load`` reads it back. The file is named ``NAME.method.json``
-    (``file_name``), whatever ``path`` ends in. Raises MethodError."""
+    (``file_name``), whatever ``path`` ends in. A name ``clash`` finds is refused before the
+    file is written, unless ``shipped``: the file is a shipped method's, written by the one
+    writer of every method file. Raises MethodError."""
     path = file_name(path)
     _check_name(name, str(path))
     doc = document(name, gas, table_for(table, gas), generator, st, seed, description)
+    if not shipped:
+        _refuse_clash(from_document(doc, path, ""))
     try:
         path.write_text(dumps(doc), encoding="utf-8", newline="\n")
     except OSError as e:
         raise MethodError(f"{path}: cannot write: {e.strerror or e}") from None
-    return load(path)
+    return load(path, shipped)
 
 
 def shipped_path(key: str) -> Path:
@@ -406,6 +424,33 @@ def get(ref: str | Path) -> Method:
         raise MethodError(f"no method is named {str(ref)!r}; the methods are "
                           + ", ".join(METHODS) + ", or the path of a method file")
     return load(p)
+
+
+def clash(name: str) -> str | None:
+    """The shipped method whose name or key ``name`` is, compared case-folded, or ``custom``
+    when it is the name a run records for custom settings; None when no run's record could
+    take it for another method's. A run records a method file by its name (``Method.key``)
+    and the methods text describes a shipped method by its key, so a file of one's own under
+    such a name would have its values described as another method's."""
+    folded = name.casefold()
+    for key, m in METHODS.items():
+        if folded in (key.casefold(), m.name.casefold()):
+            return key
+    return CUSTOM if folded == CUSTOM.casefold() else None
+
+
+def _refuse_clash(m: Method) -> None:
+    """Raise MethodError when the file, not shipped, carries a name ``clash`` finds."""
+    key = clash(m.name)
+    if key is None:
+        return
+    if key == CUSTOM:
+        raise MethodError(f"{m.path}: {m.name!r} is the name a run records for custom settings; "
+                          "give the file another name")
+    same = (f"; the file holds the values of {key}, so the shipped method itself makes the same "
+            "runs") if METHODS[key].matches(m.gas, m.table_sha256, m.generator, m.settings) else ""
+    raise MethodError(f"{m.path}: {m.name!r} is the name of the shipped method {key}, which a "
+                      f"run of the file would record; give the file another name{same}")
 
 
 def identify(gas: str, table_sha256: str | None, generator: str, st: Settings) -> str:

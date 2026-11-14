@@ -112,9 +112,15 @@ never `1000.0` or `1e3`. A key written twice in the file is refused rather than 
 of its values, and so are `NaN` and `Infinity`, which are not JSON numbers, as for the ion file
 ([The ion file](ion-file.md)).
 
-The name is 1 to 60 printable characters with no space at either end. The window refuses a file
-whose name is that of a shipped method or of another file in its list, whereas
-`mobcal run --method PATH` keeps no list and runs the file under the name it carries.
+The name is 1 to 60 printable characters with no space at either end. A run records a method
+file by its name, and the methods text describes a shipped method by its key, so a method file
+of your own may not carry the name or the key of a shipped method, such as `MOBCAL 2012 (He)` or
+`2012-he`, nor `custom`, which a record gives to settings that no method gives; letter case does
+not count. `mobcal run --method PATH`, **File ▸ Load method…**, and **File ▸ Save method…**
+refuse such a file with the same message, whatever its values. A file that equals the shipped
+method in every field that identifies a method is refused too, and the message says that the
+shipped method makes the same runs. The window also refuses a file whose name another file in
+its list carries.
 
 `description` is optional, a sentence or two on what the method is. The list of **Method** shows
 it as the tooltip of the method, and each shipped method carries one, on where the method comes
@@ -180,7 +186,8 @@ schema cannot express:
   exactly when `sha256` is that of a shipped table, which the table must then equal;
 - of the settings, that the temperature is finite and that `itn` × `inp` × `imp` is at most
   9,999,999;
-- of the name, that every character is printable;
+- of the name, that every character is printable and that the name is not the name or the key
+  of a shipped method, nor `custom`, in any letter case;
 - and the three rules of reading above: integers written as integers, no key twice, and no `NaN`
   or `Infinity`.
 

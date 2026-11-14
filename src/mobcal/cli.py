@@ -542,6 +542,9 @@ def _unpack(args: argparse.Namespace) -> int:
             check = "converted from the .mfj of the run, whose SHA-256 no ion file can have"
         elif w.recorded is None:
             check = "the run was given no file of it, only its values"
+        elif w.renamed is not None:
+            check = (f"the document of the file the run was given, renamed from {w.renamed!r} "
+                     f"(SHA-256 {w.sha256[:12]}, that of the given file {w.recorded[:12]})")
         elif w.identical:
             check = "the same bytes as the file the run was given (SHA-256 matches)"
         else:

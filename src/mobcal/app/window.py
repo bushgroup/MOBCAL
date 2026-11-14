@@ -478,9 +478,9 @@ class MainWindow(QMainWindow):
             self.dropped = []
 
     def _name_clash(self, m: methods.Method) -> str:
-        """Why a method file cannot join the list under its name, or empty."""
-        if any(b.name == m.name for b in methods.METHODS.values()):
-            return f"{m.path}: {m.name!r} is the name of a shipped method; give the file another."
+        """Why a method file cannot join the list under its name, or empty: another file in
+        the list carries it. A shipped method's name is refused by ``methods.load`` and
+        ``methods.save`` themselves, as for ``mobcal run``."""
         other = next((o for o in self.loaded.values()
                       if o.name == m.name and o.ref != m.ref), None)
         if other is not None:

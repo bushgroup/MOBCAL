@@ -211,7 +211,14 @@ def test_save_method_writes_the_fields_and_load_method_adds_the_file(window, qtb
     assert w2.load_method(twin) is None
     assert "already holds 'Five cycles (N2)'" in w._warnings[-1]  # the patch is the class's
     assert w.save_method(tmp_path / "x.method.json", "MOBCAL 2012 (He)") is None
-    assert "is the name of a shipped method" in w._warnings[-1]
+    assert "'MOBCAL 2012 (He)' is the name of the shipped method 2012-he" in w._warnings[-1]
+    assert not (tmp_path / "x.method.json").exists()
+    # A shipped key is a shipped method's name too, as the record and the methods text read it.
+    keyed = tmp_path / "keyed.method.json"
+    keyed.write_text(methods.dumps({**json.loads(m.path.read_text(encoding="utf-8")),
+                                    "name": "2012-n2"}), encoding="utf-8", newline="\n")
+    assert w2.load_method(keyed) is None
+    assert "'2012-n2' is the name of the shipped method 2012-n2" in w._warnings[-1]
 
 
 def test_a_method_seed_starts_the_seeds_and_save_method_keeps_it(window, tmp_path):
@@ -277,6 +284,11 @@ def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
     old.write_text('format = 1\nname = "Old"\ngas = "he"\nparameters = "2012"\n'
                    'generator = "ranlux"\n', encoding="utf-8")
     w.store.methods = [*w.store.methods, (str(old), "0" * 64)]
+    # A file a window before the refusal of shipped keys took, named by one, is dropped too.
+    keyed = tmp_path / "keyed.method.json"
+    keyed.write_text(methods.dumps({**json.loads(kept.read_text(encoding="utf-8")),
+                                    "name": "2000-he"}), encoding="utf-8", newline="\n")
+    w.store.methods = [*w.store.methods, (str(keyed), methods._sha256(keyed))]
     w2 = MainWindow(w.store, launcher=launcher, cpus=8)
     qtbot.addWidget(w2)
     assert combo_items(w2.method_combo)[5:] == ["Kept"]
@@ -284,7 +296,8 @@ def test_a_remembered_method_file_gone_or_changed_is_dropped_with_a_message(
     shown = []
     monkeypatch.setattr(QMessageBox, "information", lambda _, title, text: shown.append(text))
     w2.report_dropped_methods()
-    assert len(shown) == 1 and shown[0].startswith("3 method files were removed")
+    assert len(shown) == 1 and shown[0].startswith("4 method files were removed")
+    assert "keyed.method.json: '2000-he' is the name of the shipped method 2000-he" in shown[0]
     assert "changed.method.json: the file has changed since it was added" in shown[0]
     assert "gone.method.json: the file is no longer there." in shown[0]
     assert "old.toml: a TOML method file, which this version of MOBCAL does not read; a " \

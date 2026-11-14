@@ -216,7 +216,7 @@ def test_save_writes_a_shipped_method_byte_for_byte(tmp_path, key):
     m = methods.METHODS[key]
     for table in (m.set_name, parameters.shipped_path(m.gas, m.set_name), m.table):
         again = methods.save(tmp_path / key, m.name, m.gas, table, m.generator, m.settings,
-                             description=m.description)
+                             description=m.description, shipped=True)
         assert again.path == tmp_path / f"{key}.method.json"
         assert again.path.read_bytes() == methods.shipped_path(key).read_bytes()
     text = methods.shipped_path(key).read_text(encoding="utf-8")
@@ -457,6 +457,86 @@ def test_a_toml_method_file_is_refused_naming_the_json_form(tmp_path):
         methods.get(str(tmp_path / "gone.toml"))
     with pytest.raises(methods.MethodError, match="gone.method.json: cannot read"):
         methods.get(str(tmp_path / "gone.method.json"))
+
+
+def test_clash_finds_a_shipped_methods_name_or_key_case_folded():
+    for key, m in methods.METHODS.items():
+        assert methods.clash(m.name) == key and methods.clash(key) == key
+        assert methods.clash(m.name.upper()) == key and methods.clash(key.upper()) == key
+    assert methods.clash("custom") == methods.clash("Custom") == methods.CUSTOM
+    assert methods.clash("Mine") is None and methods.clash("2012") is None
+    assert methods.clash("MOBCAL 2012 (He) mine") is None
+
+
+def clashing(tmp_path: Path, name: str, **changes) -> Path:
+    """The shipped 2012-he file under another name and description, with ``changes`` made to
+    its block and core."""
+    doc = json.loads(methods.shipped_path("2012-he").read_text(encoding="utf-8"))
+    doc |= {"name": name, "description": "ours"}
+    for k, v in changes.items():
+        if k in methods.BLOCK:
+            doc["mobcal"][k] = v
+        else:
+            doc[k] = v
+    f = tmp_path / "mine.method.json"
+    f.write_text(methods.dumps(doc), encoding="utf-8", newline="\n")
+    return f
+
+
+@pytest.mark.parametrize("name, key", [
+    ("MOBCAL 2012 (He)", "2012-he"),  # a shipped method's name, which the window lists
+    ("2012-he", "2012-he"),  # a shipped key, which the record and the methods text read
+    ("mobcal 2012 with philox (n2)", "2012-philox-n2"),  # case-folded
+    ("2000-HE", "2000-he"),
+])
+def test_a_file_named_as_a_shipped_method_is_refused_wherever_it_is_loaded(tmp_path, name, key):
+    """A run records a method file by its name and the methods text describes a shipped method
+    by its key, so a file of one's own under either would have its values described as the
+    shipped method's: ``load`` refuses it, and with it ``mobcal run``, a batch and ``save``."""
+    f = clashing(tmp_path, name, generator="philox", temperature={"value": 298.15, "unit": "K"})
+    want = f"mine.method.json: '{re.escape(name)}' is the name of the shipped method {key}, " \
+        "which a run of the file would record; give the file another name$"
+    with pytest.raises(methods.MethodError, match=want):
+        methods.load(f)
+    with pytest.raises(methods.MethodError, match=want):
+        methods.get(str(f))
+    with pytest.raises(cli.UsageError, match=want):
+        from_cli(tmp_path, str(CHOLINE), "--method", str(f))
+    with pytest.raises(BatchError, match=want):
+        Batch((CHOLINE,), tmp_path / "runs", method=str(f))
+    m = methods.from_document(json.loads(f.read_text(encoding="utf-8")), f, "")
+    assert m.name == name  # a result file's document is read as it is (mobcal.io.result)
+    out = tmp_path / "saved.method.json"
+    with pytest.raises(methods.MethodError, match="saved.method.json: '.*' is the name of the "
+                                                  f"shipped method {key}"):
+        methods.save(out, name, "he", "2012", "ranlux", settings.DEFAULTS)
+    assert not out.exists()  # refused before the file is written
+    for key2, shipped in methods.METHODS.items():  # the shipped files themselves load
+        assert methods.load(shipped.path, shipped=True).key == key2
+
+
+def test_a_file_equal_to_the_shipped_method_of_its_name_is_refused_saying_so(tmp_path):
+    """A seed and a description are not fields that identify a method: a file of a shipped
+    method's values under its name is refused, and the message says the shipped method makes
+    the same runs."""
+    f = clashing(tmp_path, "MOBCAL 2012 (He)", seed=42)
+    with pytest.raises(methods.MethodError, match="is the name of the shipped method 2012-he, "
+                       "which a run of the file would record; give the file another name; the "
+                       "file holds the values of 2012-he, so the shipped method itself makes "
+                       "the same runs$"):
+        methods.load(f)
+    with pytest.raises(methods.MethodError, match="the shipped method 2012-he.*another name$"):
+        methods.load(clashing(tmp_path, "MOBCAL 2012 (He)", itn=9))  # other values: no more
+
+
+def test_a_file_named_custom_is_refused(tmp_path):
+    """``custom`` is what a record says of settings no method gives, and the methods text
+    reads it as such."""
+    for name in ("custom", "Custom"):
+        with pytest.raises(methods.MethodError, match=f"'{name}' is the name a run records for "
+                                                      "custom settings; give the file another "
+                                                      "name$"):
+            methods.load(clashing(tmp_path, name))
 
 
 def test_a_description_is_carried_and_is_not_part_of_the_method(tmp_path):

@@ -355,15 +355,22 @@ original. The method file takes the name of the file the method came from, `2012
 for a shipped method and the name of the file itself for a method file of your own. A `custom`
 run has no method file, and its method is written as `NAME.method.json` under the name NAME,
 that of the result file, in place of `Custom`, so that the methods of several custom runs can be
-loaded side by side. The command names a shipped method by its key when the method file the run
-recorded is the one this version of MOBCAL ships, and the written file otherwise. It adds
+loaded side by side. The command names a shipped method by its key when the values of the method
+are those of the shipped method that the run recorded, or whose name the method carries, and the
+written file otherwise. A result file made under a shipped method of another version, whose file
+differs from the one this version ships in its description alone, therefore runs again under the
+key. A method file of your own that carried the name of a shipped method with other values,
+which `mobcal run` now refuses ([Methods](methods.md#method-files)), is written under the name of
+its file without `.method.json`, or under the name of the result file when that is the name of a
+shipped method too, and `unpack` says so. It adds
 `--split W` for a run that was divided among W processes, which gives the same numbers as a run
 in one process.
 
 Each file is checked as it is written, and `unpack` says what each check found:
 
 - The method written back has the bytes of the file the run was given, for every method file
-  MOBCAL wrote, and its SHA-256 is then the one the result records. Whatever its bytes, its gas,
+  MOBCAL wrote and that `unpack` did not rename, and its SHA-256 is then the one the result
+  records. Whatever its bytes, its gas,
   generator, element table, and six settings must be those the `mobcal` block records, and a
   result file in which they differ is refused.
 - The ion file written back has the bytes of the file the run was given when MOBCAL wrote that

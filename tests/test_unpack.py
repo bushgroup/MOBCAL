@@ -125,6 +125,74 @@ def test_a_custom_method_is_named_by_the_result(tmp_path):
     same_job(new, job)
 
 
+def renamed_in_result(job: Job, tmp_path: Path, name: str, **changes) -> result.Result:
+    """The job's result file as a run before the refusal of shipped names wrote it, from a
+    file named ``name`` (``inputs.method.name`` and the document's name), with ``changes``
+    made to ``inputs.method``."""
+    def change(d: dict) -> None:
+        me = d["inputs"]["method"]
+        me["name"] = me["document"]["name"] = name
+        me |= changes
+    return result.Result.read(edited(job, tmp_path, change))
+
+
+@pytest.mark.parametrize("name, stem, key", [
+    ("MOBCAL 2012 (He)", "mine", "2012-he"),
+    ("2012-he", "mine", "2012-he"),
+    ("custom", "mine", "custom"),
+    ("MOBCAL 2012 (He)", "2012-he", "2012-he"),  # the stem clashes too: the result's name
+])
+def test_a_file_under_a_shipped_name_with_other_values_unpacks_renamed(tmp_path, name, stem,
+                                                                       key):
+    """A run made before ``mobcal.methods`` refused a file under a shipped method's name, with
+    other values, unpacks its method under the file's stem, or the result's name, which
+    ``mobcal run`` takes; its record then names the method by that name."""
+    st = settings.DEFAULTS.replace(temperature=298.15)
+    m = methods.save(tmp_path / stem.replace("2012-he", "x"), "Mine", "he", "2012", "philox",
+                     st)
+    job = ran(tmp_path, ion_file(tmp_path / "ok.ion.json", "ok"), "--method", str(m.path))
+    r = renamed_in_result(job, tmp_path, name,
+                          file={"name": f"{stem}.method.json", "sha256": m.sha256})
+    assert r.method.name == name  # the result reads
+    u = result.unpack(r, tmp_path / "u")
+    want = stem if stem != "2012-he" else r.name  # the result file's, as for a custom method
+    assert u.method.renamed == name and not u.method.identical
+    assert u.method.path.name == f"{stem}.method.json"
+    assert methods.load(u.method.path).name == want
+    assert any(f"named {name!r}, the name of the shipped method {key}" in n
+               and f"names it {want!r}" in n for n in u.notes)
+    assert u.rerun[-4:] == ("--method", str(u.method.path), "--seeds", str(SEED))
+    new = again(job, u)
+    same_job(new, job)
+    assert new.method == want
+
+
+@pytest.mark.parametrize("source", ["shipped", "file"])
+def test_a_method_under_a_shipped_name_with_its_values_reruns_by_its_key(tmp_path, source):
+    """A result of a shipped method whose file another version shipped with other bytes (a
+    description reworded), or of a file named as a shipped method with that method's values,
+    reruns by the key, as a file under that name would be refused."""
+    job = ran(tmp_path, ion_file(tmp_path / "ok.ion.json", "ok"), "--method", "2012-he")
+    shipped = methods.METHODS["2012-he"]
+    doc = {**json.loads(shipped.path.read_text(encoding="utf-8")),
+           "description": "As another version said it."}
+    file = {"name": "2012-he.method.json", "sha256": "0" * 64}
+    if source == "file":
+        doc = {**doc, "name": shipped.name, "seed": SEED}
+        file = {"name": "mine.method.json", "sha256": "0" * 64}
+    r = renamed_in_result(job, tmp_path, "2012-he" if source == "shipped" else shipped.name,
+                          source=source, file=file, document=doc)
+    u = result.unpack(r, tmp_path / "u")
+    assert u.method.renamed is None and u.method.path.name == file["name"]
+    assert u.rerun[-4:] == ("--method", "2012-he", "--seeds", str(SEED))
+    said = "as another version of MOBCAL shipped it" if source == "shipped" else \
+        "a file named as the shipped method 2012-he"
+    assert any(said in n and "the command names 2012-he itself" in n for n in u.notes)
+    new = again(job, u)
+    same_job(new, job)
+    assert new.method == "2012-he" and new.method_file is None
+
+
 def test_a_table_of_ones_own_reruns_without_its_file(tmp_path):
     """A result made under a table of one's own carries the table in its method: unpacked and
     run again with the TOML file gone, it is the same calculation, in the same directory."""

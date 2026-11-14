@@ -37,6 +37,10 @@ task 57):
   run's calculation: its gas, generator, six settings and the SHA-256 of its table are those the
   result's ``mobcal`` block records. A custom run's method, named ``Custom`` in the result, is
   written under the result's name, so that two unpacked into one Method list do not collide.
+  A method under the name of a shipped method (``methods.clash``), which ``mobcal run`` refuses
+  as a file, is never what the rerun is given by path: with that method's values the rerun
+  names the shipped method by its key, and with others the method is written under another
+  name, by which its bytes then differ.
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ import hashlib
 import os
 import shlex
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from mobcal import methods, settings
@@ -343,6 +347,9 @@ class Written:
     sha256: str
     recorded: str | None  # the SHA-256 the result records for the file the run was given
     existed: bool = False  # the file was there already, byte for byte
+    # the name the method of the run carried, when unpack wrote it under another (a shipped
+    # method's name, which mobcal.methods.load refuses for a file not shipped)
+    renamed: str | None = None
 
     @property
     def identical(self) -> bool:
@@ -377,6 +384,12 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
     the name of the run's input (its own for an ion file, ``X.ion.json`` for ``X.mfj``), so that a
     run of it is named as the original was; the method file takes its file's name, or for a
     custom method the result's name, which also becomes the method's.
+
+    The command names a shipped method by its key when the method's values are those of the
+    shipped method it was recorded as, or whose name it carries, whatever its bytes. A method
+    under a shipped method's name with other values (a file run before ``mobcal.methods``
+    refused such names) is written under its file's stem, or the result's name, since
+    ``mobcal run`` would refuse it under its own.
 
     Refuses, writing nothing, a result whose ion is recorded by reference, one whose method or
     staged input does not agree with its ``mobcal`` block, and a file already there with other
@@ -445,6 +458,29 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
         method_name = f"{r.name}{methods.SUFFIX}"
     else:
         method_name = me["file"]["name"]
+    # The shipped method the method names, by the key a shipped run records or by its name,
+    # when its values are that method's: the rerun names it by its key, as the record of the
+    # run did, whatever the bytes (a shipped file of another version, a file named as one).
+    named = methods.clash(doc["name"])
+    keys = ([me["name"]] if me["source"] == "shipped" else []) + [named]
+    shipped_as = next((k for k in keys if k in methods.METHODS and methods.METHODS[k].matches(
+        m.gas, m.table_sha256, m.generator, m.settings)), None)
+    renamed = None
+    if named is not None and shipped_as is None:
+        # a name mobcal.methods.load refuses for a file not shipped, with other values: the
+        # file's own stem, or the result's name
+        renamed = doc["name"]
+        free = [n for n in (methods.stem(method_name), r.name[:methods.MAX_NAME].strip())
+                if 0 < len(n) <= methods.MAX_NAME and n == n.strip() and n.isprintable()
+                and methods.clash(n) is None]
+        if not free:
+            raise ResultError(f"{where}: the method of the run is named {renamed!r}, the name "
+                              f"of the shipped method {named}, and neither {method_name} nor "
+                              "the result gives it another")
+        doc["name"] = free[0]
+        notes.append(f"the method of the run was named {renamed!r}, the name of the shipped "
+                     f"method {named}, which a method file not shipped may not carry; "
+                     f"{method_name} names it {doc['name']!r}, and a run of it records that name")
     method_text = methods.dumps(doc).encode("utf-8")
 
     files = ((out_dir / ion_name, ion_text, ie["file"]["sha256"]),
@@ -461,11 +497,19 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
         if not existed[path]:
             path.write_bytes(data)
         written.append(Written(path, _sha256(data), recorded, existed[path]))
+    written[1] = replace(written[1], renamed=renamed)
 
     rerun = ["mobcal", "run", str(written[0].path), "--method"]
-    shipped = methods.METHODS.get(me["name"]) if me["source"] == "shipped" else None
-    if shipped is not None and shipped.sha256 == me["file"]["sha256"]:
-        rerun.append(me["name"])  # the shipped method itself, which the record then names
+    if shipped_as is not None:
+        rerun.append(shipped_as)  # the shipped method itself, which the record then names
+        if me["source"] == "shipped" and me["file"]["sha256"] != methods.METHODS[shipped_as].sha256:
+            notes.append(f"the method of the run is {shipped_as} as another version of MOBCAL "
+                         f"shipped it, with the values {shipped_as} has in this one, so the "
+                         f"command names {shipped_as} itself")
+        elif me["source"] != "shipped":
+            notes.append(f"the method of the run was a file named as the shipped method "
+                         f"{shipped_as}, which a method file not shipped may not be, holding the "
+                         f"values of {shipped_as}, so the command names {shipped_as} itself")
     else:
         rerun.append(str(written[1].path))
     rerun += ["--seeds", str(r.seed)]
