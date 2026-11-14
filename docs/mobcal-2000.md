@@ -85,9 +85,11 @@ the four failed trajectories with their diagnostics, and the SUMMARY are the 200
 averages over the 50 sets are 183.74 Å² by the projection approximation, 206.03 Å² by the exact
 hard-sphere method, and 196.31 Å² by the trajectory method, as the reference prints them. This was
 measured with MSYS2 gfortran 16.2.0 on Windows on 24 October 2026, as one process and divided
-among 40 ([Divided runs](#divided-runs)), and again as one process on 13 November 2026. The
-comparison is not part of the test suite, which holds the program to the 2012 outputs on every
-change ([What the tests hold](mobcal-2012.md#what-the-tests-hold)).
+among 40 ([Divided runs](#divided-runs)), and again as one process on 13 and 14 November 2026.
+The test suite of the source code makes this comparison on Windows, macOS, and Linux. Every run
+of the suite takes the first five coordinate sets of the example, which print the lines of the
+whole run up to the sixth set, and the whole example runs every Monday and for every release
+([What the tests hold](mobcal-2012.md#what-the-tests-hold)).
 
 ## The differences in the output
 

@@ -91,8 +91,8 @@ and again on 13 November 2026, in helium as one process and in both gases divide
 
 ## What the tests hold
 
-Unlike the [2000 comparison](mobcal-2000.md), this one is part of the test suite of the source
-code, which continuous integration runs on Windows, macOS, and Linux for every change. To check
+This comparison and the [2000 comparison](mobcal-2000.md) are part of the test suite of the
+source code, which continuous integration runs on Windows, macOS, and Linux for every change. To check
 that a build still computes the 2012 numbers, the suite runs `Choline.mfj` through each program
 under RANLUX at seed 5013489, staged under the name the references echo, and compares the output
 with [`tests/reference/`](../tests/reference/README.md). Those two files hold what the shipped
@@ -124,6 +124,23 @@ selected, and from the source code with
 
 ```
 uv run pytest -m nitrogen
+```
+
+The suite holds the shipped helium program to the output of the 2000 release in the same three
+tiers. `tests/reference/a10A1.out` holds what the program prints for the example of that release,
+`a10A1.mfj`, under the method `2000-he` at the seed of its run file, and a test ties it to the
+2000 output line by line: it differs in exactly the 42 lines of [The differences in the
+output](mobcal-2000.md#the-differences-in-the-output). The whole example takes about 20 minutes
+as one process, so every run of the suite runs its first five coordinate sets. The program
+treats the coordinate sets one after another on one random number stream, so a run of the first
+five prints the lines of the whole run up to the sixth set, the line that counts the sets aside,
+and the test requires those lines to pass the three tiers, with the cross sections of each of
+the five sets in the second. All 42 lines that differ from the 2000 output fall in the first
+set. The whole example runs every Monday, for every pushed release tag, on a manual run of the
+`ci` workflow with the same option selected, and from the source code with
+
+```
+uv run pytest -m mobcal2000
 ```
 
 The suite also holds a divided run to the run as one process. Choline in helium runs under

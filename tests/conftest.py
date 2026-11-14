@@ -4,8 +4,9 @@ runs' wall times, printed at the end of the session.
 The pool builds each gas the session's tests ask for, then runs every real choline calculation
 they need in one ``run_many`` batch: the serial run per gas for the regression gate, the
 split runs in helium for the exactness tests, and the helium runs under Philox, serial and
-split, for the generator's own exactness tests, each on its own processes. Every run compared
-with a 2012 reference says ``ranlux``, the driver's default being Philox. The one-cycle nitrogen
+split, for the generator's own exactness tests, and the 2000 release's example under the 2000
+method, its first five sets or whole, each on its own processes. Every run compared with a 2012
+or 2000 reference says ``ranlux``, the driver's default being Philox. The one-cycle nitrogen
 check's worker, for which ``mobcal.run`` has no mode (a split job runs all W workers and the
 combining run), is started directly before the batch and waited for after it. Everything that
 needs gfortran waits for the longest of them, not for their sum. Without gfortran the pool
@@ -23,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import gate
-from mobcal import fortran, parameters
+from mobcal import fortran, methods, parameters
 from mobcal.io.infile import InFile
 from mobcal.io.outfile import OutFile
 from mobcal.run import LOG_NAME, OUTPUT_NAME, Job, run_many
@@ -80,6 +81,12 @@ def selected_philox(session) -> list[int]:
     return sorted(wanted | {0}) if wanted else []
 
 
+def selected_2000(session) -> list[int]:
+    """The runs of the 2000 example the collected tests ask for, by coordinate sets run (the
+    whole example only when its ``mobcal2000`` marker is selected)."""
+    return sorted(_params(session, "sets2000"))
+
+
 def selected_cycles(session) -> list[str]:
     """The gases whose one-cycle check a collected test asks for (the ``n2_cycle`` fixture)."""
     names = {n for item in session.items for n in getattr(item, "fixturenames", ())}
@@ -122,9 +129,10 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
     splits = selected_splits(request.session)
     cycles = selected_cycles(request.session)
     philox = selected_philox(request.session)
+    sets2000 = selected_2000(request.session)
     if (splits or philox) and "he" not in gases:
         gases = ["he", *gases]
-    built = [g for g in fortran.GASES if g in gases or g in cycles]
+    built = [g for g in fortran.GASES if g in gases or g in cycles or (sets2000 and g == "he")]
     binaries = {g: fortran.build(g, tmp_path_factory.mktemp(f"bin-{g}"), gfortran).binary
                 for g in built}
     p = gate.Pool(binaries)
@@ -146,6 +154,22 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
                  staged_name=refs["he"].input_name, split=w or None, generator="philox",
                  scratch="keep")
              for w in philox]
+    # The 2000 example under the shipped method of its release, at the seed of its output,
+    # whole or as its first k sets, staged under its own name.
+    sets_of: dict[str, int] = {}
+    if sets2000:
+        m2000 = methods.get(gate.METHOD_2000)
+        ref2000 = OutFile.read(gate.A10A1_REF)
+        assert ref2000.generator == m2000.generator == "ranlux"
+    for k in sets2000:
+        inp = gate.A10A1
+        if k != gate.A10A1_SETS:
+            inp = tmp_path_factory.mktemp(f"a10A1-{k}") / gate.A10A1.name
+            inp.write_text(gate.a10A1_sets(k), encoding="ascii", newline="\n")
+        sets_of[f"a10A1-{k}"] = k
+        jobs.append(Job(inp, m2000.gas, ref2000.seed, out, name=f"a10A1-{k}",
+                        staged_name=ref2000.input_name, parameters=m2000.job_table(),
+                        generator=m2000.generator, settings=m2000.settings, method_from=m2000))
     # Nitrogen's one cycle is the longest run of a default session, so it starts first.
     workers = [_Worker(binaries[g], g, refs[g], tmp_path_factory.mktemp(f"cycle-{g}"))
                for g in cycles]
@@ -155,7 +179,10 @@ def pool(request, gfortran, tmp_path_factory, run_times) -> gate.Pool:
             run_times[r.job.label] = r.seconds
             log = (r.job.run_dir / LOG_NAME).read_text(errors="replace")[-2000:]
             assert r.ok, f"{r.job.label}: {r.message}\n{log}"
-            if r.job.generator == "philox":
+            if r.job.name in sets_of:
+                p.mobcal_2000[sets_of[r.job.name]] = gate.GateRun(
+                    "he", ref2000, OutFile.read(r.output), r.job.result_path)
+            elif r.job.generator == "philox":
                 p.philox[r.job.split or 0] = r
             elif r.job.split:
                 p.splits[r.job.split] = r

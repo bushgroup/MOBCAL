@@ -108,8 +108,10 @@ The 2012 release is kept as published at
 [bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012). The 2000 helium release of the
 Jarrold group, from which the 2012 helium program was made and whose calculation the method
 `2000-he` runs, is kept as distributed at
-[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000). The MMFF94/exp-6 programs of
-2017 and 2018, a branch of the same lineage, are kept as distributed at
+[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), and the test suite holds the
+shipped program to the output of its example, five of the 50 coordinate sets on every change and
+all of them weekly ([What the tests hold](docs/mobcal-2012.md#what-the-tests-hold)). The
+MMFF94/exp-6 programs of 2017 and 2018, a branch of the same lineage, are kept as distributed at
 [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018).
 
 ## From source

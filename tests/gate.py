@@ -4,9 +4,10 @@ The choline runs themselves go through ``mobcal.run`` from the session fixture i
 ``conftest.py``; what lives here is what the comparison needs beyond that: the stochastic-lines
 list and the filter that applies it, the strict-platforms list, the key this platform is listed
 under, where the references are (``tests/reference/``, derived from the 2012 originals under
-``fortran/sample-output/`` by two changes of print format that ``test_reference.py`` checks),
-the line a split run's worker adds to its output, and the dataclasses the pool fixture hands
-the tests.
+``fortran/sample-output/`` by two changes of print format that ``test_reference.py`` checks,
+and from the 2000 release's example output by those two and the exponent letter), how the 2000
+example is cut to its first sets, the line a split run's worker adds to its output, and the
+dataclasses the pool fixture hands the tests.
 """
 
 from __future__ import annotations
@@ -32,6 +33,61 @@ REFS = HERE / "reference"
 ``ORIGINALS`` line by line by ``test_reference.py``."""
 REFERENCE = {"he": "Choline_He.out", "n2": "Choline_N2.out"}
 CHOLINE = fortran.FORTRAN_DIR / "Choline.mfj"
+
+MOBCAL_2000 = HERE / "data" / "mobcal-2000"
+"""The example of the Jarrold group's 2000 helium release, as distributed and never edited:
+``a10A1.mfj`` (Ala10Na+, 50 coordinate sets of 104 atoms), its output ``a10A1.out.orig`` and its
+run file ``mobcal.run``."""
+A10A1 = MOBCAL_2000 / "a10A1.mfj"
+A10A1_ORIG = MOBCAL_2000 / "a10A1.out.orig"
+A10A1_REF = REFS / "a10A1.out"
+"""``a10A1.out.orig`` as the shipped helium program prints it under ``METHOD_2000``, tied to the
+original line by line by ``test_reference.py``."""
+METHOD_2000 = "2000-he"
+A10A1_SETS = 50
+SLICE_2000 = 5
+"""The coordinate sets of ``a10A1.mfj`` run in every session; the whole example carries the
+``mobcal2000`` marker."""
+MASS_LINE = " mass of ion ="
+SET_COUNT = re.compile(r"^ number of coordinate sets =\s*(\d+)$")
+
+
+def a10A1_sets(k: int) -> str:
+    """The first ``k`` coordinate sets of ``a10A1.mfj``, its set count line saying ``k``.
+
+    The file is six header lines, then each set's atom lines, each set followed by the atom
+    count. The program treats the sets one after another on one RANLUX stream (``mobil4``,
+    ``mobil2``, then ``ncoord`` reads the next set), so a run of the first k sets prints the
+    lines a run of all of them prints for those sets (``first_sets``)."""
+    if not 2 <= k <= A10A1_SETS:
+        raise ValueError(f"k = {k}: one set takes the program's single-set path")
+    lines = A10A1.read_text(encoding="ascii").split("\n")
+    per = int(lines[2]) + 1
+    out = lines[:6] + lines[6:6 + k * per]
+    out[1] = str(k)
+    return "\n".join(out) + "\n"
+
+
+def first_sets(ref: list[str], new: list[str], k: int) -> tuple[list[str], list[str]]:
+    """What a run of the first ``k`` sets of ``a10A1.mfj`` (``new``) shares with a run of all
+    50 (``ref``): the lines of the whole run from the top to the blank lines before ``coordinate
+    set = k+1``, and as many lines of ``new``, each without its set-count line. Both whole and
+    unchanged for the whole example."""
+    if k == A10A1_SETS:
+        return ref, new
+    end = ref.index(f" coordinate set ={k + 1:5d}")
+    while ref[end - 1] == "":
+        end -= 1
+    return ([s for s in ref[:end] if not SET_COUNT.match(s)],
+            [s for s in new[:end] if not SET_COUNT.match(s)])
+
+
+def underived_2000(old: list[str], new: list[str]) -> list[tuple[str, str]]:
+    """``underived`` against a 2000 output, whose ``mass of ion`` line prints the exponent
+    letter ``D`` where format 604 has printed ``E`` since 2012 (``mobcal.io.outfile``)."""
+    old = [s.replace("D", "E") if s.startswith(MASS_LINE) else s for s in old]
+    return underived(old, new)
+
 
 PROVENANCE = re.compile(r"^ blocks of imp trajectories: ")
 CYCLE = (10, 10)
@@ -63,13 +119,15 @@ class WorkerRun:
 class Pool:
     """What the session built and ran: one binary per gas a selected test needs, the serial
     choline run per selected gas, the split choline runs in helium per selected worker count,
-    the one-cycle worker run per gas checked that way, and the choline runs in helium under
-    Philox per selected worker count (0 is the serial run)."""
+    the one-cycle worker run per gas checked that way, the choline runs in helium under
+    Philox per selected worker count (0 is the serial run), and the runs of the 2000 example
+    per number of its coordinate sets run."""
     binaries: dict[str, Path]
     runs: dict[str, GateRun] = field(default_factory=dict)
     splits: dict[int, Result] = field(default_factory=dict)
     cycles: dict[str, WorkerRun] = field(default_factory=dict)
     philox: dict[int, Result] = field(default_factory=dict)
+    mobcal_2000: dict[int, GateRun] = field(default_factory=dict)
 
     def launcher(self, job: Job) -> list[str]:
         return [str(self.binaries[job.gas])]

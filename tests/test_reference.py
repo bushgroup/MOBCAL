@@ -17,6 +17,12 @@ number. ``gate.underived`` states the rule, the q1st values within what two roun
 4x the 2012 values (``gate.q1st_bound``), and the corrected column must satisfy the identity that
 shows the divisor is right: the wgst-weighted sum of q1st is the printed mean OMEGA*(1,1). The
 2012 column gives a quarter of it.
+
+``tests/reference/a10A1.out`` is held the same way to the 2000 helium release's example output
+``tests/data/mobcal-2000/a10A1.out.orig``, the shipped program run under the 2000 method: the
+same two changes, and the ``mass of ion`` line's exponent letter, ``D`` in 2000 where the 2012
+outputs and the programs since print ``E`` (``gate.underived_2000``). The q1st table and the
+mean are coordinate set 1's.
 """
 
 from __future__ import annotations
@@ -32,15 +38,17 @@ Q1ST_ROWS = 40  # inp, the velocity points
 MEAN = re.compile(r"^ mean OMEGA\*\(1,1\) = (\S+)$")
 
 
-@pytest.fixture(params=sorted(gate.REFERENCE))
+@pytest.fixture(params=[*sorted(gate.REFERENCE), "2000"])
 def pair(request) -> tuple[OutFile, OutFile]:
+    if request.param == "2000":
+        return OutFile.read(gate.A10A1_ORIG), OutFile.read(gate.A10A1_REF)
     name = gate.REFERENCE[request.param]
     return OutFile.read(gate.ORIGINALS / name), OutFile.read(gate.REFS / name)
 
 
-def test_the_references_are_the_2012_outputs_printed_now(pair):
+def test_the_references_are_the_original_outputs_printed_now(pair):
     old, new = pair
-    assert gate.underived(old.lines, new.lines) == []
+    assert gate.underived_2000(old.lines, new.lines) == []
 
 
 def test_exactly_the_two_changes_were_made(pair):
@@ -49,7 +57,10 @@ def test_exactly_the_two_changes_were_made(pair):
     assert len(rows) == Q1ST_ROWS
     differ = [i for i, (a, b) in enumerate(zip(old.lines, new.lines, strict=True)) if a != b]
     atoms = [i for i, s in enumerate(old.lines) if gate.ATOMS.match(s)]
-    assert differ == sorted(atoms + rows) and len(atoms) == 1
+    # and the exponent letter, which only the 2000 output prints as D
+    letter = [i for i, s in enumerate(old.lines) if s.startswith(gate.MASS_LINE) and "D" in s]
+    assert differ == sorted(atoms + rows + letter) and len(atoms) == 1
+    assert len(letter) == (old.input_name == gate.A10A1.name)
 
 
 def test_the_corrected_q1st_sums_to_the_mean_collision_integral(pair):
