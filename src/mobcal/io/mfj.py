@@ -124,7 +124,7 @@ def _nine_column(lines: list[str]) -> str | None:
         return None  # the 2018 MMFF94 layout, which the program reads
     if _is_run_line(seven):
         return ("lines 7 and 8 are a run line and an atom line of nine fields: the nine-column "
-                "layout of MobCal-MPI, which the 2012 program would misread; `mobcal import` "
+                "layout of MobCal-MPI, which the 2012 program would misread; `ccs-ion import` "
                 "reads it into an ion file")
     return (f"{_not_a_run_line(lines[6])}, and line 8 carries the nine fields "
             f"{' '.join(NINE_FIELDS)}: a nine-column MobCal-MPI file with a damaged run line, "

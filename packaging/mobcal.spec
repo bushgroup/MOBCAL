@@ -9,12 +9,14 @@
 # executable and PyInstaller's _internal/; build_bundle.py adds fortran/ and examples/ beside it,
 # where mobcal.fortran.binary_dir() and examples_dir() look in a frozen program.
 #
-# Two executables in the one folder: `mobcal`, the console program (the command line, whose
-# `mobcal gui` also opens the window), and `mobcal-gui`, windowed, which opens the window and
-# nothing else: on Windows the Start-menu shortcut's target, which must not open a console; on
-# macOS the executable of MOBCAL.app, which BUNDLE wraps around the folder. Two Analyses of the
-# same package, since each executable freezes its own entry script; COLLECT keeps one copy of
-# what they share. The third-party runtime dependencies are cclib, which `mobcal import` loads
+# Four executables in the one folder: `mobcal`, the console program (the command line, whose
+# `mobcal gui` also opens the window); `ccs-ion` and `ccs-result`, the console commands named
+# for the file formats they work on, frozen from the same entry script and Analysis as `mobcal`
+# (entrypoint.py runs the command of the executable's own name); and `mobcal-gui`, windowed,
+# which opens the window and nothing else: on Windows the Start-menu shortcut's target, which
+# must not open a console; on macOS the executable of MOBCAL.app, which BUNDLE wraps around the
+# folder. Two Analyses of the same package, since the window's executable freezes its own entry
+# script; COLLECT keeps one copy of what they share. The third-party runtime dependencies are cclib, which `ccs-ion import` loads
 # to read an ORCA output, with numpy, scipy and periodictable under it (PyInstaller's own hooks
 # cover numpy and scipy; periodictable's tables are collected here because no hook does), and
 # PySide6-Essentials, which only mobcal.app imports and PyInstaller's hook collects with the
@@ -138,7 +140,7 @@ _import = {"mobcal.io.structure", "cclib.io.ccio", "cclib.parser.orcaparser",
            "cclib.parser.gaussianparser"}
 if not _import <= _pure:
     raise RuntimeError(f"Refusing to build: {sorted(_import - _pure)} are not in the bundle, so "
-                       "`mobcal import` could not read an ORCA output or recognize a Gaussian "
+                       "`ccs-ion import` could not read an ORCA output or recognize a Gaussian "
                        "one. The Analysis did not follow cli.py's import of mobcal.io.structure "
                        "or its import of cclib.")
 
@@ -225,17 +227,19 @@ def _exe(analysis, name, console):
 
 
 exe = _exe(a, "mobcal", console=True)
+exe_ion = _exe(a, "ccs-ion", console=True)
+exe_result = _exe(a, "ccs-result", console=True)
 exe_gui = _exe(g, "mobcal-gui", console=False)
 
 if sys.platform == "darwin":
-    # The .app's executable is the first EXE its COLLECT names. The console program sits beside
-    # it in Contents/MacOS, where build_bundle.py also puts fortran/ and examples/.
-    coll = COLLECT(exe_gui, exe, a.binaries, a.datas, g.binaries, g.datas, strip=False,
+    # The .app's executable is the first EXE its COLLECT names. The console programs sit beside
+    # it in Contents/MacOS; build_bundle.py puts fortran/ and examples/ in Contents/Resources.
+    coll = COLLECT(exe_gui, exe, exe_ion, exe_result, a.binaries, a.datas, g.binaries, g.datas, strip=False,
                    upx=False, upx_exclude=[], name="mobcal")
     app = BUNDLE(coll, name="MOBCAL.app", icon=os.path.join(ICON, "mobcal.icns"),
                  bundle_identifier="edu.uw.bushgroup.mobcal",
                  info_plist={"CFBundleName": "MOBCAL", "CFBundleDisplayName": "MOBCAL",
                              "NSHighResolutionCapable": True})
 else:
-    coll = COLLECT(exe, exe_gui, a.binaries, a.datas, g.binaries, g.datas, strip=False,
+    coll = COLLECT(exe, exe_ion, exe_result, exe_gui, a.binaries, a.datas, g.binaries, g.datas, strip=False,
                    upx=False, upx_exclude=[], name="mobcal")

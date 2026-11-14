@@ -1,6 +1,6 @@
 # tests/data/qm/
 
-Quantum-chemistry outputs that `mobcal import` reads, kept whole: what `tests/test_import.py`
+Quantum-chemistry outputs that `ccs-ion import` reads, kept whole: what `tests/test_import.py`
 imports, and the worked examples `docs/import.md` points at. Six ORCA 6.1.1 jobs on the choline
 cation (C5H14NO+, 21 atoms, z = +1, singlet), the test ion of the 2012 reference calculations,
 run on 2026-10-26 on Windows 11 with `%pal nprocs 8` and `%maxcore 3000`. Every job starts from

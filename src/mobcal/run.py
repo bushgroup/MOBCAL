@@ -398,7 +398,7 @@ def stage(path: Path, table: ParameterSet) -> Staged:
     text = data.decode("latin-1")
     if mobcalmpi.detect(text):
         raise MfjError(f"{path.name} is in the nine-column layout of MobCal-MPI, which the 2012 "
-                       "program would misread; `mobcal import` it into an ion file and run that")
+                       "program would misread; `ccs-ion import` it into an ion file and run that")
     return Staged(Mfj.parse(text), data, sha, sha)
 
 

@@ -99,7 +99,7 @@ as that line will be written: at most 30 characters, no line break (none of the 
 U+000A to U+000D, U+001C to U+001E, and U+0085, each of which ends a line for some reader), no
 trailing blank, and only characters of ISO 8859-1 (the `.mfj` is written in that encoding). The
 label is never derived from the name of the file when the `.mfj` is written, so renaming an ion
-file does not change the input of a run. `mobcal import` chooses the label once. From an ORCA
+file does not change the input of a run. `ccs-ion import` chooses the label once. From an ORCA
 output, a Gaussian output, or an `.xyz` file, it is the stem of the source file and the charge
 choice joined by `_`, with every character other than a printing ASCII character replaced by
 `_`, cut to 30 characters; from a `.mfj`, it is line 1 of that file ([Importing a structure and
@@ -113,7 +113,7 @@ constant (0.52917706) and multiplies every centred coordinate by the correction 
 centres the ion on its centre of mass. Applying either before the file is written would change
 the last digits of the coordinates the program reads, and would put the constant of the program
 into a file that should not depend on it, so the ion file leaves both to the program. An ion
-file that `mobcal import` writes from an ORCA output, a Gaussian output, or an `.xyz` file is in
+file that `ccs-ion import` writes from an ORCA output, a Gaussian output, or an `.xyz` file is in
 ångström with a correction factor of 1, whereas one written from a `.mfj` keeps the unit and the
 factor of that file.
 
@@ -150,7 +150,7 @@ line, so that the coordinates of each atom take one line of the file.
 
 `molecular_charge` is the integer z the ion carries, stored apart from the partial charges. In
 `calc` mode, when z is given, the charges of every conformer must sum to z within 0.001 e, the
-tolerance `mobcal import` applies to the charges of a quantum chemistry output: the Hirshfeld
+tolerance `ccs-ion import` applies to the charges of a quantum chemistry output: the Hirshfeld
 charges that ORCA integrates on a grid sum to z + 0.0002 for the 21-atom choline cation. The
 charges are written as read and never rescaled to z. A file with no charges, or one read from a
 `.mfj` whose charges do not sum to an integer, carries `null`.
@@ -166,7 +166,7 @@ give it, which differs between them:
 | `equal` | 1/N on every atom, whatever the charges | Σq/N on every atom, from the charges of the first conformer | optional, as read |
 | `none` | no charge | no charge | optional, as read |
 
-`mobcal import` writes `calc` mode from an ORCA output, a Gaussian output, or an `.xyz` file,
+`ccs-ion import` writes `calc` mode from an ORCA output, a Gaussian output, or an `.xyz` file,
 with Q/N written out on every atom when the user asks for `uniform` charges, because `calc` is
 the one mode both programs read the same way. A file read from a `.mfj` in `equal` or `none`
 mode keeps that mode and keeps the charge column as it was read, with `null` for an atom whose
@@ -209,7 +209,7 @@ such a file read as an import source loses nothing. MOBCAL does not assign MMFF9
 
 The keys under `import.source` follow the source program and are kept as written, not refused,
 because MOBCAL does not read them back. [The import record](import.md#the-import-record) says what
-`mobcal import` writes in each field.
+`ccs-ion import` writes in each field.
 
 ## Writing the `.mfj`
 
@@ -233,7 +233,7 @@ when that name is longer than the 30 characters the program reads, from the tabl
 the run. The run record (`record.json`) names the SHA-256 of the ion file and of the `.mfj`
 written from it. The record also keeps the charge mode and, from `import`, the source
 `program`, `version`, `keywords` or `route`, and `charges.choice`, so that the methods paragraph
-names the charges of a run whose ion file has since moved. `mobcal export X.ion.json` writes
+names the charges of a run whose ion file has since moved. `ccs-ion export X.ion.json` writes
 the same file as `X.mfj` beside the ion file, from the default table of each gas, from that of
 the gas `--gas` names, or from the table `--parameters` names
 ([Importing a structure and its charges](import.md#the-command)).
@@ -303,7 +303,7 @@ MOBCAL refuses a file, naming the field, when
   hexadecimal digits.
 
 Writing the `.mfj` refuses, in addition, an element the table of the run lacks and, for a
-nitrogen run, a first conformer without a charge on every atom. `mobcal import` never replaces
+nitrogen run, a first conformer without a charge on every atom. `ccs-ion import` never replaces
 an existing ion file unless given `--force`. The window writes each import into `imported/` in
 the results folder, and replaces a file there only when the same source and the same choice of
 charges now give another ion.

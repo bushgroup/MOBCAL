@@ -1,7 +1,8 @@
 """The result file, ``NAME.result.json`` (``docs/result-file.md``, ``ccs-result`` version 1),
 read back: ``Result.read`` checks it and hands the embedded documents to their own readers,
 ``Result.record`` gives the methods text what it reads from a ``record.json``, and ``unpack``
-writes the two inputs back as files and checks them against the hashes the result recorded.
+writes the two inputs back as files and checks them against the hashes the result recorded
+(the ``ccs-result unpack`` command, ``mobcal.cli``).
 
 The writer is ``mobcal.run.result_document``; the format's constants are here, so that the
 reader need not import the driver. No Qt, no subprocess.
@@ -17,7 +18,7 @@ task 57):
 
 - **The ion file.** An ion file input is embedded as the same JSON value, and ``ion.dumps``
   lays a document out as ``Ion.text`` does, in the document's own key order. A given file that
-  MOBCAL wrote (``mobcal import``, ``Ion.write``) is therefore written back byte for byte, and
+  MOBCAL wrote (``ccs-ion import``, ``Ion.write``) is therefore written back byte for byte, and
   its SHA-256 is the recorded ``inputs.ion.file.sha256``; a file laid out otherwise is written
   back as the same document in MOBCAL's layout, and the hashes differ, which ``unpack`` reports
   without refusing. A ``.mfj`` input is embedded as the ion document reading it gives, and the
@@ -366,6 +367,7 @@ class Unpacked:
     # file cannot reproduce (its values it does)
     staged: bool
     notes: tuple[str, ...]  # what the files are, beyond the hashes, for the person unpacking
+    seed: int  # the run's, which ``rerun`` passes as --seeds
     rerun: tuple[str, ...]  # the arguments of the command that runs the calculation again
 
     @property
@@ -516,4 +518,4 @@ def unpack(r: Result, out_dir: Path | str = ".", force: bool = False) -> Unpacke
     if mb["split"] is not None:
         rerun += ["--split", str(mb["split"])]
     return Unpacked(written[0], written[1], ie["converted_from"], staged, tuple(notes),
-                    tuple(rerun))
+                    r.seed, tuple(rerun))

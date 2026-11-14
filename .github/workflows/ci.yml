@@ -210,7 +210,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/clean" && tar -xzf dist/mobcal-*.tar.gz -C "$RUNNER_TEMP/clean"
           for img in almalinux:8 ubuntu:20.04; do
             echo "== $img"
-            docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp "$img" sh -c '/opt/mobcal-*/mobcal self-check'
+            docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp "$img" sh -c '/opt/mobcal-*/mobcal self-check && /opt/mobcal-*/ccs-ion import -h && /opt/mobcal-*/ccs-result unpack -h'
           done
           echo "== debian:stable-slim, with choline"
           docker run --rm -v "$RUNNER_TEMP/clean:/opt" -w /tmp debian:stable-slim sh -c '/opt/mobcal-*/mobcal self-check --choline'
@@ -236,6 +236,8 @@ jobs:
           codesign --verify --deep --strict "$RUNNER_TEMP/clean/MOBCAL.app"
           cd "$RUNNER_TEMP" && env -i HOME="$HOME" PATH=/usr/bin:/bin "$RUNNER_TEMP"/clean/MOBCAL.app/Contents/MacOS/mobcal self-check --choline
           env -i HOME="$HOME" PATH=/usr/bin:/bin "$RUNNER_TEMP"/clean/MOBCAL.app/Contents/MacOS/mobcal gui --check
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$RUNNER_TEMP"/clean/MOBCAL.app/Contents/MacOS/ccs-ion import -h
+          env -i HOME="$HOME" PATH=/usr/bin:/bin "$RUNNER_TEMP"/clean/MOBCAL.app/Contents/MacOS/ccs-result unpack -h
 
       # Per-user and silent, as a person without admin rights would install it; then the
       # installed command, the PATH entry the default task adds, and a clean uninstall.
@@ -255,6 +257,10 @@ jobs:
           & "$app\mobcal.exe" self-check --choline
           if ($LASTEXITCODE -ne 0) { throw "installed self-check exited $LASTEXITCODE" }
           if (-not (Test-Path "$app\mobcal-gui.exe")) { throw "no mobcal-gui.exe" }
+          foreach ($c in @(@('ccs-ion', 'import'), @('ccs-result', 'unpack'))) {
+            & "$app\$($c[0]).exe" $c[1] -h
+            if ($LASTEXITCODE -ne 0) { throw "the installed $($c[0]) $($c[1]) -h exited $LASTEXITCODE" }
+          }
           $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\MOBCAL\MOBCAL.lnk'
           if (-not (Test-Path $lnk)) { throw "no Start menu shortcut at $lnk" }
           $target = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk).TargetPath

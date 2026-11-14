@@ -1,8 +1,8 @@
 # Running the quantum chemistry for an import
 
-To compute the cross section of an ion from a structure of your own, `mobcal import` needs an output
-that holds one geometry of the ion and a partial charge on every atom ([Importing a structure and
-its charges](import.md)). This page gives ORCA and Gaussian inputs that produce such an output, the
+To compute the cross section of an ion from a structure of your own, `ccs-ion import` needs an
+output that holds one geometry of the ion and a partial charge on every atom ([Importing a
+structure and its charges](import.md)). This page gives ORCA and Gaussian inputs that produce such an output, the
 level of theory and charge scheme that reproduce the charges of the 2012 choline input, and how much
 the choice of charges moves the cross section of that ion in helium and in nitrogen. The worked
 examples are the six ORCA 6.1.1 jobs and three Gaussian 16 Rev. B.01 jobs on the choline cation
@@ -177,7 +177,7 @@ To repeat a row, import the column and run it at the three seeds in each gas, e.
 Gaussian Merz-Kollman row:
 
 ```
-mobcal import tests/data/qm/gaussian/choline_2012_mk/choline_2012_mk.log --charges mk
+ccs-ion import tests/data/qm/gaussian/choline_2012_mk/choline_2012_mk.log --charges mk
 mobcal run choline_2012_mk_mk.ion.json --seeds 5013489,1234567,7654321
 mobcal run choline_2012_mk_mk.ion.json --seeds 5013489,1234567,7654321 --method 2012-philox-n2 --split 10
 ```

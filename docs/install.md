@@ -149,6 +149,10 @@ new archive. On Linux, unpack the new archive and put its folder, `mobcal-<versi
 
 This version treats what version 2.0 wrote as follows.
 
+- `mobcal import` of version 2.0 is `ccs-ion import`. The commands that work on the files of a
+  calculation are named for the formats of those files, `ccs-ion` for the ion file and
+  `ccs-result` for the result file, and are installed beside `mobcal` ([The command
+  line](command-line.md)).
 - A `.mfj` runs as it did. `mobcal import` of version 2.0 wrote a `.mfj` and, beside it, the
   record of the import, `X.import.json`. That `.mfj` still runs, but the record beside it is not
   read. Importing the source again writes an ion file, which carries the record inside it ([The

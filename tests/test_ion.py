@@ -365,20 +365,20 @@ def test_the_page_example_matches_the_stored_file():
     assert copy.deepcopy(d)["import"]["source"]["sha256"][:8] in page
 
 
-# --- mobcal export ---------------------------------------------------------------------------
+# --- ccs-ion export ---------------------------------------------------------------------------
 
 def test_export_writes_the_mfj_a_run_stages_beside_the_ion_file(tmp_path, capsys):
     src = tmp_path / "choline.ion.json"
     src.write_bytes((DATA / "choline.ion.json").read_bytes())
-    assert cli.main(["export", str(src)]) == 0
+    assert cli.ccs_ion(["export", str(src)]) == 0
     out = tmp_path / "choline.mfj"
     assert ("21 atoms, 1 conformer, keys of the 'MOBCAL 2012 helium' and 'MOBCAL 2012 "
             "nitrogen' tables") in capsys.readouterr().out
     assert out.read_bytes() == (DATA / "choline.mfj").read_bytes()
     assert Mfj.read(out) == Mfj.read(CHOLINE)
-    assert cli.main(["export", str(src)]) == 2
+    assert cli.ccs_ion(["export", str(src)]) == 2
     assert "exists; not replacing it" in capsys.readouterr().err
-    assert cli.main(["export", str(src), "--force", "--gas", "he", "--parameters", "2000",
+    assert cli.ccs_ion(["export", str(src), "--force", "--gas", "he", "--parameters", "2000",
                      "-o", str(tmp_path / "c2000.mfj")]) == 0
     assert "keys of the 'MOBCAL 2000 helium' table" in capsys.readouterr().out
     assert (tmp_path / "c2000.mfj").read_bytes() == out.read_bytes()
@@ -388,12 +388,12 @@ def test_export_refuses_an_element_a_table_lacks_and_a_bad_file(tmp_path, capsys
     i = Ion.read(DATA / "choline.ion.json")
     p = dataclasses.replace(i, symbols=("P", *i.symbols[1:]))
     src = p.write(tmp_path / "p.ion.json")
-    assert cli.main(["export", str(src)]) == 2
+    assert cli.ccs_ion(["export", str(src)]) == 2
     assert "P (1 atom) not in the element table" in capsys.readouterr().err
-    assert cli.main(["export", str(src), "--gas", "n2"]) == 0
+    assert cli.ccs_ion(["export", str(src), "--gas", "n2"]) == 0
     assert Mfj.read(tmp_path / "p.mfj").sets[0][0].key == 31
     bad = tmp_path / "bad.ion.json"
     bad.write_text('{"format": "ccs-ion", "version": 2}', encoding="utf-8")
-    assert cli.main(["export", str(bad)]) == 2
+    assert cli.ccs_ion(["export", str(bad)]) == 2
     assert "bad.ion.json: version: 2" in capsys.readouterr().err
     assert not (tmp_path / "bad.mfj").exists()

@@ -1,6 +1,6 @@
-"""Reading a result file back (``mobcal.io.result``) and ``mobcal unpack``: every shape the writer
-makes unpacks into an ion file and a method file that check against the hashes recorded, the
-command it prints makes the same job again, and the 2012 choline run unpacked and run again
+"""Reading a result file back (``mobcal.io.result``) and ``ccs-result unpack``: every shape the
+writer makes unpacks into an ion file and a method file that check against the hashes recorded,
+the command it prints makes the same job again, and the 2012 choline run unpacked and run again
 gives the reference's digits. The stand-in binary for every shape; the built one under the gate.
 """
 
@@ -237,7 +237,7 @@ def test_a_referenced_ion_is_refused_with_its_hash(tmp_path, capsys):
     sha = run.stage(inp, table(job)).sha256
     with pytest.raises(result.ResultError, match=f"by reference, as ok.ion.json .SHA-256 {sha}"):
         result.unpack(result.Result.read(job.result_path), tmp_path / "u")
-    assert cli.main(["unpack", str(job.result_path), "-o", str(tmp_path / "u")]) == 1
+    assert cli.ccs_result(["unpack", str(job.result_path), "-o", str(tmp_path / "u")]) == 1
     assert "by reference" in capsys.readouterr().err
     assert not (tmp_path / "u").exists()
 
@@ -315,24 +315,29 @@ def test_unpack_refuses_a_record_of_no_one_calculation(done, tmp_path, change, m
 def test_a_file_already_there_is_kept_unless_forced(done, tmp_path, capsys):
     out = tmp_path / "u"
     argv = ["unpack", str(done.result_path), "-o", str(out)]
-    assert cli.main(argv) == 0
+    assert cli.ccs_result(argv) == 0
     assert "wrote" in capsys.readouterr().out
-    assert cli.main(argv) == 0  # the same bytes: found, not refused
+    assert cli.ccs_result(argv) == 0  # the same bytes: found, not refused
     assert capsys.readouterr().out.count("found unchanged") == 2
     (out / "ok.ion.json").write_text("{}\n", encoding="utf-8")
-    assert cli.main(argv) == 1
+    assert cli.ccs_result(argv) == 1
     assert "exists with other contents" in capsys.readouterr().err
     assert (out / "ok.ion.json").read_text(encoding="utf-8") == "{}\n"
-    assert cli.main([*argv, "--force"]) == 0
+    assert cli.ccs_result([*argv, "--force"]) == 0
     assert (out / "ok.ion.json").read_bytes() == (tmp_path / "ok.ion.json").read_bytes()
 
 
 def test_the_command_prints_the_checks_and_the_rerun(done, tmp_path, capsys):
-    assert cli.main(["unpack", str(done.result_path), "-o", str(tmp_path / "u")]) == 0
+    assert cli.ccs_result(["unpack", str(done.result_path), "-o", str(tmp_path / "u")]) == 0
     out = capsys.readouterr().out
     assert out.count("SHA-256 matches") == 3  # the ion, the method and the staged .mfj
     u = result.unpack(result.Result.read(done.result_path), tmp_path / "u")
     assert out.endswith(f"to run it again:\n  {u.command}\n")
+    # the seed comes back on a line of its own, the run's, and the command passes it
+    r = result.Result.read(done.result_path)
+    assert u.seed == r.seed and f"\nseed: {r.seed}, " in out
+    i = u.rerun.index("--seeds")
+    assert u.rerun[i + 1] == str(r.seed)
 
 
 # --- a result another program wrote -----------------------------------------------------------
@@ -365,7 +370,7 @@ def test_a_result_another_program_wrote_is_read_for_its_core(done, tmp_path, cap
     assert not (tmp_path / "u").exists()
     with pytest.raises(result.ResultError, match="written by othercode, not MOBCAL; the methods"):
         methods.read_records([path])
-    assert cli.main(["unpack", str(path), "-o", str(tmp_path / "u")]) == 1
+    assert cli.ccs_result(["unpack", str(path), "-o", str(tmp_path / "u")]) == 1
     assert "written by othercode, not MOBCAL" in capsys.readouterr().err
 
 

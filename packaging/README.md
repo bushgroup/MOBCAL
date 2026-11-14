@@ -10,12 +10,14 @@ One layout on every platform, PyInstaller's onedir folder plus two folders the b
 ```
 mobcal/
   mobcal(.exe)        the command, frozen with its own Python; `mobcal gui` opens the window
+  ccs-ion(.exe)       `ccs-ion import` and `ccs-ion export`, the commands of the ion file
+  ccs-result(.exe)    `ccs-result unpack`, the command of the result file
   mobcal-gui(.exe)    the window alone, without a console: the Start-menu shortcut's target
   _internal/          PyInstaller's runtime and the mobcal package, with the element tables
                       in mobcal/parameters/, the five shipped methods in mobcal/methods/,
                       the window's icon in mobcal/app/icons/, the user's guide (docs/*.md,
                       which Help, MOBCAL Help shows) in docs/,
-                      cclib with numpy, scipy and periodictable for `mobcal import`, and
+                      cclib with numpy, scipy and periodictable for `ccs-ion import`, and
                       PySide6-Essentials (QtCore, QtGui, QtWidgets and their plugins) for the
                       window; on Linux, libxcb-cursor.so.0, which Qt's xcb plugin needs
   fortran/            mobcal_he(.exe), mobcal_n2(.exe), build.json
@@ -27,12 +29,16 @@ mobcal/
 
 cclib and what it brings are most of the folder: on Windows (2026-10-26, local binaries) it went
 from 23.6 MB to 124.3 MB, of which scipy is 67 MB and the OpenBLAS libraries that numpy and scipy
-each carry are 40 MB together, and the installer from 8.7 MB to 34.1 MB. Only `mobcal import`
+each carry are 40 MB together, and the installer from 8.7 MB to 34.1 MB. Only `ccs-ion import`
 loads them. The window's Qt (PySide6-Essentials, 73 MB, and shiboken6) and the second executable
 took the Windows folder from 124.3 MB to 207.6 MB (2026-10-26, local binaries); only `mobcal
 gui` and `mobcal-gui` load Qt. `mobcal.spec` leaves out pytest, pluggy and setuptools, which scipy's test helpers
 name: with setuptools in the bundle, PyInstaller adds a runtime hook that imports it on every
-start of the program.
+start of the program. `ccs-ion` and `ccs-result` are two more executables of the console
+Analysis, frozen from the same entry script as `mobcal`, which runs the command of the
+executable's own name. Each embeds its own copy of the Python archive, 9.7 MB on Windows, so the
+two took the Windows folder from 207.9 MB to 227.4 MB and the installer from 62.0 MB to 80.9 MB
+(2026-11-14, local binaries).
 
 `mobcal.fortran.binary_dir()` and `examples_dir()` look in `fortran/` and `examples/` beside the
 executable when the program is frozen, so the frozen program and a source checkout run the same

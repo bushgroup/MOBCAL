@@ -1,7 +1,9 @@
 ; Inno Setup script for the mobcal installer.
 ;
 ; Packages the onedir folder dist\mobcal\ that tools\build_exe.ps1 builds: mobcal.exe (the
-; command), mobcal-gui.exe (the window, without a console) and PyInstaller's _internal\, the
+; command), ccs-ion.exe and ccs-result.exe (the commands named for the ion and result file
+; formats, on the PATH with it), mobcal-gui.exe (the window, without a console) and
+; PyInstaller's _internal\, the
 ; two Fortran binaries built in CI with their build.json under
 ; fortran\, and the 2012 choline input and outputs under examples\. Compile with Inno Setup 6:
 ;

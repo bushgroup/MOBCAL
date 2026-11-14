@@ -1,4 +1,10 @@
-"""The ``mobcal`` command.
+"""The ``mobcal``, ``ccs-ion`` and ``ccs-result`` commands.
+
+``mobcal`` runs calculations and looks after the installation; ``ccs-ion`` and ``ccs-result``
+work on the files of a calculation and are named for their formats (``mobcal.io.ion``,
+``mobcal.io.result``), as the formats are named for the quantity and not the program. Each is
+a console script of the package and an executable of the installed program; the frozen
+executables share one entry script, which picks the command by its own name.
 
     mobcal version
     mobcal self-check [--choline] [--report PATH]
@@ -14,11 +20,11 @@
     mobcal methods-text PATH [PATH ...]
     mobcal gui [--check]
     mobcal render-parameters he|n2 [DIR] [--method KEY|PATH] [--parameters PATH|NAME]
-    mobcal import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
-                  [-o OUT.ion.json] [--force]
-    mobcal export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
-                  [--force]
-    mobcal unpack RESULT.result.json [-o DIR] [--force]
+    ccs-ion import SOURCE [--charges KEY|uniform] [--net-charge Q] [--gas he|n2|both]
+                   [-o OUT.ion.json] [--force]
+    ccs-ion export ION.ion.json [--gas he|n2|both] [--parameters PATH|NAME] [-o OUT.mfj]
+                   [--force]
+    ccs-result unpack RESULT.result.json [-o DIR] [--force]
 
 ``run`` takes input files, ``.mfj`` or ion files (paths or globs), makes one job per input and
 seed, prints how they will use the cores and about how long they will take
@@ -61,8 +67,9 @@ on disk, a dry run unless ``--apply`` (``mobcal.clean``).
 ``--result-ion`` says whether each run's ``NAME.result.json`` embeds the ion document or
 names the file alone (``mobcal.run.RESULT_ION_MODES``, docs/result-file.md).
 ``unpack`` writes a result file's ion and method back as an ion file and a method file,
-checks them against the hashes the result recorded (``mobcal.io.result.unpack``) and prints
-the command that runs the calculation again; it refuses a result that names its ion by
+checks them against the hashes the result recorded (``mobcal.io.result.unpack``), prints the
+seed of the run on a line of its own, and prints the command that runs the calculation again,
+which passes that seed; it refuses a result that names its ion by
 reference, and every refusal exits 1.
 ``methods-text`` prints the methods paragraph and its references for the runs in the run
 directories, folders or result files named (``mobcal.methods.text``).
@@ -144,14 +151,19 @@ def _settings_default() -> str:
                            for k, v in two.items()))
 
 
-def parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(
-        prog="mobcal", description="Collision cross sections by the trajectory method: the 2012 "
-        "MOBCAL Fortran, run many calculations at a time.")
+def _commands(prog: str, description: str):
+    """A parser for ``prog`` with a required subcommand, and the function that adds one."""
+    ap = argparse.ArgumentParser(prog=prog, description=description)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def command(name: str, help: str, description: str | None = None) -> argparse.ArgumentParser:
         return sub.add_parser(name, help=help, description=description or help)
+    return ap, command
+
+
+def parser() -> argparse.ArgumentParser:
+    ap, command = _commands("mobcal", "Collision cross sections by the trajectory method: the "
+                            "2012 MOBCAL Fortran, run many calculations at a time.")
 
     command("version", "Print the package version and the commit it was built from.")
 
@@ -260,6 +272,12 @@ def parser() -> argparse.ArgumentParser:
                    help="Write this TOML file, or this shipped table by name "
                         f"({options.set_names()}), instead of the table of the method or the "
                         "default table for the gas.")
+    return ap
+
+
+def ion_parser() -> argparse.ArgumentParser:
+    ap, command = _commands("ccs-ion", "Ion files, the ccs-ion format: write one from a "
+                            "structure, or the .mfj the 2012 program reads from one.")
 
     m = command("import", "Write an ion file from an ORCA output, a Gaussian output, or an "
                 ".xyz file, with the charges you name, or from a .mfj, with its own.")
@@ -288,6 +306,12 @@ def parser() -> argparse.ArgumentParser:
     x.add_argument("-o", "--out", type=Path, default=None, metavar="OUT.mfj",
                    help="The file to write. Default: ION.mfj beside the ion file.")
     x.add_argument("--force", action="store_true", help="Replace OUT.mfj if it exists.")
+    return ap
+
+
+def result_parser() -> argparse.ArgumentParser:
+    ap, command = _commands("ccs-result", "Result files, the ccs-result format: write the "
+                            "inputs of a calculation back from its result file.")
 
     u = command("unpack", "Write the ion and method of a result file back as files, to run the "
                 "calculation again.",
@@ -296,7 +320,8 @@ def parser() -> argparse.ArgumentParser:
                 "alone. Each file is checked against the SHA-256 the result file records, and the "
                 "ion against the input the program read. A result file that names its ion by "
                 "reference holds no ion to write and is refused. Writes NAME.ion.json and "
-                "NAME.method.json, and prints the command that runs the calculation again.")
+                "NAME.method.json, and prints the seed of the run and the command that runs the "
+                "calculation again at that seed.")
     u.add_argument("result", type=Path, metavar="RESULT.result.json", help="The result file.")
     u.add_argument("-o", "--out", type=Path, default=Path("."), metavar="DIR",
                    help="The folder to write the two files into. Default: the current "
@@ -312,13 +337,22 @@ REFERENCE_OPENING = (
     "`mobcal` is the command line of MOBCAL, one command with a subcommand for each task. "
     "Everything the window does, the command line does too, by the same rules and with the "
     "same records ([The window](window.md)), and it also checks an installation and builds "
-    "the programs from source. `mobcal` runs in any terminal once the installation folder is "
-    "on the `PATH`, which the Windows installer offers to do, and in the **MOBCAL command "
-    "prompt** of the Windows Start menu either way ([Installing MOBCAL](install.md)). The "
-    "options of `mobcal run` and `mobcal import` that the window also sets carry the same "
-    "descriptions as its tooltips, from one table in the package, so the two say the same "
-    "thing about every setting they share. `mobcal COMMAND -h` prints the section of this "
-    "page for that command.")
+    "the programs from source. Two more commands work on the files of a calculation, and "
+    "each is named for its format, as the formats are named for the quantity and not the "
+    "program: `ccs-ion` writes an ion file from a structure and a `.mfj` from an ion file, "
+    "and `ccs-result` writes the ion and the method of a result file back as files. The three "
+    "run in any terminal once the installation folder is on the `PATH`, which the Windows "
+    "installer offers to do, and in the **MOBCAL command prompt** of the Windows Start menu "
+    "either way ([Installing MOBCAL](install.md)). The options of `mobcal run` and "
+    "`ccs-ion import` that the window also sets carry the same descriptions as its tooltips, "
+    "from one table in the package, so the two say the same thing about every setting they "
+    "share. A command and its subcommand with `-h`, such as `mobcal run -h`, print the "
+    "section of this page for that subcommand.")
+
+
+def programs() -> dict[str, argparse.ArgumentParser]:
+    """The three commands' parsers, by the name a user types."""
+    return {"mobcal": parser(), "ccs-ion": ion_parser(), "ccs-result": result_parser()}
 
 
 def _code(help: str) -> str:
@@ -330,18 +364,21 @@ def reference() -> str:
     """``docs/command-line.md``: every subcommand's usage and arguments, from the parser.
     ``tools/make_command_line.py`` writes it and a test holds the committed page to it."""
     # argparse keeps its subcommands and groups in private attributes, stable since 2.7.
-    ap = parser()
-    sub = next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction))
-    short = {a.dest: a.help for a in sub._choices_actions}
+    subs = {}
+    for prog, ap in programs().items():
+        sub = next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction))
+        short = {a.dest: a.help for a in sub._choices_actions}
+        subs.update({(prog, name): (p, short[name]) for name, p in sub.choices.items()})
     lines = ["# The command line", "",
-             "<!-- Generated by tools/make_command_line.py from the argument parser in "
+             "<!-- Generated by tools/make_command_line.py from the argument parsers in "
              "src/mobcal/cli.py and the descriptions in src/mobcal/options.py. Edit those and "
              "run the tool; a test fails while this page differs from what it writes. -->", "",
              REFERENCE_OPENING, ""]
-    lines += [f"- [`mobcal {name}`](#mobcal-{name}): {short[name]}" for name in sub.choices]
-    for name, p in sub.choices.items():
+    lines += [f"- [`{prog} {name}`](#{prog}-{name}): {short}"
+              for (prog, name), (_, short) in subs.items()]
+    for (prog, name), (p, _) in subs.items():
         p.formatter_class = lambda prog: argparse.HelpFormatter(prog, width=REFERENCE_WIDTH)
-        lines += ["", f"## mobcal {name}", "", p.description, "", "```",
+        lines += ["", f"## {prog} {name}", "", p.description, "", "```",
                   p.format_usage().strip(), "```"]
         fmt = argparse.HelpFormatter(p.prog)
         for g in p._action_groups:
@@ -400,15 +437,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "clean":
         return _clean(args)
 
-    if args.cmd == "import":
-        return _import(args)
-
-    if args.cmd == "export":
-        return _export(args)
-
-    if args.cmd == "unpack":
-        return _unpack(args)
-
     if args.cmd == "gui":
         from mobcal.app import main as gui
         return gui(sys.argv[:1], check=args.check)
@@ -448,6 +476,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     return 1
+
+
+def ccs_ion(argv: list[str] | None = None) -> int:
+    """The ``ccs-ion`` command."""
+    args = ion_parser().parse_args(argv)
+    return _import(args) if args.cmd == "import" else _export(args)
+
+
+def ccs_result(argv: list[str] | None = None) -> int:
+    """The ``ccs-result`` command."""
+    return _unpack(result_parser().parse_args(argv))
+
+
+COMMANDS = {"mobcal": main, "ccs-ion": ccs_ion, "ccs-result": ccs_result}  # by executable name
 
 
 def _import(args: argparse.Namespace) -> int:
@@ -555,6 +597,7 @@ def _unpack(args: argparse.Namespace) -> int:
 
     print(said(u.ion, "the ion", u.converted_from == "mfj"))
     print(said(u.method, "the method"))
+    print(f"seed: {u.seed}, the seed of the run, which the command below passes as --seeds")
     if u.staged:
         print("checked: the .mfj this ion file gives for the element table of the method is the "
               "one the program read (SHA-256 matches)")

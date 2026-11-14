@@ -6,7 +6,7 @@ element, and a charge. No atom type, bond or force-field label. ``read`` gets th
 and every charge block that belongs to it; ``convert`` turns one choice of charges into a
 one-conformer ``Ion`` (ångström, ``calc`` mode, the charges declared with where they came from)
 whose ``import`` block is the provenance record; ``write`` writes it as ``X.ion.json``. The
-``.mfj`` a run reads is written from it per run, or on request by ``mobcal export``.
+``.mfj`` a run reads is written from it per run, or on request by ``ccs-ion export``.
 
 Sources. ORCA and Gaussian outputs are read with cclib, pinned in ``pyproject.toml`` and
 imported here only, inside ``read``, so that nothing else in the package loads it or the numpy
@@ -558,7 +558,7 @@ def from_mfj(path: Path | str, gases: tuple[str, ...] = GASES) -> Imported:
 
 
 def default_name(source: Path | str, charges: str | None) -> Path:
-    """Where ``mobcal import`` writes by default: ``SOURCE-STEM_CHARGES.ion.json``, or
+    """Where ``ccs-ion import`` writes by default: ``SOURCE-STEM_CHARGES.ion.json``, or
     ``SOURCE-STEM.ion.json`` for a ``.mfj``, whose charges are not chosen."""
     stem = Path(source).stem
     return Path(f"{stem}_{charges}{ion.SUFFIX}" if charges else f"{stem}{ion.SUFFIX}")
@@ -570,7 +570,7 @@ def write(imported: Imported, out: Path | str, overwrite: bool = False) -> Path:
     out = Path(out)
     if not out.name.endswith(ion.SUFFIX):
         raise StructureError(f"{out}: an import writes an ion file, named X{ion.SUFFIX}; "
-                             "mobcal export writes a .mfj from it")
+                             "ccs-ion export writes a .mfj from it")
     if out.exists() and not overwrite:
         raise StructureError(f"{out} exists; not replacing it")
     try:

@@ -5,7 +5,7 @@ Every file is read on the thread pool as it is added: an ion file or an ``.mfj``
 set counts (the estimate's) and its charge column, anything else through
 ``mobcal.io.structure.read`` (cclib for an ORCA or Gaussian output, whose first import takes
 seconds). A ``.mfj`` in MobCal-MPI's nine-column layout is refused as ``mobcal run`` refuses it,
-pointing at ``mobcal import``. An import's row shows its charge choice: an ESP fit
+pointing at ``ccs-ion import``. An import's row shows its charge choice: an ESP fit
 preselected when the file holds one (``PRESELECT``), otherwise nothing until the user picks, and
 ``uniform`` (Q/N, written as ``calc``) offered last and never preselected. An ``.xyz`` asks for the
 ion's net charge; an output of a version the import is not tested on reads "ready (untested
@@ -177,7 +177,7 @@ def _read_mfj(path: Path) -> Mfj:
     text = path.read_text(encoding="latin-1")
     if mobcalmpi.detect(text):
         raise MfjError("the nine-column layout of MobCal-MPI, which the 2012 program would "
-                       "misread; `mobcal import` it into an ion file and add that")
+                       "misread; `ccs-ion import` it into an ion file and add that")
     return Mfj.parse(text)
 
 

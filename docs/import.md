@@ -2,7 +2,7 @@
 
 The programs read an ion from a `.mfj` file, which gives, for every atom, its x, y, and z
 coordinates, the integer key of its element, and a partial charge. The model needs nothing else
-from a structure: no atom types, no bonds, and no force-field labels. `mobcal import` writes an
+from a structure: no atom types, no bonds, and no force-field labels. `ccs-ion import` writes an
 ion file, `X.ion.json` ([The ion file](ion-file.md)), from an ORCA output, a Gaussian output, or
 an `.xyz` file, with the charges you name, or from a `.mfj`, with its own charges
 ([below](#a-mfj-as-the-source)). The ion file carries the record of where every number came
@@ -24,7 +24,7 @@ imported by the rules on this page, and its row offers the charges the file hold
 ([The window](window.md#inputs)). From a terminal,
 
 ```
-mobcal import choline_sp.out --charges chelpg
+ccs-ion import choline_sp.out --charges chelpg
 ```
 
 reads the ORCA output `choline_sp.out` and writes the ion file `choline_sp_chelpg.ion.json` in
@@ -48,14 +48,14 @@ mobcal run choline_sp_chelpg.ion.json --method 2012-philox-n2
 Each run writes the `.mfj` the program reads from the ion file and the element table of the run,
 and keeps it in the run directory as `choline_sp_chelpg.mfj`
 ([Writing the `.mfj`](ion-file.md#writing-the-mfj)). For a `.mfj` beside the ion file, e.g., to
-read in another program, `mobcal export` writes one, with the key each element has in the
+read in another program, `ccs-ion export` writes one, with the key each element has in the
 element table of each gas (both by default, so the file runs in either):
 
 ```
-mobcal export choline_sp_chelpg.ion.json
+ccs-ion export choline_sp_chelpg.ion.json
 ```
 
-`mobcal export` takes `--gas he` or `n2` for the table of one gas, `--parameters` for another
+`ccs-ion export` takes `--gas he` or `n2` for the table of one gas, `--parameters` for another
 table ([The element tables](parameters.md)), and `-o NAME.mfj` for another name, and it refuses
 an element the table lacks. The `.mfj` it writes is a function of the ion file and the table
 alone, so the same ion file gives the same bytes on every computer.
@@ -161,11 +161,11 @@ separate inputs, which `mobcal run` runs side by side.
 
 ## A `.mfj` as the source
 
-A `.mfj` already holds an ion with its charges, so `mobcal import` takes one without a choice of
+A `.mfj` already holds an ion with its charges, so `ccs-ion import` takes one without a choice of
 charges:
 
 ```
-mobcal import Choline.mfj
+ccs-ion import Choline.mfj
 ```
 
 writes `Choline.ion.json`, i.e., the name of the source file with `.ion.json` in place of `.mfj`.

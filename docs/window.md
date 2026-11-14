@@ -39,10 +39,10 @@ reads a charge on every atom line whatever the mode, so a file with four columns
 with an atom that has no charge, cannot run in nitrogen, and its status says so.
 
 An `.mfj` in the nine-column layout of MobCal-MPI is refused, as `mobcal run` refuses it.
-`mobcal import` reads such a file into an ion file, which the window runs ([A `.mfj` as the
+`ccs-ion import` reads such a file into an ion file, which the window runs ([A `.mfj` as the
 source](import.md#a-mfj-as-the-source)).
 
-An ORCA output, a Gaussian output, or an `.xyz` file is imported as `mobcal import` imports it
+An ORCA output, a Gaussian output, or an `.xyz` file is imported as `ccs-ion import` imports it
 ([Importing a structure and its charges](import.md)), and its row is where the charges are
 chosen. When an output holds an ESP fit, that fit is selected, the Merz-Kollman fit before CHELPG;
 otherwise the row asks for a choice before the batch can run. `uniform`, i.e., the net charge

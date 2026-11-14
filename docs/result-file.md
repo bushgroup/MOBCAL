@@ -333,16 +333,22 @@ failure to write the result file is reported with the run and leaves `record.jso
 ## Reading it back
 
 Because a result file holds both inputs, the calculation can be run again from the result file
-alone. `mobcal unpack` writes the ion and the method back as files and prints the command that
-runs them:
+alone. `ccs-result unpack` writes the ion and the method back as files, gives the seed of the
+run, and prints the command that runs them at that seed. The command is named for the format,
+as the format is named for the quantity and not the program:
 
 ```
-mobcal unpack Choline-he-5013489-ranlux.result.json -o again
+ccs-result unpack Choline-he-5013489-ranlux.result.json -o again
 ```
 
 For the choline example above, the command writes `again/Choline.ion.json` and
-`again/2012-he.method.json` and ends with the following, in which Windows prints each path with
-a backslash:
+`again/2012-he.method.json`, gives the seed on a line of its own after the two files,
+
+```
+seed: 5013489, the seed of the run, which the command below passes as --seeds
+```
+
+and ends with the following, in which Windows prints each path with a backslash:
 
 ```
 to run it again:
@@ -374,7 +380,7 @@ Each file is checked as it is written, and `unpack` says what each check found:
   generator, element table, and six settings must be those the `mobcal` block records, and a
   result file in which they differ is refused.
 - The ion file written back has the bytes of the file the run was given when MOBCAL wrote that
-  file, by `mobcal import` or the window, and its SHA-256 is then the recorded one. An ion file
+  file, by `ccs-ion import` or the window, and its SHA-256 is then the recorded one. An ion file
   laid out otherwise, by hand or by another program, is written back as the same document in
   the MOBCAL layout, with another SHA-256, and `unpack` reports both hashes.
 - The input the program read is checked for an ion file: the `.mfj` the written ion file gives
@@ -388,9 +394,9 @@ this ion file gives holds every value the program read from the original, which 
 reads as numbers and not as text, so the calculation is the same. It is laid out as MOBCAL
 writes a `.mfj` (`1.0` where the 2012 choline input has `1.0000`, and wider columns), so its
 SHA-256 is not the recorded one, which is that of the original `.mfj`. For the choline input of
-the 2012 release, `mobcal unpack` followed by the command it prints reproduces the cross sections
-of the 2012 reference output to the last printed digit, and the tests check this on every change
-to MOBCAL. A run made with a table of your own reruns the same way after its TOML file has
+the 2012 release, `ccs-result unpack` followed by the command it prints reproduces the cross
+sections of the 2012 reference output to the last printed digit, and the tests check this on
+every change to MOBCAL. A run made with a table of your own reruns the same way after its TOML file has
 been deleted, into a run directory of the same name, with the same `parameters.tab` and the same
 output file.
 
@@ -473,7 +479,7 @@ gives them. To write a result file from another program,
 A reader of the core reads those keys from the file of any program and skips a block it does not
 know. MOBCAL reads a result file of another program this way: it checks the core, reads the
 embedded ion as it reads any ion file, checks the core of the embedded method, and skips the
-block. `mobcal unpack` and `mobcal methods-text` refuse such a file, naming the program that
+block. `ccs-result unpack` and `mobcal methods-text` refuse such a file, naming the program that
 wrote it, since both work from the `mobcal` block of a calculation MOBCAL ran.
 `result.schema.json` is the schema of the file as MOBCAL writes it, with `software.name`, `gas`,
 and the two inputs fixed to those of MOBCAL. Another program writes its own schema, which keeps

@@ -8,8 +8,8 @@
    static binary), nothing outside ``/usr/lib`` and ``/System`` on macOS, no MinGW runtime DLL
    on Windows.
 2. Runs PyInstaller on ``packaging/mobcal.spec``, giving ``dist/mobcal/`` with the console
-   ``mobcal`` and the windowed ``mobcal-gui`` in it, and on macOS ``dist/MOBCAL.app``, whose
-   ``Contents/MacOS/`` holds both.
+   ``mobcal``, ``ccs-ion`` and ``ccs-result`` and the windowed ``mobcal-gui`` in it, and on macOS
+   ``dist/MOBCAL.app``, whose ``Contents/MacOS/`` holds all four.
 3. Copies the binaries and ``build.json`` to ``fortran/`` beside the executables (executable,
    since an artifact download loses the mode), ``Choline.mfj``, the two 2012 outputs and one
    ORCA and one Gaussian output of the choline cation (``tests/data/qm/``) to ``examples/``,
@@ -18,10 +18,13 @@
    again, ad hoc, since adding files breaks the seal PyInstaller's ad-hoc signature put on it.
 4. Runs the built program's ``self-check`` with ``PATH`` cut to the operating system's own
    directories and no ``MOBCAL_BIN_DIR``, writing ``build/self-check.log``, times two
-   ``mobcal version`` starts, has the built program import the ORCA example's CHELPG
+   ``mobcal version`` starts, has the built ``ccs-ion`` import the ORCA example's CHELPG
    charges and the Gaussian example's MK charges as ion files and export each as a ``.mfj``,
    each of which must hold what the source tree's import gives, and the ``.mfj`` its bytes
-   (cclib and everything under it are in the bundle and work), and opens and closes the window
+   (cclib and everything under it are in the bundle and work), has the built ``mobcal`` run a
+   short calculation of ``Choline.mfj`` and the built ``ccs-result`` unpack its result file,
+   which must write the files and the seed the source tree's unpack does, and opens and closes
+   the window
    with ``mobcal gui --check`` on Qt's offscreen platform (Qt and its plugins are in the bundle
    and start).
 5. With ``--archive`` (macOS and Linux), writes ``dist/mobcal-<version>-<os>-<arch>.tar.gz``,
@@ -60,8 +63,12 @@ APP = DIST / "MOBCAL.app"  # macOS only
 # (mobcal.fortran.payload_dir finds them in Contents/Resources).
 BUNDLE = APP / "Contents" / "MacOS" if sys.platform == "darwin" else DIST / "mobcal"
 PAYLOAD = APP / "Contents" / "Resources" if sys.platform == "darwin" else BUNDLE
-EXE = "mobcal.exe" if sys.platform == "win32" else "mobcal"
-GUI_EXE = "mobcal-gui.exe" if sys.platform == "win32" else "mobcal-gui"
+_SUFFIX = ".exe" if sys.platform == "win32" else ""
+EXE, ION_EXE, RESULT_EXE, GUI_EXE = (f"{n}{_SUFFIX}" for n in ("mobcal", "ccs-ion", "ccs-result",
+                                                                "mobcal-gui"))
+# The settings of the unpack check's run: the 2012 helium method cut to a second's work.
+SHORT_RUN = ("--method", "2012-he", "--itn", "1", "--inp", "4", "--imp", "10", "--inum", "2000",
+             "--inor", "4")
 WORK = ROOT / "build" / "pyinstaller"
 SELF_CHECK_LOG = ROOT / "build" / "self-check.log"
 
@@ -191,7 +198,7 @@ def self_check() -> None:
 def import_check() -> None:
     from mobcal import parameters
     from mobcal.io import ion, structure
-    exe = BUNDLE / EXE
+    exe = BUNDLE / ION_EXE
     work = ROOT / "build" / "import-check"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
@@ -222,6 +229,39 @@ def import_check() -> None:
                              "which differs from the source tree's")
         print(f"import and export: {example.name} --charges {charges} in {seconds:.2f} s, the "
               "source tree's ion file and .mfj")
+
+
+def unpack_check() -> None:
+    from mobcal.io import result
+    work = ROOT / "build" / "unpack-check"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    t0 = time.perf_counter()
+    proc = subprocess.run([str(BUNDLE / EXE), "run", str(PAYLOAD / "examples" / "Choline.mfj"),
+                           *SHORT_RUN, "--out", str(work / "runs")], env=clean_env(), cwd=work,
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise SystemExit(f"the built program's run failed (exit {proc.returncode}):\n"
+                         f"{proc.stdout}{proc.stderr}")
+    found = sorted((work / "runs").rglob(f"*{result.SUFFIX}"))
+    if len(found) != 1:
+        raise SystemExit(f"the built program's run wrote {len(found)} result files, not one")
+    proc = subprocess.run([str(BUNDLE / RESULT_EXE), "unpack", str(found[0]), "-o",
+                           str(work / "built")], env=clean_env(), cwd=work, capture_output=True,
+                          text=True)
+    if proc.returncode != 0:
+        raise SystemExit(f"the built program's unpack failed (exit {proc.returncode}):\n"
+                         f"{proc.stdout}{proc.stderr}")
+    want = result.unpack(result.Result.read(found[0]), work / "source")
+    got = [work / "built" / w.path.name for w in (want.ion, want.method)]
+    same = (all(g.is_file() and g.read_bytes() == w.path.read_bytes()
+                for g, w in zip(got, (want.ion, want.method), strict=True))
+            and f"\nseed: {want.seed}, " in proc.stdout)
+    if not same:
+        raise SystemExit(f"the built program's unpack of {found[0]} wrote other files or another "
+                         f"seed than the source tree's:\n{proc.stdout}")
+    print(f"run and unpack: Choline.mfj, seed {want.seed}, in "
+          f"{time.perf_counter() - t0:.2f} s, the source tree's ion and method files")
 
 
 def window_check() -> None:
@@ -275,6 +315,7 @@ def main() -> int:
     print(f"bundle: {top}, {size(top):.1f} MB")
     self_check()
     import_check()
+    unpack_check()
     window_check()
     if args.archive:
         out = archive()

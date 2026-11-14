@@ -31,6 +31,8 @@ dependencies = [
 
 [project.scripts]
 mobcal = "mobcal.cli:main"
+ccs-ion = "mobcal.cli:ccs_ion"
+ccs-result = "mobcal.cli:ccs_result"
 
 [project.urls]
 Repository = "https://github.com/bushgroup/MOBCAL"

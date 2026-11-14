@@ -1,4 +1,4 @@
-"""mobcal.io.structure and ``mobcal import``: the ORCA and Gaussian fixtures, the .xyz reader,
+"""mobcal.io.structure and ``ccs-ion import``: the ORCA and Gaussian fixtures, the .xyz reader,
 the refusals, the ion file it writes, and an imported ion run through the driver in both
 gases.
 
@@ -487,13 +487,13 @@ def test_a_gaussian_log_of_another_version_imports_with_a_warning(tmp_path, caps
     assert s.version == "09 Rev. D.01" and s.details["untested_version"] is True
     assert set(s.charges) == G_BLOCKS["choline_2012_mk"]
     monkeypatch.chdir(tmp_path)
-    assert cli.main(["import", str(p), "--charges", "mk"]) == 0
+    assert cli.ccs_ion(["import", str(p), "--charges", "mk"]) == 0
     err = capsys.readouterr().err
     assert err.startswith("warning: g09.log is from Gaussian 09 Rev. D.01; the import is tested "
                           "on Gaussian 16 outputs")
     rec = Ion.read(tmp_path / "g09_mk.ion.json").import_record
     assert rec["source"]["untested_version"] is True
-    assert cli.main(["import", str(GAUSSIAN / "choline_2012_mk" / "choline_2012_mk.log"),
+    assert cli.ccs_ion(["import", str(GAUSSIAN / "choline_2012_mk" / "choline_2012_mk.log"),
                      "--charges", "mk"]) == 0
     io = capsys.readouterr()
     assert io.err == "" and "(Gaussian 16 Rev. B.01), mk charges" in io.out
@@ -628,30 +628,30 @@ def test_a_long_or_unusual_name_gives_a_label_the_program_reads(tmp_path):
 def test_the_command_lists_the_blocks_until_one_is_named(tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
     src = str(ORCA / "choline_two_jobs" / "choline_two_jobs.out")
-    assert cli.main(["import", src]) == 2
+    assert cli.ccs_ion(["import", src]) == 2
     assert "choose the charges: choline_two_jobs.out holds mulliken" in capsys.readouterr().err
     assert list(tmp_path.iterdir()) == []
-    assert cli.main(["import", src, "--charges", "chelpg"]) == 0
+    assert cli.ccs_ion(["import", src, "--charges", "chelpg"]) == 0
     out = capsys.readouterr().out
     assert "21 atoms from choline_two_jobs.out (ORCA 6.1.1), chelpg charges" in out
     assert sorted(p.name for p in tmp_path.iterdir()) == ["choline_two_jobs_chelpg.ion.json"]
-    assert cli.main(["import", src, "--charges", "chelpg"]) == 2
+    assert cli.ccs_ion(["import", src, "--charges", "chelpg"]) == 2
     assert "exists; not replacing it" in capsys.readouterr().err
-    assert cli.main(["import", src, "--charges", "chelpg", "--force"]) == 0
+    assert cli.ccs_ion(["import", src, "--charges", "chelpg", "--force"]) == 0
 
 
 def test_the_command_takes_an_xyz_a_net_charge_and_a_gas(tmp_path, capsys):
     p = xyz(tmp_path, ["P 0 0 0", "H 1.4 0 0", "H -1.4 0 0"], "ph2.xyz")
     out = tmp_path / "ph2.ion.json"
-    assert cli.main(["import", str(p), "--charges", "uniform", "-o", str(out)]) == 2
+    assert cli.ccs_ion(["import", str(p), "--charges", "uniform", "-o", str(out)]) == 2
     assert "does not carry the net charge of the ion" in capsys.readouterr().err
-    assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
+    assert cli.ccs_ion(["import", str(p), "--charges", "uniform", "--net-charge", "1",
                      "-o", str(out)]) == 2
     assert "not in the He element table" in capsys.readouterr().err
-    assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
+    assert cli.ccs_ion(["import", str(p), "--charges", "uniform", "--net-charge", "1",
                      "--gas", "n2", "-o", str(out)]) == 0
     assert Ion.read(out).symbols == ("P", "H", "H")
-    assert cli.main(["import", str(p), "--charges", "uniform", "--net-charge", "1",
+    assert cli.ccs_ion(["import", str(p), "--charges", "uniform", "--net-charge", "1",
                      "--gas", "n2", "-o", str(tmp_path / "ph2.mfj")]) == 2
     assert "an import writes an ion file" in capsys.readouterr().err
 

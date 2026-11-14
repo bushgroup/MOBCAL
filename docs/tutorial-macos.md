@@ -89,7 +89,7 @@ right. At the first launch the method is **MOBCAL 2012 with Philox (He)**, the c
 ## An ORCA output in nitrogen
 
 1. Select the `Choline.mfj` row in Inputs and choose **Remove**. Choose **Add files…** and choose
-   `choline_sp.out` from `MOBCAL examples`. The window imports the output as `mobcal import` does.
+   `choline_sp.out` from `MOBCAL examples`. The window imports the output as `ccs-ion import` does.
    Its row gives 21 atoms and the net charge, 1, read from the output, and the Charges list offers
    each set of charges the output holds: "mulliken", "lowdin", "hirshfeld", "chelpg", and "uniform
    (Q/N on every atom)". The CHELPG charges, which ORCA fitted to the electrostatic potential, are

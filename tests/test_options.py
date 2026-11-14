@@ -24,8 +24,20 @@ OPTIONS = {
 
 
 def commands() -> dict[str, argparse.ArgumentParser]:
-    ap = cli.parser()
-    return next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction)).choices
+    """Every subcommand of the three commands, by its name, which no two share."""
+    out: dict[str, argparse.ArgumentParser] = {}
+    for prog, ap in cli.programs().items():
+        sub = next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction))
+        assert not set(sub.choices) & set(out), prog
+        out.update(sub.choices)
+    return out
+
+
+def program(name: str) -> str:
+    """The command a subcommand belongs to."""
+    return next(prog for prog, ap in cli.programs().items()
+                if name in next(a for a in ap._actions
+                                if isinstance(a, argparse._SubParsersAction)).choices)
 
 
 def test_every_shared_description_is_an_options_help():
@@ -58,7 +70,17 @@ def test_the_command_line_page_is_the_generators():
 def test_the_page_lists_every_command_and_option():
     page = cli.reference()
     for name, p in commands().items():
-        assert f"\n## mobcal {name}\n" in page
+        assert f"\n## {program(name)} {name}\n" in page
         for a in p._actions:
             for flag in a.option_strings:
                 assert flag in page or flag in ("-h", "--help"), flag
+
+
+def test_the_files_commands_are_named_for_their_formats():
+    # ccs-ion and ccs-result take the names of the formats they read and write (mobcal.io.ion,
+    # mobcal.io.result); mobcal keeps none of their subcommands.
+    from mobcal.io import ion, result
+    assert set(cli.programs()) == {"mobcal", ion.FORMAT, result.FORMAT}
+    assert {program(n) for n in ("import", "export")} == {ion.FORMAT}
+    assert program("unpack") == result.FORMAT
+    assert set(cli.COMMANDS) == set(cli.programs())

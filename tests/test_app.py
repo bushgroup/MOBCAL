@@ -1053,7 +1053,7 @@ def test_a_nine_column_mfj_and_a_bad_ion_file_are_refused_saying_why(window, qtb
     bad.write_text('{"format": "ccs-ion", "version": 2}\n', encoding="utf-8")
     add(qtbot, w, ION / "choline_mobcalmpi.mfj", bad)
     nine, two = w.inputs.items
-    assert nine.state == "error" and "nine-column" in nine.error and "mobcal import" in nine.error
+    assert nine.state == "error" and "nine-column" in nine.error and "ccs-ion import" in nine.error
     assert two.state == "error" and "version" in two.error
     assert not w.add_batch_button.isEnabled()
 

@@ -1,5 +1,5 @@
 """MobCal-MPI's nine-column ``.mfj`` as an import source (``mobcal.io.mobcalmpi``), and
-``mobcal import X.mfj`` for both layouts.
+``ccs-ion import X.mfj`` for both layouts.
 
 The fixture, ``tests/data/ion/choline_mobcalmpi.mfj``, is the 2012 choline input in MobCal-MPI
 2.1's layout with its coordinates, charges and masses the 2012 file's, so the ion file read
@@ -176,7 +176,7 @@ def test_a_damaged_run_line_is_refused_by_import_run_and_the_window(igas, tmp_pa
         Mfj.read(p)
     assert str(e.value) == message
     monkeypatch.chdir(tmp_path)
-    assert cli.main(["import", p.name]) == 2
+    assert cli.ccs_ion(["import", p.name]) == 2
     assert capsys.readouterr().err == f"error: x.mfj: {message}\n"
     assert not (tmp_path / "x.ion.json").exists()
     for gas in ("he", "n2"):
@@ -211,32 +211,32 @@ def test_the_2018_mmff94_layout_reads_as_the_2012_program_reads_it(tmp_path):
     assert i.mfj(parameters.shipped("he")) == Mfj.read(CHOLINE)
 
 
-# --- mobcal import X.mfj ---------------------------------------------------------------------
+# --- ccs-ion import X.mfj ---------------------------------------------------------------------
 
 def test_import_writes_the_ion_file_of_either_layout(tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    assert cli.main(["import", str(NINE)]) == 0
+    assert cli.ccs_ion(["import", str(NINE)]) == 0
     out = capsys.readouterr().out
     assert ("wrote choline_mobcalmpi.ion.json: 21 atoms, 1 conformer from "
             "choline_mobcalmpi.mfj (MobCal-MPI layout), calc mode, net charge +1, every element "
             "in the He and N2 tables") in out
     i = Ion.read(tmp_path / "choline_mobcalmpi.ion.json")
     assert i.mfj(parameters.shipped("n2")) == Mfj.read(CHOLINE)
-    assert cli.main(["import", str(CHOLINE)]) == 0
+    assert cli.ccs_ion(["import", str(CHOLINE)]) == 0
     assert "from Choline.mfj, calc mode, net charge +1" in capsys.readouterr().out
     assert Ion.read(tmp_path / "Choline.ion.json").mfj(parameters.shipped("he")) == \
         Mfj.read(CHOLINE)
 
 
 def test_import_of_a_mfj_refuses_a_charge_choice_and_checks_the_gases(tmp_path, capsys):
-    assert cli.main(["import", str(CHOLINE), "--charges", "column", "--net-charge", "1",
+    assert cli.ccs_ion(["import", str(CHOLINE), "--charges", "column", "--net-charge", "1",
                      "-o", str(tmp_path / "c.ion.json")]) == 2
     assert ("Choline.mfj: a .mfj carries its charges, which the ion file keeps as read; "
             "--charges and --net-charge are not taken") in capsys.readouterr().err
     n2 = TESTS / "elements" / "n2.mfj"  # carries phosphorus, which the helium table lacks
-    assert cli.main(["import", str(n2), "-o", str(tmp_path / "n2.ion.json")]) == 2
+    assert cli.ccs_ion(["import", str(n2), "-o", str(tmp_path / "n2.ion.json")]) == 2
     assert "P (1 atom) is not in the He element table" in capsys.readouterr().err
-    assert cli.main(["import", str(n2), "--gas", "n2", "-o", str(tmp_path / "n2.ion.json")]) == 0
+    assert cli.ccs_ion(["import", str(n2), "--gas", "n2", "-o", str(tmp_path / "n2.ion.json")]) == 0
     assert Ion.read(tmp_path / "n2.ion.json").mfj(parameters.shipped("n2")) == Mfj.read(n2)
 
 

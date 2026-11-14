@@ -225,5 +225,5 @@ beside `record.json` ([The result file](result-file.md)). It holds the method as
 document whatever the run was made from: the file of a shipped method, any other method file, or,
 for a run made `custom`, the method its gas, table, generator, and settings make, with the method
 it was made from and the values that differ. Written to a file, that document is a method that
-makes the calculation of the run again, and `mobcal unpack` writes it, beside the ion
+makes the calculation of the run again, and `ccs-result unpack` writes it, beside the ion
 ([Reading it back](result-file.md#reading-it-back)).
