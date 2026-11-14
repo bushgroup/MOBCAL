@@ -20,7 +20,7 @@
 ; MyAppVersion is one of the three version declarations tools\check_public.py compares.
 
 #define MyAppName "MOBCAL"
-#define MyAppVersion "2.0.1.dev0"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "University of Washington"
 #define MyAppURL "https://github.com/bushgroup/MOBCAL"
 #define MyAppExeName "mobcal.exe"
