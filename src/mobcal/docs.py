@@ -3,8 +3,9 @@
 Qt-free, so the window's Help viewer (``mobcal.app.help``) and the tests share it. The pages are
 ``docs/`` in a source checkout and ``docs/`` under the bundle's own directory (``sys._MEIPASS``)
 in an installed program, which ``packaging/mobcal.spec`` ships every page into. ``pages`` lists
-whatever the directory holds: the known pages in ``ORDER``, the window first, then any other
-page by name, so a new page needs no change here.
+whatever the directory holds: the known pages in ``ORDER``, the three tutorials first and the
+window after them, then any other page by name, so a new page needs no change here. The viewer
+opens on the tutorial of the platform it runs on (``first``).
 
 A link between pages is followed in the viewer; a link to anything else in the repository
 (``../README.md``, ``../fortran/README.md``) is opened on GitHub at the installed version's ref
@@ -25,11 +26,13 @@ import mobcal
 from mobcal import fortran
 from mobcal.methods import REPOSITORY
 
-# The window first; the command line as the same program from a terminal; then a calculation
-# in its own order: the ion, what a method is made of, what a run leaves, large ions and long
-# runs; then reproducing the two releases.
-ORDER = ("window.md", "install.md", "command-line.md", "ion-file.md", "import.md", "qm.md",
-         "methods.md", "parameters.md", "settings.md", "random-numbers.md",
+# A first calculation on each platform; the window; the command line as the same program from a
+# terminal; then a calculation in its own order: the ion, what a method is made of, what a run
+# leaves, large ions and long runs; then reproducing the two releases.
+TUTORIALS = {"win32": "tutorial-windows.md", "darwin": "tutorial-macos.md",
+             "linux": "tutorial-linux.md"}
+ORDER = (*TUTORIALS.values(), "window.md", "install.md", "command-line.md", "ion-file.md",
+         "import.md", "qm.md", "methods.md", "parameters.md", "settings.md", "random-numbers.md",
          "results-folder.md", "result-file.md", "large-ions.md", "mobcal-2012.md",
          "mobcal-2000.md")
 
@@ -54,6 +57,11 @@ def docs_dir() -> Path:
 def title(text: str, fallback: str) -> str:
     m = re.search(r"^# +(.+?)\s*$", text, re.M)
     return plain(m.group(1)) if m else fallback
+
+
+def first(platform: str = sys.platform) -> str:
+    """The page the viewer opens on: the tutorial of this platform, else the first in ``ORDER``."""
+    return TUTORIALS.get(platform, ORDER[0])
 
 
 def pages(d: Path | None = None) -> list[Page]:

@@ -1,7 +1,8 @@
 """Help ▸ MOBCAL Help: every page of the user's guide (``mobcal.docs``), offline, in the window.
 
-Left, the contents: each page by its title, the window's page first, with its sections under
-it; above them a search across every page, whose hits replace the contents while it holds text,
+Left, the contents: each page by its title, the three tutorials first and the window's page
+after them, with its sections under it; the viewer opens at the tutorial of this platform.
+Above them, a search across every page, whose hits replace the contents while it holds text,
 listed under their page and the section they are in. Right, the page, as Qt renders Markdown
 (GitHub's dialect: tables and fenced code). A link to another page, or to a section of one, is
 followed here; any other link opens in the system's browser, a file of the repository on GitHub
@@ -170,7 +171,7 @@ class HelpWindow(QWidget):
         self.current: str | None = None
         self.pages: dict[str, Page] = {}
         self.read()
-        self.show_first()
+        self.show_first(docs.first())
 
     # --- reading the pages ----------------------------------------------------------------
 

@@ -6,7 +6,9 @@ Each holds the window ([The window](window.md)), the `mobcal` command ([The comm
 line](command-line.md)), the helium and nitrogen programs compiled for that platform, the 2012
 choline input with its two reference outputs, and these pages, which the window shows under
 **Help ▸ MOBCAL Help**. To run MOBCAL from its source code instead, see [From
-source](#from-source).
+source](#from-source). For a first installation, the tutorial for your platform,
+[Windows](tutorial-windows.md), [macOS](tutorial-macos.md), or [Linux](tutorial-linux.md), gives
+the steps of this page in order and goes on to two calculations in the window.
 
 Released versions are on the
 [Releases page](https://github.com/bushgroup/MOBCAL/releases) of the repository. Between releases,

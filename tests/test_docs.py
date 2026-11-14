@@ -15,13 +15,24 @@ ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 
 
-def test_every_page_is_listed_the_window_first():
+def test_every_page_is_listed_the_tutorials_then_the_window_first():
     pages = docs.pages()
     assert {p.name for p in pages} == {p.name for p in DOCS.glob("*.md")}
-    assert pages[0].name == "window.md" and pages[0].title == "The window"
+    assert [(p.name, p.title) for p in pages[:4]] == [
+        ("tutorial-windows.md", "A first calculation on Windows"),
+        ("tutorial-macos.md", "A first calculation on macOS"),
+        ("tutorial-linux.md", "A first calculation on Linux"), ("window.md", "The window")]
     known = [p.name for p in pages if p.name in docs.ORDER]
     assert known == [n for n in docs.ORDER if n in known]
     assert all(p.title and not p.title.startswith("#") for p in pages)
+
+
+def test_the_viewer_opens_at_the_tutorial_of_the_platform():
+    assert docs.first("win32") == "tutorial-windows.md"
+    assert docs.first("darwin") == "tutorial-macos.md"
+    assert docs.first("linux") == "tutorial-linux.md"
+    assert docs.first("freebsd14") == docs.ORDER[0]
+    assert docs.first() in {p.name for p in docs.pages()}
 
 
 def test_a_new_page_comes_after_the_known_ones(tmp_path):

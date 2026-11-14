@@ -201,7 +201,8 @@ FOLDER` prints the same paragraph for any runs, from their run directories or th
 ## Help
 
 **Help ▸ MOBCAL Help** (F1, or ⌘? on macOS) opens these pages in a window of their own, which can
-stay open beside the main window. The contents list every page, this one first, with its
+stay open beside the main window. It opens on the tutorial for the platform it runs on. The
+contents list every page, the three tutorials first and this page after them, each with its
 sections under it, and the search box above them finds a word or phrase on every page at once
 and lists each place it occurs under its page and section; choosing one opens the page with the
 words selected. A link to another page is followed in the help window, and any other link opens

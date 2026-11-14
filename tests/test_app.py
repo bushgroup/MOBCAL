@@ -691,7 +691,9 @@ def test_help_opens_one_viewer_and_a_second_call_raises_it(window, qtbot):
     w.help_action.trigger()
     h = w.help
     assert h is not None and h.isVisible() and not h.isModal()
-    assert h.current == "window.md" and h.windowTitle() == "The window - MOBCAL Help"
+    first = docs.first()
+    title = {p.name: p.title for p in docs.pages()}[first]
+    assert h.current == first and h.windowTitle() == f"{title} - MOBCAL Help"
     h.open("settings.md")
     h.close()
     w.help_action.trigger()

@@ -43,10 +43,17 @@ run in the folder ([The results folder](docs/results-folder.md)). Adding `--spli
 calculation among eight processes and reports the same result ([Divided
 runs](docs/large-ions.md#divided-runs)).
 
+A tutorial for each platform, [Windows](docs/tutorial-windows.md), [macOS](docs/tutorial-macos.md),
+and [Linux](docs/tutorial-linux.md), takes a new user from the package to two calculations in the
+window in about half an hour: choline in helium, and an ORCA output of the same ion in nitrogen.
+
 ## The guide
 
 The guide is the pages of [`docs/`](docs/), which the window shows under **Help ▸ MOBCAL Help**.
 
+- [A first calculation on Windows](docs/tutorial-windows.md), [on
+  macOS](docs/tutorial-macos.md), and [on Linux](docs/tutorial-linux.md): from the package to two
+  calculations in the window, the help, and the self-check.
 - [The window](docs/window.md): the form, the queue, and the table of results.
 - [Installing MOBCAL](docs/install.md): the three packages and the self-check.
 - [The command line](docs/command-line.md): every command and option.
