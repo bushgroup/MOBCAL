@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-__version__ = "2.1.0"
+__version__ = "2.1.1.dev0"
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
