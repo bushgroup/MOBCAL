@@ -4,14 +4,19 @@
 
 MOBCAL calculates the collision cross section of an ion in helium or in nitrogen by the
 trajectory method, and in helium by the projection approximation and the exact hard-sphere method
-as well. Its two Fortran programs are the 2012 release of MOBCAL (Campuzano et al., *Anal. Chem.*
-2012, 84, 1026), and every change to them since is counted line by line in
-[`fortran/README.md`](fortran/README.md). The Python package around them gives the programs a
-window and a command line, and is distributed for Windows, macOS, and Linux as a program that runs
-without a Fortran compiler and without Python. It runs many calculations at once on the cores of
-a workstation, or divides one calculation among them and reports the result of one process
-exactly. The ion, the method, and the result of a calculation are each a JSON file with a schema,
-so that a cross section can be traced to the calculation that gave it.
+as well. Version 2 runs the models of two releases of MOBCAL as reference methods: the 2012
+release (Campuzano et al., *Anal. Chem.* 2012, 84, 1026), whose two Fortran programs it keeps,
+with every change since counted line by line in [`fortran/README.md`](fortran/README.md), and the
+2000 helium release of the Jarrold group (Mesleh et al., *J. Phys. Chem.* 1996, 100, 16082;
+Shvartsburg and Jarrold, *Chem. Phys. Lett.* 1996, 261, 86), from which the 2012 helium program
+was made. The test suite reproduces the reference cross sections of both releases on Windows,
+macOS, and Linux on every change. The Python package around the programs gives them a window and
+a command line, and is distributed for Windows, macOS, and Linux as a program that runs without a
+Fortran compiler and without Python. It runs many calculations at once on the cores of a
+workstation, or divides one calculation among them and reports the result of one process exactly.
+The programs hold an ion of up to 200,000 atoms, where the 2012 release held 1,000. The ion, the
+method, and the result of a calculation are each a JSON file with a schema, so that a cross
+section can be traced to the calculation that gave it.
 
 ## Installing
 
@@ -75,15 +80,15 @@ The guide is the pages of [`docs/`](docs/), which the window shows under **Help 
   2000](docs/mobcal-2000.md): the commands, and the comparison with the outputs of each release.
 - [`fortran/README.md`](fortran/README.md): every change to the Fortran since 2012.
 
-## MOBCAL 2012 and this version
+## The 2000 and 2012 releases and this version
 
 A run under the default method, `2012-philox-he`, or under its counterpart in nitrogen,
 `2012-philox-n2`, uses the 2012 element table of the gas, the 2012 temperature and sampling
 counts, and, unless it is given another, the 2012 seed. It differs from the calculation of the
 2012 release in one choice, the random number generator, which is Philox4x32-10 where the release
-drew from RANLUX ([Random numbers](docs/random-numbers.md)). A number published from MOBCAL 2012
-reproduces only under RANLUX at its seed, so the calculation of the release is a method of its
-own in each gas:
+drew from RANLUX ([Random numbers](docs/random-numbers.md)). A number computed with the 2000 or
+2012 release reproduces only under RANLUX at its seed, so the calculation of each release is a
+method of its own, in each gas for the 2012 release:
 
 ```
 mobcal run Choline.mfj --method 2012-he
@@ -104,14 +109,27 @@ coordinate set of an input on, which was a copy error ([Silicon in
 nitrogen](docs/mobcal-2012.md#silicon-in-nitrogen)). No change to a parameter will land without a
 stated decision and a stated reason.
 
+The 2000 helium release differs from the 2012 helium calculation in its element table, its
+temperature, 298 K, and its 25 trajectories per block, and the method `2000-he` carries all
+three:
+
+```
+mobcal run a10A1.mfj --method 2000-he --seeds 5013486
+```
+
+On `a10A1.mfj`, the example of the release (a sodiated alanine decamer, 104 atoms in 50
+coordinate sets), this reports the averages of the 2000 output: 183.74 Å² by the projection
+approximation, 206.03 Å² by the exact hard-sphere method, and 196.31 Å² by the trajectory method.
+Compared as [Reproducing MOBCAL 2000](docs/mobcal-2000.md) describes, the output is the 2000
+output in every line but 42, and each of those 42 lines is a change in how a value is printed,
+not in the value. The test suite makes this comparison on Windows, macOS, and Linux, five of the
+50 coordinate sets on every change and all of them weekly ([What the tests
+hold](docs/mobcal-2012.md#what-the-tests-hold)).
+
 The 2012 release is kept as published at
-[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012). The 2000 helium release of the
-Jarrold group, from which the 2012 helium program was made and whose calculation the method
-`2000-he` runs, is kept as distributed at
-[bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), and the test suite holds the
-shipped program to the output of its example, five of the 50 coordinate sets on every change and
-all of them weekly ([What the tests hold](docs/mobcal-2012.md#what-the-tests-hold)). The
-MMFF94/exp-6 programs of 2017 and 2018, a branch of the same lineage, are kept as distributed at
+[bushgroup/MOBCAL-2012](https://github.com/bushgroup/MOBCAL-2012), the 2000 helium release as
+distributed at [bushgroup/MOBCAL-2000](https://github.com/bushgroup/MOBCAL-2000), and the
+MMFF94/exp-6 programs of 2017 and 2018, a branch of the same lineage, as distributed at
 [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018).
 
 ## From source
@@ -150,6 +168,8 @@ The repository holds:
 ## Citation
 
 Any research that uses this code or the included Lennard-Jones parameters should reference [1].
+Calculations under the method `2000-he`, which uses the element table of the 2000 release,
+should also reference [2] and [4].
 
 1. Campuzano, I.; Bush, M. F.; Robinson, C. V.; Beaumont, C.; Richardson, K.; Kim, H.; Kim, H. I.
    Structural Characterization of Drug-like Compounds by Ion Mobility Mass Spectrometry:
@@ -161,6 +181,8 @@ Any research that uses this code or the included Lennard-Jones parameters should
 3. Kim, H.; Kim, H. I.; Johnson, P. V.; Beegle, L. W.; Beauchamp, J. L.; Goddard, W. A.; Kanik,
    I. Experimental and Theoretical Investigation into the Correlation between Mass and Ion
    Mobility for Choline and Other Ammonium Cations in N2. *Anal. Chem.* 2008, 80, 1928-1936.
+4. Shvartsburg, A. A.; Jarrold, M. F. An Exact Hard-Spheres Scattering Model for the Mobilities
+   of Polyatomic Ions. *Chem. Phys. Lett.* 1996, 261, 86-91.
 
 Calculations made with the MMFF94/exp-6 programs of 2017 and 2018 should reference the two papers
 that their repository, [bushgroup/MOBCAL-2018](https://github.com/bushgroup/MOBCAL-2018), lists.
