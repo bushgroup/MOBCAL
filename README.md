@@ -18,6 +18,15 @@ The programs hold an ion of up to 200,000 atoms, where the 2012 release held 1,0
 method, and the result of a calculation are each a JSON file with a schema, so that a cross
 section can be traced to the calculation that gave it.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/window-dark.png">
+  <img alt="The window of MOBCAL during a batch of three runs in nitrogen" src="docs/images/window-light.png">
+</picture>
+
+The window during a batch of three choline inputs in nitrogen under **MOBCAL 2012 with Philox
+(N2)**: two runs are complete, and the third is divided among 36 processes ([The
+window](docs/window.md)).
+
 ## Installing
 
 Released versions are on the [Releases page](https://github.com/bushgroup/MOBCAL/releases): an

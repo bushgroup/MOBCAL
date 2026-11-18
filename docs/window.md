@@ -20,6 +20,13 @@ mobcal gui
 left (Inputs, Method, Basics, Advanced, and Results folder, with the estimate for the batch under
 them), and the Queue, Progress, and Results are on the right.
 
+![The window during a batch of three runs in nitrogen](images/window-light.png)
+
+In this picture, three choline inputs, `Choline.mfj`, an ORCA output, and a Gaussian output, run
+in nitrogen under **MOBCAL 2012 with Philox (N2)**. Two runs are complete and their cross
+sections are in Results, and the third is divided among 36 processes. The window is at its
+smallest size, so Inputs and Results each show one row, and the menu bar is left out.
+
 ## Inputs
 
 To add inputs, choose **Add files…** or drop files on the list; **Remove** takes the selected rows

@@ -4,7 +4,9 @@ Left, the contents: each page by its title, the three tutorials first and the wi
 after them, with its sections under it; the viewer opens at the tutorial of this platform.
 Above them, a search across every page, whose hits replace the contents while it holds text,
 listed under their page and the section they are in. Right, the page, as Qt renders Markdown
-(GitHub's dialect: tables and fenced code). A link to another page, or to a section of one, is
+(GitHub's dialect: tables and fenced code). A picture is read from beside the page, as GitHub
+reads it, drawn at most ``IMAGE_WIDTH`` wide, and under a dark palette a ``-light`` picture is
+shown as its ``-dark`` twin. A link to another page, or to a section of one, is
 followed here; any other link opens in the system's browser, a file of the repository on GitHub
 at the installed version (``mobcal.docs.target``). One viewer per window, non-modal; a second
 F1 brings it forward on the page it was left at.
@@ -26,6 +28,7 @@ from PySide6.QtGui import (
     QDesktopServices,
     QFont,
     QFontDatabase,
+    QImage,
     QKeySequence,
     QPalette,
     QShortcut,
@@ -52,6 +55,7 @@ PAGE, ANCHOR, HIT = Qt.ItemDataRole.UserRole, Qt.ItemDataRole.UserRole + 1, \
     Qt.ItemDataRole.UserRole + 2
 MIN_TERM = 2  # characters before a search runs
 BEFORE, AFTER = 12, 60  # characters of context shown before and after a hit
+IMAGE_WIDTH = 720  # the widest a picture of a page is drawn, in logical pixels
 
 
 def fixed_family() -> str:
@@ -80,6 +84,7 @@ class Page:
         family = fixed_family()
         band = mix(palette.color(QPalette.ColorRole.Base), palette.color(QPalette.ColorRole.Text),
                    0.07)
+        dark = palette.color(QPalette.ColorRole.Base).lightness() < 128
         cur = QTextCursor(self.doc)
         cur.beginEditBlock()
         b = self.doc.begin()
@@ -105,7 +110,9 @@ class Page:
             it = b.begin()
             while not it.atEnd():
                 frag = it.fragment()
-                if code or frag.charFormat().fontFixedPitch():
+                if frag.charFormat().isImageFormat():
+                    self._picture(cur, frag, dark)
+                elif code or frag.charFormat().fontFixedPitch():
                     cur.setPosition(frag.position())
                     cur.setPosition(frag.position() + frag.length(),
                                     QTextCursor.MoveMode.KeepAnchor)
@@ -117,6 +124,27 @@ class Page:
             b = b.next()
         cur.endEditBlock()
         self.doc.setModified(False)
+
+    def _picture(self, cur: QTextCursor, frag, dark: bool) -> None:
+        """A picture on the page, ``![text](images/x.png)``: read from beside the page, as
+        GitHub reads it, and drawn at most ``IMAGE_WIDTH`` wide. Under a dark palette a
+        ``-light`` picture gives way to its ``-dark`` twin when there is one."""
+        fmt = frag.charFormat().toImageFormat()
+        path = self.page.path.parent / fmt.name()
+        if dark and path.stem.endswith("-light"):
+            twin = path.with_name(path.stem[:-len("-light")] + "-dark" + path.suffix)
+            if twin.is_file():
+                path = twin
+        image = QImage(str(path))
+        if image.isNull():
+            return
+        self.doc.addResource(QTextDocument.ResourceType.ImageResource, QUrl(fmt.name()), image)
+        width = min(IMAGE_WIDTH, image.width())
+        fmt.setWidth(width)
+        fmt.setHeight(width * image.height() / image.width())
+        cur.setPosition(frag.position())
+        cur.setPosition(frag.position() + frag.length(), QTextCursor.MoveMode.KeepAnchor)
+        cur.setCharFormat(fmt)
 
     def section_of(self, block: int) -> tuple[str, str]:
         """The heading a block falls under, and its anchor: the nearest above it, or the page's

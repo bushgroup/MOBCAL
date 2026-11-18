@@ -61,6 +61,23 @@ def test_the_spec_ships_every_page():
     spec = (ROOT / "packaging" / "mobcal.spec").read_text(encoding="utf-8")
     assert '(os.path.join(ROOT, "docs", "*.md"), "docs")' in spec
     assert re.search(r"^if _pages != _want_pages:\n    raise RuntimeError", spec, re.M)
+    assert '(os.path.join(ROOT, "docs", "images", "*.png"), os.path.join("docs", "images"))' \
+        in spec
+    assert re.search(r"^if _pictures != _want_pictures:\n    raise RuntimeError", spec, re.M)
+
+
+def test_every_picture_a_page_shows_is_in_docs_images():
+    """The README's banner aside (packaging/), a picture of the guide or the README is a file of
+    docs/images, which the bundle ships and the help viewer reads beside the page."""
+    for page in [*docs.docs_dir().glob("*.md"), ROOT / "README.md"]:
+        text = page.read_text(encoding="utf-8")
+        for src in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text) + re.findall(
+                r'(?:src|srcset)="([^"]+)"', text):
+            if src.startswith("http") or src.startswith("packaging/"):
+                continue
+            path = (page.parent / src).resolve()
+            assert path.is_file(), (page.name, src)
+            assert path.parent == (ROOT / "docs" / "images").resolve(), (page.name, src)
 
 
 @pytest.mark.parametrize("heading, anchor", [

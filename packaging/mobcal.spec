@@ -58,7 +58,8 @@ def _analysis(script):
         binaries=_binaries,
         # The element tables, beside mobcal/parameters/__init__ where mobcal.parameters looks,
         # the shipped methods beside mobcal/methods/__init__, the window's icon where mobcal.app.ICONS looks, and the
-        # guide's pages in docs/ at the top of the bundle, where mobcal.docs looks. The three
+        # guide's pages in docs/ at the top of the bundle, where mobcal.docs looks, with their
+        # pictures in docs/images, where the help viewer reads them beside the page. The three
         # published schemas (mobcal.run.SCHEMAS: the result file's and the ion and method
         # files' it refers to) beside the modules that name them, for other programs and
         # editors to check files against offline; the program itself never loads them.
@@ -72,7 +73,9 @@ def _analysis(script):
                 os.path.join("mobcal", "io")),
                (os.path.join(ROOT, "src", "mobcal", "app", "icons", "*.png"),
                 os.path.join("mobcal", "app", "icons")),
-               (os.path.join(ROOT, "docs", "*.md"), "docs")] + collect_data_files("periodictable"),
+               (os.path.join(ROOT, "docs", "*.md"), "docs"),
+               (os.path.join(ROOT, "docs", "images", "*.png"), os.path.join("docs", "images"))]
+              + collect_data_files("periodictable"),
         hiddenimports=[],
         hookspath=[],
         hooksconfig={},
@@ -180,6 +183,14 @@ if _pages != _want_pages:
     raise RuntimeError(f"Refusing to build: the help pages in the bundle are {sorted(_pages)}, "
                        f"not every page of docs/ ({sorted(_want_pages)}), so Help > MOBCAL Help "
                        "would show a guide with pages missing.")
+_pictures = {os.path.basename(dest) for dest, *_ in g.datas
+             if os.path.dirname(dest.replace("\\", "/")) == "docs/images"}
+_want_pictures = {f for f in os.listdir(os.path.join(ROOT, "docs", "images"))
+                  if f.endswith(".png")}
+if _pictures != _want_pictures:
+    raise RuntimeError(f"Refusing to build: the pictures in the bundle are {sorted(_pictures)}, "
+                       f"not every picture of docs/images ({sorted(_want_pictures)}), so a page "
+                       "of MOBCAL Help would show a picture missing.")
 
 # --- Provenance guard (Windows) -------------------------------------------------------------
 # PyInstaller resolves a collected binary's DLL dependencies through the binary's own directory,

@@ -714,6 +714,58 @@ def test_every_page_loads_with_githubs_anchors_on_its_headings(window):
     assert top == [p.title for p in pages]
 
 
+def test_a_picture_is_read_from_beside_its_page_fitted_and_dark_under_a_dark_palette(
+        qtbot, tmp_path):
+    from PySide6.QtGui import QImage, QTextDocument
+
+    from mobcal.app import help as helpview
+
+    (tmp_path / "images").mkdir()
+    for name, colour in (("w-light.png", Qt.GlobalColor.white), ("w-dark.png", Qt.GlobalColor.black)):
+        img = QImage(2000, 500, QImage.Format.Format_RGB32)
+        img.fill(colour)
+        img.save(str(tmp_path / "images" / name))
+    md = tmp_path / "pic.md"
+    md.write_text("# Pic\n\n![the window](images/w-light.png)\n", encoding="utf-8")
+    page = docs.Page(md, "Pic")
+    holder = QWidget()
+    qtbot.addWidget(holder)
+    light, dark = QPalette(), QPalette()
+    light.setColor(QPalette.ColorRole.Base, QColor("white"))
+    dark.setColor(QPalette.ColorRole.Base, QColor("#202020"))
+    for palette, want in ((light, QColor("white")), (dark, QColor("black"))):
+        p = helpview.Page(page, QFont(), palette, holder)
+        b = p.doc.begin().next()
+        it = b.begin()
+        while not it.fragment().charFormat().isImageFormat():
+            it += 1
+        fmt = it.fragment().charFormat().toImageFormat()
+        assert (fmt.width(), fmt.height()) == (helpview.IMAGE_WIDTH, helpview.IMAGE_WIDTH / 4)
+        got = p.doc.resource(QTextDocument.ResourceType.ImageResource, QUrl(fmt.name()))
+        assert got.pixelColor(0, 0) == want
+
+
+def test_every_picture_of_the_guide_is_in_docs_images_and_loads(window):
+    from mobcal.app import help as helpview
+
+    h = window.show_help()
+    shown = 0
+    for name, p in h.pages.items():
+        b = p.doc.begin()
+        while b.isValid():
+            it = b.begin()
+            while not it.atEnd():
+                f = it.fragment().charFormat()
+                if f.isImageFormat():
+                    f = f.toImageFormat()
+                    assert f.name().startswith("images/"), (name, f.name())
+                    assert 0 < f.width() <= helpview.IMAGE_WIDTH, (name, f.name())  # it loaded
+                    shown += 1
+                it += 1
+            b = b.next()
+    assert shown >= 1  # the window, on its page
+
+
 def test_a_link_to_a_section_of_another_page_is_followed(window, qtbot):
     h = window.show_help()
     h.resize(900, 500)
