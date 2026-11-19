@@ -721,7 +721,8 @@ def test_a_picture_is_read_from_beside_its_page_fitted_and_dark_under_a_dark_pal
     from mobcal.app import help as helpview
 
     (tmp_path / "images").mkdir()
-    for name, colour in (("w-light.png", Qt.GlobalColor.white), ("w-dark.png", Qt.GlobalColor.black)):
+    for name, colour in (("w-light.png", Qt.GlobalColor.white),
+                         ("w-dark.png", Qt.GlobalColor.black)):
         img = QImage(2000, 500, QImage.Format.Format_RGB32)
         img.fill(colour)
         img.save(str(tmp_path / "images" / name))

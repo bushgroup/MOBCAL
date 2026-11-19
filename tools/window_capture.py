@@ -151,7 +151,8 @@ def main(argv: list[str]) -> int:
         hints.setColorScheme(Qt.ColorScheme.Light)
         settle()
         print(f"  status: {w.status_label.text()}")
-        print(f"  in flight: {[w.running_list.item(i).text() for i in range(w.running_list.count())]}")
+        flight = [w.running_list.item(i).text() for i in range(w.running_list.count())]
+        print(f"  in flight: {flight}")
         print(f"  rows shown: inputs {visible_rows(w.inputs.table)} of "
               f"{w.inputs.table.rowCount()}, results {visible_rows(w.results_table)} of "
               f"{w.results_table.rowCount()}")
