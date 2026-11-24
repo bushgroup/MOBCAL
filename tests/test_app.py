@@ -348,7 +348,9 @@ def test_opening_advanced_scrolls_the_form_and_never_raises_the_minimum_height(w
     qtbot.waitUntil(lambda: column.verticalScrollBar().maximum() > 0)
     assert w.minimumSizeHint().height() == folded and w.height() == folded
     qtbot.waitUntil(lambda: not w.advanced.visibleRegion().isEmpty())  # scrolled into view
-    assert column.horizontalScrollBar().maximum() == 0
+    # once the splitter has made room for the open fold, nothing is wider than the column
+    qtbot.waitUntil(lambda: column.horizontalScrollBar().maximum() == 0)
+    assert column.horizontalScrollBar().value() == 0
     # tall enough for the form at its minimum, nothing scrolls: the fields are not stretched
     form = column.widget()
     w.resize(1280, w.height() + form.height() - column.viewport().height())
