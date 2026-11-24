@@ -222,6 +222,7 @@ class MainWindow(QMainWindow):
     # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
+        self._ended_line = ""  # the status line a batch last ended on, for Copy methods text
         """File ▸ Load method…, Save method… and Exit, which closes the window by the same path
         as its close button; Help ▸ MOBCAL Help, at the platform's help key, and About. The
         roles put Exit and About in the application menu on macOS. The batch controls are the
@@ -856,7 +857,7 @@ class MainWindow(QMainWindow):
         self.results = [r for r in s.results if not r.waiting]
         self._draw_results()
         out = self.worker.batch.out_dir if self.worker else self.out_dir
-        self.status_label.setText(f"{self.current_title}: {s}; summary.csv in {out}")
+        self._show_ended(f"{self.current_title}: {s}; summary.csv in {out}")
         self.methods_button.setEnabled(bool(s.ok))
 
     def _on_failed(self, message: str) -> None:
@@ -879,7 +880,7 @@ class MainWindow(QMainWindow):
         if was == PAUSING and left:
             self._pin(dataclasses.replace(w.batch, remaining=tuple(left)))
             n = len(left)
-            self.status_label.setText(
+            self._show_ended(
                 f"{self.current_title}: paused, {n} run{'s' if n != 1 else ''} left; "
                 f"{len(self.results)} landed, summary.csv in {w.batch.out_dir}")
         else:
@@ -925,6 +926,12 @@ class MainWindow(QMainWindow):
         now = time.monotonic()
         for label, (job, t0) in self.running.items():
             text = f"{label}: {estimate.duration(now - t0)}"
+    def _show_ended(self, line: str) -> None:
+        """Show the line a batch ends on (it ends in a folder, with no full stop) and keep it,
+        so Copy methods text can add a sentence of its own without cutting the folder's name."""
+        self._ended_line = line
+        self.status_label.setText(line)
+
             if job.split:
                 n, total = self.blocks.get(label, (0, 0))
                 text += f", {job.split} processes" + (f", {n} of {total} blocks" if total else "")
@@ -1283,8 +1290,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Methods text", str(e))
             return
         QGuiApplication.clipboard().setText(text)
-        self.status_label.setText(self.status_label.text().split(" Methods text")[0]
-                                  + " Methods text copied.")
+        self.status_label.setText(f"{self._ended_line}. Methods text copied.")
 
     # --- closing ---------------------------------------------------------------------------
 

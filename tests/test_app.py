@@ -427,6 +427,21 @@ def test_add_batch_only_queues_and_the_queue_survives(window, qtbot, tmp_path):
     saved, problems = batches.load(w.store.queue_path)
     assert [b.title() for b in saved] == ["MOBCAL 2012 with Philox (He)",
                                           "MOBCAL 2012 with Philox (He)",
+def test_copy_methods_text_ends_the_status_line_in_a_sentence_of_its_own(window, qtbot, tmp_path):
+    w = window
+    folder = tmp_path / "Methods text results"  # a name that holds the words the copy adds
+    w.out_edit.setText(str(folder))
+    add(qtbot, w, write_input(tmp_path / "a.mfj", "a"))
+    run(w)
+    wait_idle(qtbot, w)
+    line = w.status_label.text()
+    assert line.endswith(f"summary.csv in {folder}")
+    w.copy_methods_text()
+    assert w.status_label.text() == f"{line}. Methods text copied."
+    w.copy_methods_text()  # pressed again, it reads the same
+    assert w.status_label.text() == f"{line}. Methods text copied."
+
+
                                           "MOBCAL 2012 (N2)"] and not problems
     assert saved[0].remaining == labels(saved[0], 5013489) and saved[1].remaining is None
     assert saved[1].seeds == (5013489, 5013490)
@@ -502,6 +517,10 @@ def test_remove_batch_on_the_running_row_asks_then_stops_and_leaves_the_queue_pa
     w.queue.item(0).setSelected(True)
     w._answers.append(QMessageBox.StandardButton.No)
     w.remove_clicked()
+    paused = w.status_label.text()
+    assert w.methods_button.isEnabled()  # the run that landed
+    w.copy_methods_text()
+    assert w.status_label.text() == f"{paused}. Methods text copied."
     assert w.state == win.RUNNING and not w.worker.stopping
     w.queue.item(0).setSelected(True)
     w.remove_clicked()  # answered yes
