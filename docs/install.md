@@ -70,6 +70,9 @@ tar -xzf mobcal-<version>-linux-x86_64.tar.gz -C ~
 export PATH="$HOME/mobcal-<version>:$PATH"
 ```
 
+The `export` line holds for this terminal only. To run `mobcal` in every new terminal, add the
+same line to `~/.bashrc`, or to the startup file of your shell.
+
 The helium and nitrogen programs are linked statically and depend on no library. The `mobcal`
 command needs a glibc-based distribution; each build is tested in AlmaLinux 8, Ubuntu 20.04, and
 Debian stable containers that have neither a compiler nor Python installed, and the oldest of
