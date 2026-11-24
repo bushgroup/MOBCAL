@@ -6,8 +6,9 @@ element table, seeds, temperature), an Advanced fold (generator, the five sampli
 the batch uses the cores), and the results folder, one per study, remembered. The method shown
 is the one the fields make, or *Custom (from …)* once a field moves off every method; the runs'
 records say the same. The gas is a method's field like any other: changing it shows the same
-method in the other gas when there is one. Under the form, the estimate for the batch as it
-stands.
+method in the other gas when there is one. The form scrolls when the window is shorter than
+it (``FormColumn``), so opening Advanced never raises the window's minimum height. Under the
+form, outside the scroll, the estimate for the batch as it stands.
 
 Above, a menu bar: File ▸ Load method…, Save method… and Exit, and Help ▸ MOBCAL Help (F1,
 the guide in a window of its own, ``mobcal.app.help``) and About. Load method adds a method file
@@ -49,7 +50,7 @@ import sys
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -71,6 +72,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QSplitter,
     QTableWidget,
@@ -153,6 +155,62 @@ def open_file(path: Path) -> None:
         subprocess.Popen(["notepad.exe", str(path)])
 
 
+class FormLayout(QVBoxLayout):
+    """The form's layout, which a scroll area sizes by its minimum height, not its preferred.
+
+    A word-wrapped label (the cores line under Advanced) makes a layout height-for-width, and
+    ``QScrollArea`` then gives such a form its preferred height: the Inputs table grows and the
+    column scrolls even when every field would fit. Reported as not height-for-width, the form
+    is given its minimum instead, which counts what a wrapped item needs at the width it has.
+    """
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802 -- Qt's name
+        return False
+
+    def minimumSize(self) -> QSize:  # noqa: N802
+        size = super().minimumSize()
+        m = self.contentsMargins()
+        width = self.geometry().width() - m.left() - m.right()
+        if width > 0:
+            for i in range(self.count()):
+                item = self.itemAt(i)
+                if item.hasHeightForWidth() and not item.isEmpty():
+                    size.setHeight(size.height() + max(
+                        0, item.heightForWidth(width) - item.minimumSize().height()))
+        return size
+
+
+class FormColumn(QScrollArea):
+    """The left column's form, scrolled when the window is shorter than it.
+
+    Its minimum height is the form's with the Advanced fold closed, open or not, so opening the
+    fold never raises the window's minimum height (on a short screen it once pushed the title
+    bar off the top), and with the fold closed the window is the size it always was. Its
+    minimum width is the form's plus the vertical bar's, so no horizontal bar is ever needed.
+    """
+
+    def __init__(self, form: QWidget, fold: QWidget) -> None:
+        super().__init__()
+        self.fold = fold  # the Advanced group, shown and hidden by its toggle
+        self.floor: int | None = None  # the form's minimum height with the fold closed
+        self.setWidget(form)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        form.installEventFilter(self)
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 -- Qt's name
+        hint = self.widget().minimumSizeHint()
+        if self.fold.isHidden() or self.floor is None:
+            self.floor = hint.height()  # nothing under it wraps, so it holds at any width
+        return QSize(hint.width() + self.verticalScrollBar().sizeHint().width(), self.floor)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if watched is self.widget() and event.type() == QEvent.Type.LayoutRequest:
+            self.updateGeometry()  # the form's width may move with the fold or a method
+        return super().eventFilter(watched, event)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, store: Store | None = None, launcher: Launcher | None = None,
                  cpus: int | None = None) -> None:
@@ -164,6 +222,7 @@ class MainWindow(QMainWindow):
         self.current: Batch | None = None  # the queue's top row: running, pausing or paused
         self.help: HelpWindow | None = None
         self.results: list[Result] = []
+        self._ended_line = ""  # the status line a batch last ended on, for Copy methods text
         self.running: dict[str, tuple[Job, float]] = {}  # label -> job, start time
         self.blocks: dict[str, tuple[int, int]] = {}
         self.plan: estimate.Plan | None = None
@@ -178,18 +237,26 @@ class MainWindow(QMainWindow):
         self._closing = False
         self.setWindowTitle(f"MOBCAL {mobcal.__version__}")
 
-        left = QWidget()
-        lv = QVBoxLayout(left)
+        form = QWidget()
+        fv = FormLayout(form)
+        fv.setContentsMargins(0, 0, 0, 0)
         self.inputs = InputsPanel()
         self.inputs.start_dir = self.store.input_dir
         self.inputs.browse_dir_changed.connect(lambda d: setattr(self.store, "input_dir", d))
         box = QGroupBox("Inputs")
         QVBoxLayout(box).addWidget(self.inputs)
-        lv.addWidget(box, 1)
-        lv.addWidget(self._method_box())
-        lv.addWidget(self._basics_box())
-        lv.addWidget(self._advanced_box())
-        lv.addWidget(self._folder_box())
+        fv.addWidget(box, 1)
+        fv.addWidget(self._method_box())
+        fv.addWidget(self._basics_box())
+        fv.addWidget(self._advanced_box())
+        fv.addWidget(self._folder_box())
+        self.form_column = FormColumn(form, self.advanced)
+        # opened on a short window, the fold would land below the view: bring it into it
+        self.advanced_toggle.toggled.connect(lambda on: on and QTimer.singleShot(
+            0, lambda: self.form_column.ensureWidgetVisible(self.advanced, 0, 0)))
+        left = QWidget()
+        lv = QVBoxLayout(left)
+        lv.addWidget(self.form_column, 1)
         self.estimate_label = QLabel()
         self.estimate_label.setWordWrap(True)
         lv.addWidget(self.estimate_label)
@@ -222,7 +289,6 @@ class MainWindow(QMainWindow):
     # --- the menus ------------------------------------------------------------------------
 
     def _actions(self) -> None:
-        self._ended_line = ""  # the status line a batch last ended on, for Copy methods text
         """File ▸ Load method…, Save method… and Exit, which closes the window by the same path
         as its close button; Help ▸ MOBCAL Help, at the platform's help key, and About. The
         roles put Exit and About in the application menu on macOS. The batch controls are the
@@ -860,6 +926,12 @@ class MainWindow(QMainWindow):
         self._show_ended(f"{self.current_title}: {s}; summary.csv in {out}")
         self.methods_button.setEnabled(bool(s.ok))
 
+    def _show_ended(self, line: str) -> None:
+        """Show the line a batch ends on (it ends in a folder, with no full stop) and keep it,
+        so Copy methods text can add a sentence of its own without cutting the folder's name."""
+        self._ended_line = line
+        self.status_label.setText(line)
+
     def _on_failed(self, message: str) -> None:
         self.status_label.setText(f"{self.current_title}: did not run: {message}")
 
@@ -926,12 +998,6 @@ class MainWindow(QMainWindow):
         now = time.monotonic()
         for label, (job, t0) in self.running.items():
             text = f"{label}: {estimate.duration(now - t0)}"
-    def _show_ended(self, line: str) -> None:
-        """Show the line a batch ends on (it ends in a folder, with no full stop) and keep it,
-        so Copy methods text can add a sentence of its own without cutting the folder's name."""
-        self._ended_line = line
-        self.status_label.setText(line)
-
             if job.split:
                 n, total = self.blocks.get(label, (0, 0))
                 text += f", {job.split} processes" + (f", {n} of {total} blocks" if total else "")

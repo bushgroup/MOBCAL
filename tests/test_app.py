@@ -336,6 +336,44 @@ def test_the_estimate_and_add_batch(window, qtbot):
         w.estimate_label.text()
 
 
+def test_opening_advanced_scrolls_the_form_and_never_raises_the_minimum_height(window, qtbot):
+    w = window
+    w.show()
+    w.resize(1280, 1)  # the layout raises it to the minimum height
+    qtbot.waitUntil(lambda: w.height() == w.minimumSizeHint().height())
+    folded = w.minimumSizeHint().height()
+    column = w.form_column
+    assert column.verticalScrollBar().maximum() == 0  # folded, the form fits at the minimum
+    w.advanced_toggle.setChecked(True)
+    qtbot.waitUntil(lambda: column.verticalScrollBar().maximum() > 0)
+    assert w.minimumSizeHint().height() == folded and w.height() == folded
+    qtbot.waitUntil(lambda: not w.advanced.visibleRegion().isEmpty())  # scrolled into view
+    assert column.horizontalScrollBar().maximum() == 0
+    # tall enough for the form at its minimum, nothing scrolls: the fields are not stretched
+    form = column.widget()
+    w.resize(1280, w.height() + form.height() - column.viewport().height())
+    qtbot.waitUntil(lambda: column.verticalScrollBar().maximum() == 0)
+    w.advanced_toggle.setChecked(False)
+    w.resize(1280, 1)
+    qtbot.waitUntil(lambda: w.height() == folded)
+
+
+def test_a_geometry_taller_than_the_screen_comes_back_on_it(qtbot, tmp_path):
+    store = Store(QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat),
+                  data_dir=tmp_path / "appdata")
+    screen = QGuiApplication.primaryScreen().availableGeometry()
+    tall = MainWindow(store, launcher=launcher, cpus=8)
+    qtbot.addWidget(tall)
+    tall.setGeometry(screen.x(), screen.y() - 200, 1280, screen.height() + 400)
+    store.geometry = tall.saveGeometry()
+    w = MainWindow(store, launcher=launcher, cpus=8)
+    qtbot.addWidget(w)
+    w.show()
+    # the title bar on the screen, not above it, and the window inside it
+    assert screen.top() <= w.frameGeometry().top() and w.geometry().bottom() <= screen.bottom()
+    assert w.minimumSizeHint().height() < screen.height()
+
+
 # --- running ---------------------------------------------------------------------------
 
 def test_the_mode_is_a_preference_the_estimate_follows(window, qtbot, tmp_path):
@@ -389,6 +427,21 @@ def test_a_batch_runs_and_fills_the_results(window, qtbot, tmp_path):
     assert QGuiApplication.clipboard().text().splitlines()[0].startswith("ion\tinput\tgas\tTM")
 
 
+def test_copy_methods_text_ends_the_status_line_in_a_sentence_of_its_own(window, qtbot, tmp_path):
+    w = window
+    folder = tmp_path / "Methods text results"  # a name that holds the words the copy adds
+    w.out_edit.setText(str(folder))
+    add(qtbot, w, write_input(tmp_path / "a.mfj", "a"))
+    run(w)
+    wait_idle(qtbot, w)
+    line = w.status_label.text()
+    assert line.endswith(f"summary.csv in {folder}")
+    w.copy_methods_text()
+    assert w.status_label.text() == f"{line}. Methods text copied."
+    w.copy_methods_text()  # pressed again, it reads the same
+    assert w.status_label.text() == f"{line}. Methods text copied."
+
+
 def serial(w: MainWindow, seeds: int) -> None:
     """One run at a time, one process each, so a pause finds one run in flight and the rest
     not started."""
@@ -427,21 +480,6 @@ def test_add_batch_only_queues_and_the_queue_survives(window, qtbot, tmp_path):
     saved, problems = batches.load(w.store.queue_path)
     assert [b.title() for b in saved] == ["MOBCAL 2012 with Philox (He)",
                                           "MOBCAL 2012 with Philox (He)",
-def test_copy_methods_text_ends_the_status_line_in_a_sentence_of_its_own(window, qtbot, tmp_path):
-    w = window
-    folder = tmp_path / "Methods text results"  # a name that holds the words the copy adds
-    w.out_edit.setText(str(folder))
-    add(qtbot, w, write_input(tmp_path / "a.mfj", "a"))
-    run(w)
-    wait_idle(qtbot, w)
-    line = w.status_label.text()
-    assert line.endswith(f"summary.csv in {folder}")
-    w.copy_methods_text()
-    assert w.status_label.text() == f"{line}. Methods text copied."
-    w.copy_methods_text()  # pressed again, it reads the same
-    assert w.status_label.text() == f"{line}. Methods text copied."
-
-
                                           "MOBCAL 2012 (N2)"] and not problems
     assert saved[0].remaining == labels(saved[0], 5013489) and saved[1].remaining is None
     assert saved[1].seeds == (5013489, 5013490)
@@ -479,6 +517,10 @@ def test_pause_drains_and_resume_runs_exactly_the_runs_left(window, qtbot, tmp_p
     assert w.toggle_button.text() == "Resume queue" and w.toggle_button.isEnabled()
     assert "2 runs left" in w.queue.item(0).text() and "paused, 2 runs left" in \
         w.status_label.text()
+    paused = w.status_label.text()
+    assert w.methods_button.isEnabled()  # the run that landed
+    w.copy_methods_text()
+    assert w.status_label.text() == f"{paused}. Methods text copied."
     assert batches.load(w.store.queue_path)[0][0].remaining == w.current.remaining
     w.toggle_clicked()  # Resume queue
     qtbot.waitUntil(lambda: w.plan is not None, timeout=20_000)
@@ -517,10 +559,6 @@ def test_remove_batch_on_the_running_row_asks_then_stops_and_leaves_the_queue_pa
     w.queue.item(0).setSelected(True)
     w._answers.append(QMessageBox.StandardButton.No)
     w.remove_clicked()
-    paused = w.status_label.text()
-    assert w.methods_button.isEnabled()  # the run that landed
-    w.copy_methods_text()
-    assert w.status_label.text() == f"{paused}. Methods text copied."
     assert w.state == win.RUNNING and not w.worker.stopping
     w.queue.item(0).setSelected(True)
     w.remove_clicked()  # answered yes

@@ -18,7 +18,8 @@ mobcal gui
 
 [Installing MOBCAL](install.md) says where each package puts the program. The form is on the
 left (Inputs, Method, Basics, Advanced, and Results folder, with the estimate for the batch under
-them), and the Queue, Progress, and Results are on the right.
+them), and the Queue, Progress, and Results are on the right. When the window is shorter than the
+form, as it can be with Advanced open, the form scrolls and the estimate stays in view below it.
 
 ![The window during a batch of three runs in nitrogen](images/window-light.png)
 
